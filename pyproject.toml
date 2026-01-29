@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "agora"
+version = "0.1.0"
+description = "Motor narrativo conversacional para videojuego basado en agentes"
+authors = ["Agora Team"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+langgraph = "^0.2.0"
+langchain = "^0.3.0"
+langchain-deepseek = "^0.1.0"
+python-dotenv = "^1.0.0"
+
+[tool.poetry.scripts]
+agora = "main:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
