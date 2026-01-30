@@ -22,9 +22,12 @@ def _default_setup(num_actors: int) -> Dict[str, Any]:
             "personality": "Eres amigable y conversador.",
             "mission": "Mantener una conversación interesante.",
             "background": "Personaje de una historia generada por defecto.",
+            "presencia_escena": "Presente en la escena.",
         })
     return {
         "ambientacion": "Una conversación en un lugar neutro.",
+        "contexto_problema": "Hay una situación que requiere la participación del jugador.",
+        "relevancia_jugador": "Tu intervención puede cambiar el curso de los acontecimientos.",
         "player_mission": "Participar en la conversación y lograr conectar con los personajes.",
         "actors": actors,
     }
@@ -50,16 +53,16 @@ class GuionistaAgent(Agent):
     def generate_setup(
         self,
         theme: str | None = None,
-        num_actors: int = 1,
+        num_actors: int = 3,
     ) -> Dict[str, Any]:
-        """Genera el setup de la partida: ambientación, player_mission y actores (name, personality, mission, background).
+        """Genera el setup de la partida: ambientación, contexto del problema, relevancia, player_mission y actores (name, personality, mission, background, presencia_escena).
 
         Args:
             theme: Tema o semilla opcional (ej. "historia romántica en Alemania siglo XVII"). Si es None, el Guionista inventa.
-            num_actors: Número de actores a generar (por defecto 1).
+            num_actors: Número de actores a generar (por defecto 3).
 
         Returns:
-            Diccionario con keys: ambientacion, player_mission, actors (lista de dicts con name, personality, mission, background).
+            Diccionario con keys: ambientacion, contexto_problema, relevancia_jugador, player_mission, actors (lista con name, personality, mission, background, presencia_escena).
         """
         theme_part = f"El tema o semilla es: «{theme}». " if theme else "Inventa una ambientación atractiva. "
         system_prompt = """Eres un guionista experto. Tu tarea es definir el setup de una partida de juego conversacional.
@@ -67,20 +70,24 @@ class GuionistaAgent(Agent):
 Debes generar un JSON válido con esta estructura exacta (sin comentarios, sin campos extra):
 {
   "ambientacion": "Descripción del escenario: época, lugar, tono de la historia (2-4 frases).",
+  "contexto_problema": "Explicación de la situación o el problema en el que se encuentra la escena (2-4 frases). Qué está en juego, qué conflicto o tensión existe.",
+  "relevancia_jugador": "Por qué esta situación es relevante o importante para el jugador (1-2 frases). Qué puede ganar o perder, por qué su participación importa.",
   "player_mission": "Objetivo principal que el jugador debe intentar alcanzar durante la conversación (privado, 1-2 frases).",
   "actors": [
     {
       "name": "Nombre del personaje",
       "personality": "Descripción en segunda persona para el LLM del personaje: cómo es, cómo habla (ej. Eres reservada, te gusta el chocolate...).",
       "mission": "Objetivo privado que este personaje intenta alcanzar durante la conversación (1-2 frases).",
-      "background": "Breve contexto del personaje: gustos, origen, profesión, rasgos relevantes, coherente con la ambientación (ej. Le gusta el chocolate y salir de fiesta, desconfía de los hombres, nació en Alemania en 1660, trabaja como pastelera)."
+      "background": "Breve contexto del personaje: gustos, origen, profesión, rasgos relevantes, coherente con la ambientación.",
+      "presencia_escena": "Una sola frase que describa su presencia en la escena (ej. sentada junto a la ventana, observando la calle; de pie junto a la puerta; acurrucada en el sofá con una taza de té)."
     }
   ]
 }
 
 Reglas:
-- ambientacion, player_mission y cada actor deben ser coherentes entre sí.
-- actors debe tener exactamente el número de personajes que se te indique.
+- ambientacion, contexto_problema, relevancia_jugador, player_mission y cada actor deben ser coherentes entre sí.
+- actors debe tener exactamente el número de personajes que se te indique (normalmente 3).
+- presencia_escena debe ser muy breve: una frase por personaje para la descripción inicial.
 - Responde SOLO con el JSON, sin texto antes ni después. Si usas markdown, envuelve el JSON en ```json ... ```."""
 
         user_prompt = f"""Genera el setup de la partida. {theme_part}Debes crear exactamente {num_actors} actor(es).
@@ -106,11 +113,13 @@ Responde únicamente con el JSON especificado."""
                 raise ValueError("La respuesta no es un objeto JSON")
             if "ambientacion" not in data or "player_mission" not in data or "actors" not in data:
                 raise ValueError("Faltan campos obligatorios: ambientacion, player_mission, actors")
+            if "contexto_problema" not in data or "relevancia_jugador" not in data:
+                raise ValueError("Faltan campos obligatorios: contexto_problema, relevancia_jugador")
             actors_list = data["actors"]
             if not isinstance(actors_list, list) or len(actors_list) < num_actors:
                 raise ValueError("actors debe ser una lista con al menos num_actors elementos")
 
-            # Normalizar cada actor: name, personality, mission, background
+            # Normalizar cada actor: name, personality, mission, background, presencia_escena
             normalized_actors: List[Dict[str, str]] = []
             for i, a in enumerate(actors_list[:num_actors]):
                 if not isinstance(a, dict):
@@ -120,10 +129,13 @@ Responde únicamente con el JSON especificado."""
                     "personality": str(a.get("personality", "Eres amigable.")).strip(),
                     "mission": str(a.get("mission", "Mantener la conversación.")).strip(),
                     "background": str(a.get("background", "Sin background.")).strip(),
+                    "presencia_escena": str(a.get("presencia_escena", "Presente en la escena.")).strip(),
                 })
 
             return {
                 "ambientacion": str(data.get("ambientacion", "")).strip(),
+                "contexto_problema": str(data.get("contexto_problema", "")).strip(),
+                "relevancia_jugador": str(data.get("relevancia_jugador", "")).strip(),
                 "player_mission": str(data.get("player_mission", "")).strip(),
                 "actors": normalized_actors,
             }

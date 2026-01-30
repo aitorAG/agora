@@ -10,7 +10,7 @@ from .renderer import render_message
 
 
 def create_conversation_graph(
-    character_agent: CharacterAgent,
+    character_agents: dict[str, CharacterAgent],
     observer_agent: ObserverAgent,
     manager: ConversationManager,
     max_turns: int = 10
@@ -18,7 +18,7 @@ def create_conversation_graph(
     """Crea el grafo de conversación con LangGraph.
     
     Args:
-        character_agent: Agente actor que participa
+        character_agents: Diccionario nombre del personaje -> CharacterAgent (uno o varios)
         observer_agent: Agente observador que analiza
         manager: ConversationManager para gestionar estado
         max_turns: Número máximo de turnos
@@ -26,13 +26,22 @@ def create_conversation_graph(
     Returns:
         Grafo LangGraph configurado
     """
-    
+    # Orden fijo de nombres (primer personaje abre cada turno cuando no hay decisión de continuación)
+    agent_names_ordered = list(character_agents.keys())
+
     def character_agent_node(state: ConversationState) -> ConversationState:
-        """Nodo que ejecuta el CharacterAgent."""
-        result = character_agent.process(state)
+        """Nodo que ejecuta el CharacterAgent correspondiente (por nombre o el primero del turno)."""
+        continuation_decision = state.get("metadata", {}).get("continuation_decision", {})
+        who_should_respond = continuation_decision.get("who_should_respond", "")
+        # Si hay un nombre concreto en character_agents, usar ese agente; si no, usar el primero (nuevo turno)
+        if who_should_respond and who_should_respond in character_agents:
+            agent = character_agents[who_should_respond]
+        else:
+            agent = character_agents[agent_names_ordered[0]]
+        result = agent.process(state)
         
         if "error" in result:
-            print(f"Error en {character_agent.name}: {result['error']}")
+            print(f"Error en {agent.name}: {result['error']}")
             return state
         
         # Añadir mensaje al estado
@@ -88,8 +97,8 @@ def create_conversation_graph(
     def should_allow_continuation(state: ConversationState) -> Literal["character", "user_input", "continue"]:
         """Decide si alguien debe continuar antes de incrementar el turno.
         
-        Basado en la decisión del ObserverAgent, determina si el character,
-        el usuario, o nadie debe responder antes de pasar al siguiente turno.
+        Basado en la decisión del ObserverAgent: character (nombre concreto o "character"),
+        user, o nadie. Si who_should_respond es un nombre en character_agents o "character", va al nodo character.
         """
         # Obtener decisión del observer desde metadata
         continuation_decision = state.get("metadata", {}).get("continuation_decision", {})
@@ -101,12 +110,11 @@ def create_conversation_graph(
         # Verificar quién debe responder
         who_should_respond = continuation_decision.get("who_should_respond", "none")
         
-        if who_should_respond == "character":
-            return "character"
-        elif who_should_respond == "user":
+        if who_should_respond == "user":
             return "user_input"
-        else:
-            return "continue"
+        if who_should_respond == "character" or who_should_respond in character_agents:
+            return "character"
+        return "continue"
     
     def should_continue(state: ConversationState) -> Literal["continue", "end"]:
         """Condición para decidir si continuar o terminar."""

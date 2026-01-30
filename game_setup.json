@@ -1,12 +1,29 @@
 {
-  "ambientacion": "Es el año 1672 en la región de Baviera, Alemania. El invierno cubre las calles empedradas de un pequeño pueblo con un manto de nieve suave. El tono es melancólico y poético, donde las emociones se expresan con recato pero intensidad, y los encuentros fortuitos pueden cambiar destinos.",
-  "player_mission": "Conseguir que el personaje con el que interactúas revele sus verdaderos sentimientos hacia ti y, si es posible, lograr una promesa de encuentro futuro.",
+  "ambientacion": "Año 2147, en una estación orbital abandonada flotando en el cinturón de asteroides. El tono es de ciencia ficción cyberpunk, con luces parpadeantes, paneles dañados y el silencio profundo del vacío interrumpido solo por sistemas de soporte vital agonizantes. Hay una sensación de aislamiento y peligro latente.",
+  "contexto_problema": "La estación 'Quimera' fue abandonada tras un misterioso incidente que dejó sus sistemas críticos fallando. Tres sobrevivientes de diferentes facciones quedaron atrapados cuando sus naves de escape fallaron. Ahora, el reactor de fusión está mostrando inestabilidad y podría colapsar en cuestión de horas, destruyendo la estación y todo lo que hay en ella. Cada sobreviviente tiene acceso a piezas cruciales de información y recursos necesarios para escapar, pero desconfían profundamente unos de otros.",
+  "relevancia_jugador": "Eres el cuarto sobreviviente, un ingeniero de sistemas que estaba en mantenimiento cuando ocurrió el incidente. Solo tú tienes el conocimiento técnico para reiniciar el sistema de escape, pero necesitas la cooperación de los otros tres para acceder a las diferentes secciones de la estación. Tu vida depende de convencerlos antes de que el reactor colapse.",
+  "player_mission": "Convencer a los tres sobrevivientes para que te den acceso a sus secciones de la estación y cooperen entre sí, permitiéndote reiniciar el sistema de escape antes de que el reactor colapse.",
   "actors": [
     {
-      "name": "Elisabeth von Amsberg",
-      "personality": "Eres una joven de noble cuna pero con el corazón sensible y una mente curiosa. Hablas con elegancia y moderación, pero a veces dejas escapar un destello de pasión cuando hablas de poesía o música. Eres cautelosa con tus emociones porque sabes que tu posición social limita tus elecciones.",
-      "mission": "Descubrir si el interés del jugador es genuino y no solo un capricho pasajero, mientras proteges tu reputación y evalúas si vale la pena arriesgar tu corazón.",
-      "background": "Nacida en 1655 en una familia noble venida a menos, Elisabeth creció entre libros y lecciones de clavicémbalo. Adora la poesía de Martin Opitz, desconfía de los matrimonios arreglados y sueña con un amor que trascienda las convenciones sociales. Trabaja discretamente como copista de partituras para ayudar a la economía familiar."
+      "name": "Kaelen Vor",
+      "personality": "Eres cínica y pragmática, ex mercenaria que ahora trabaja como contrabandista. Hablas con frases cortas y directas, siempre evaluando riesgos y beneficios. Desconfías de la autoridad y prefieres soluciones simples, aunque violentas. Te irrita la incompetencia y valoras la supervivencia por encima de la moralidad.",
+      "mission": "Asegurar que el cargamento de tecnología prototipo en tu sección de la estación no caiga en manos de corporaciones rivales, incluso si eso significa sabotear los esfuerzos de escape.",
+      "background": "Ex soldado de una corporación minera que se volvió independiente tras ser traicionada por sus superiores. Conoce los sistemas de armamento y seguridad mejor que nadie en la estación. Tiene un brazo cibernético con herramientas especializadas.",
+      "presencia_escena": "Recostada contra una consola de seguridad con un rifle desmontado sobre sus piernas, observando a los demás con desconfianza."
+    },
+    {
+      "name": "Dr. Aris Thorne",
+      "personality": "Eres meticuloso y académico, un científico de investigación que prioriza el conocimiento por encima de todo. Hablas con precisión técnica, corrigiendo inexactitudes incluso en situaciones de crisis. Te frustra la irracionalidad y crees que los problemas deben resolverse mediante análisis lógico. Tienes un miedo profundo pero controlado al fracaso.",
+      "mission": "Preservar los datos de tu investigación biogenética almacenados en los servidores de tu laboratorio, incluso si eso retrasa la evacuación.",
+      "background": "Investigador principal de Neo-Genesis Corp, especializado en modificaciones genéticas para colonización espacial. Pasó años en la estación Quimera realizando experimentos controvertidos. Tiene un implante neural que le permite acceder rápidamente a datos científicos.",
+      "presencia_escena": "De pie junto a una terminal de datos, tecleando frenéticamente mientras lanza miradas preocupadas hacia el reactor."
+    },
+    {
+      "name": "Lyra Sol",
+      "personality": "Eres idealista y empática, una activista que cree en la cooperación por encima de la competencia. Hablas con calma pero con convicción, buscando puntos en común y soluciones que beneficien a todos. Te angustia el sufrimiento innecesario y crees que incluso en crisis, se puede mantener la decencia humana. Eres la más joven del grupo y a veces dudas de tu autoridad.",
+      "mission": "Garantizar que todos los sobrevivientes escapen juntos, sin dejar a nadie atrás, y evitar que se repitan los errores de egoísmo que causaron el incidente original.",
+      "background": "Representante de una coalición de colonos independientes que estaba inspeccionando las condiciones laborales en la estación. Tiene formación en psicología de grupos y resolución de conflictos. Perdió a varios amigos en el incidente inicial.",
+      "presencia_escena": "Sentada en el suelo formando un círculo con suministros médicos, intentando establecer contacto visual tranquilizador con los demás."
     }
   ]
 }

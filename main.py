@@ -13,7 +13,7 @@ from src.agents.guionista import GuionistaAgent
 from src.graph import create_conversation_graph
 
 # Archivo JSON de setup (raíz del proyecto). Lo genera el Guionista al inicializar.
-# Formato: { "ambientacion": str, "player_mission": str, "actors": [ { "name", "personality", "mission", "background" } ] }
+# Formato: ambientacion, contexto_problema, relevancia_jugador, player_mission, actors (name, personality, mission, background, presencia_escena)
 GAME_SETUP_PATH = Path(__file__).resolve().parent / "game_setup.json"
 
 # Cargar variables de entorno
@@ -47,8 +47,8 @@ def main():
     print("=== Conversation Engine ===")
     print("Inicializando sistema conversacional...\n")
 
-    # Generar setup con el Guionista (ambientación, player_mission, actores con personality, mission, background)
-    num_actors = 1
+    # Generar setup con el Guionista (ambientación, contexto_problema, relevancia_jugador, player_mission, 3 actores con presencia_escena)
+    num_actors = 3
     theme = os.getenv("GAME_THEME")
     guionista = GuionistaAgent()
     game_setup = guionista.generate_setup(theme=theme, num_actors=num_actors)
@@ -57,8 +57,16 @@ def main():
     with open(GAME_SETUP_PATH, "w", encoding="utf-8") as f:
         json.dump(game_setup, f, indent=2, ensure_ascii=False)
 
-    # Mostrar al jugador la ambientación y su misión (privada)
+    # Explicación inicial al jugador (ambientación, problema, relevancia, personajes en escena, misión privada)
     print("Ambientación:", game_setup["ambientacion"])
+    print()
+    print("Situación:", game_setup.get("contexto_problema", ""))
+    print()
+    print("Por qué te importa:", game_setup.get("relevancia_jugador", ""))
+    print()
+    print("Personajes en la escena:")
+    for a in game_setup["actors"]:
+        print(f"  **{a['name']}**: {a.get('presencia_escena', 'Presente en la escena.')}")
     print()
     print("Tu misión (privada):", game_setup["player_mission"])
     print()
@@ -67,19 +75,21 @@ def main():
     manager = ConversationManager()
     initial_state: ConversationState = manager.state
 
-    # Crear actores desde el JSON (name, personality, mission, background)
+    # Crear un CharacterAgent por cada actor (name, personality, mission, background)
     actors_list = game_setup["actors"]
-    first_actor = actors_list[0]
-    character = CharacterAgent(
-        name=first_actor["name"],
-        personality=first_actor["personality"],
-        mission=first_actor.get("mission"),
-        background=first_actor.get("background"),
-    )
+    character_agents: dict[str, CharacterAgent] = {}
+    for a in actors_list:
+        character_agents[a["name"]] = CharacterAgent(
+            name=a["name"],
+            personality=a["personality"],
+            mission=a.get("mission"),
+            background=a.get("background"),
+        )
 
-    observer = ObserverAgent()
+    actor_names = [a["name"] for a in game_setup["actors"]]
+    observer = ObserverAgent(actor_names=actor_names)
 
-    print(f"Agente creado: {character.name}")
+    print(f"Agentes creados: {', '.join(character_agents.keys())}")
     print(f"Observador creado: {observer.name}\n")
     
     # Obtener número máximo de turnos desde variable de entorno
@@ -96,17 +106,21 @@ def main():
     print("Iniciando conversación...\n")
     print("-" * 50)
     
-    # Crear grafo
+    # Crear grafo (dict nombre -> CharacterAgent para soportar varios personajes)
     graph = create_conversation_graph(
-        character_agent=character,
+        character_agents=character_agents,
         observer_agent=observer,
         manager=manager,
         max_turns=max_turns
     )
     
-    # Ejecutar grafo
+    # Ejecutar grafo (recursion_limit evita GraphRecursionError con muchos turnos o respuestas extra)
     try:
-        final_state = graph.invoke(initial_state)
+        recursion_limit = max(100, 50 + max_turns * 15)
+        final_state = graph.invoke(
+            initial_state,
+            config={"recursion_limit": recursion_limit},
+        )
         print("-" * 50)
         print(f"\nConversación finalizada después de {final_state['turn']} turnos.")
         print(f"Total de mensajes: {len(final_state['messages'])}")
