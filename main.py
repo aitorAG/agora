@@ -9,11 +9,11 @@ from src.state import ConversationState
 from src.manager import ConversationManager
 from src.agents.character import CharacterAgent
 from src.agents.observer import ObserverAgent
+from src.agents.guionista import GuionistaAgent
 from src.graph import create_conversation_graph
 
-# Archivo JSON de setup (raíz del proyecto). Se crea al inicializar.
-# Formato: { "player_mission": str, "actors": [ { "name": str, "personality": str, "mission": str } ] }
-# Las misiones son privadas: cada actor/jugador conoce solo la suya.
+# Archivo JSON de setup (raíz del proyecto). Lo genera el Guionista al inicializar.
+# Formato: { "ambientacion": str, "player_mission": str, "actors": [ { "name", "personality", "mission", "background" } ] }
 GAME_SETUP_PATH = Path(__file__).resolve().parent / "game_setup.json"
 
 # Cargar variables de entorno
@@ -47,37 +47,34 @@ def main():
     print("=== Conversation Engine ===")
     print("Inicializando sistema conversacional...\n")
 
-    # Definir misión del jugador y actores (personalidad + misión privada)
-    player_mission = "Conseguir que Alice te preste su libro favorito durante la conversación."
-    actors_setup = [
-        {
-            "name": "Alice",
-            "personality": "Eres curiosa, amigable y entusiasta. Te gusta hacer preguntas y mantener conversaciones interesantes.",
-            "mission": "Descubrir si el jugador es de fiar antes de confiarle algo personal.",
-        },
-    ]
+    # Generar setup con el Guionista (ambientación, player_mission, actores con personality, mission, background)
+    num_actors = 1
+    theme = os.getenv("GAME_THEME")
+    guionista = GuionistaAgent()
+    game_setup = guionista.generate_setup(theme=theme, num_actors=num_actors)
 
-    # Escribir game_setup.json en la inicialización
-    game_setup = {
-        "player_mission": player_mission,
-        "actors": actors_setup,
-    }
+    # Guardar en game_setup.json
     with open(GAME_SETUP_PATH, "w", encoding="utf-8") as f:
         json.dump(game_setup, f, indent=2, ensure_ascii=False)
 
-    # Mostrar al jugador su misión (privada) al inicio
-    print("Tu misión (privada):", player_mission)
+    # Mostrar al jugador la ambientación y su misión (privada)
+    print("Ambientación:", game_setup["ambientacion"])
+    print()
+    print("Tu misión (privada):", game_setup["player_mission"])
     print()
 
     # Inicializar estado
     manager = ConversationManager()
     initial_state: ConversationState = manager.state
 
-    # Crear actores con personalidad y misión
+    # Crear actores desde el JSON (name, personality, mission, background)
+    actors_list = game_setup["actors"]
+    first_actor = actors_list[0]
     character = CharacterAgent(
-        name=actors_setup[0]["name"],
-        personality=actors_setup[0]["personality"],
-        mission=actors_setup[0]["mission"],
+        name=first_actor["name"],
+        personality=first_actor["personality"],
+        mission=first_actor.get("mission"),
+        background=first_actor.get("background"),
     )
 
     observer = ObserverAgent()

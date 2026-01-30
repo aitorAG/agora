@@ -119,11 +119,12 @@ agora/
 │   ├── agents/
 │   │   ├── base.py           # Clase base Agent
 │   │   ├── character.py      # CharacterAgent
-│   │   └── observer.py       # ObserverAgent
+│   │   ├── observer.py       # ObserverAgent
+│   │   └── guionista.py      # GuionistaAgent
 │   ├── graph.py              # Construcción del grafo LangGraph
 │   └── renderer.py           # Renderizado en terminal
 ├── main.py                   # Punto de entrada
-├── game_setup.json           # Setup de partida (personalidades y misiones privadas, generado al iniciar)
+├── game_setup.json           # Setup de partida (generado por el Guionista al iniciar: ambientación, misiones, actores con background)
 ├── pyproject.toml            # Configuración de Poetry
 ├── poetry.lock               # Lock file de dependencias (generado)
 ├── requirements.txt          # Dependencias (opcional, para compatibilidad)
@@ -133,18 +134,20 @@ agora/
 
 ### game_setup.json
 
-Se crea en la **inicialización** del programa y registra el setup de la partida:
+Lo genera el **Guionista** en la inicialización del programa y registra el setup de la partida:
 
+- **ambientacion**: Descripción del escenario (época, lugar, tono). Se muestra al jugador al inicio.
 - **player_mission**: Misión privada del jugador (se muestra al inicio; no es pública en el chat).
-- **actors**: Lista de actores, cada uno con `name`, `personality` y `mission` (privada). Cada actor conoce solo su misión y la usa para orientar sus respuestas sin revelarla.
+- **actors**: Lista de actores, cada uno con `name`, `personality`, `mission` (privada) y `background` (contexto del personaje). Cada actor conoce solo su misión y su background y actúa de forma coherente con ellos.
 
 Formato:
 
 ```json
 {
+  "ambientacion": "Descripción del escenario, época y tono...",
   "player_mission": "Tu misión como jugador...",
   "actors": [
-    { "name": "Alice", "personality": "...", "mission": "Misión privada de Alice." }
+    { "name": "Marcela", "personality": "...", "mission": "...", "background": "Le gusta el chocolate, nació en Alemania en 1660, trabaja como pastelera." }
   ]
 }
 ```
@@ -163,11 +166,17 @@ Orquestador que:
 - Valida quién puede escribir
 - Proporciona historial a los agentes
 
+### GuionistaAgent
+Agente que al inicio de la partida genera el setup (no es actor):
+- Define la ambientación de la historia
+- Define el objetivo del jugador y de cada actor (personalidad, misión, background)
+- Se invoca una vez al arranque; el resultado se guarda en game_setup.json
+
 ### CharacterAgent
 Agente actor que:
 - Participa activamente en la conversación
 - Genera respuestas usando DeepSeek
-- Tiene personalidad configurable y misión privada opcional (intenta alcanzarla sin revelarla)
+- Tiene personalidad, misión privada opcional y background opcional (coherente con la ambientación)
 
 ### ObserverAgent
 Agente observador que:
