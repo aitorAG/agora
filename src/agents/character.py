@@ -10,27 +10,40 @@ from .base import Agent
 class CharacterAgent(Agent):
     """Agente que representa un personaje en la conversación."""
     
-    def __init__(self, name: str, personality: str, model: str = "deepseek-chat"):
+    def __init__(
+        self,
+        name: str,
+        personality: str,
+        mission: str | None = None,
+        model: str = "deepseek-chat",
+    ):
         """Inicializa el CharacterAgent.
-        
+
         Args:
             name: Nombre del personaje
             personality: Descripción de la personalidad
+            mission: Misión privada que el actor debe intentar alcanzar (opcional)
             model: Modelo de DeepSeek a usar
         """
         super().__init__(name)
         self._personality = personality
+        self._mission = mission
         self._llm = ChatDeepSeek(model=model, temperature=0.8)
-    
+
     @property
     def is_actor(self) -> bool:
         """CharacterAgent es un actor."""
         return True
-    
+
     @property
     def personality(self) -> str:
         """Personalidad del personaje."""
         return self._personality
+
+    @property
+    def mission(self) -> str | None:
+        """Misión privada del personaje (opcional)."""
+        return self._mission
     
     def process(self, state: ConversationState) -> Dict[str, Any]:
         """Genera una respuesta basada en el historial visible.
@@ -45,13 +58,18 @@ class CharacterAgent(Agent):
             # Construir historial de mensajes para el LLM
             messages = []
             
-            # Mensaje del sistema con personalidad
+            # Mensaje del sistema con personalidad y misión privada (si existe)
             system_prompt = f"""Eres {self.name}, un personaje en una conversación grupal.
 Tu personalidad: {self.personality}
 
-Responde de manera natural y coherente con tu personalidad. 
+Responde de manera natural y coherente con tu personalidad.
 Mantén tus respuestas concisas (1-3 frases típicamente).
 Solo responde con el contenido del mensaje, sin prefijos ni explicaciones."""
+            if self._mission:
+                system_prompt += f"""
+
+Tienes una misión secreta que debes intentar cumplir durante la conversación. No la reveles explícitamente.
+Tu misión: {self._mission}"""
             
             messages.append(SystemMessage(content=system_prompt))
             

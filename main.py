@@ -1,13 +1,20 @@
 """Punto de entrada del Conversation Engine."""
 
+import json
 import os
 import logging
+from pathlib import Path
 from dotenv import load_dotenv
 from src.state import ConversationState
 from src.manager import ConversationManager
 from src.agents.character import CharacterAgent
 from src.agents.observer import ObserverAgent
 from src.graph import create_conversation_graph
+
+# Archivo JSON de setup (raíz del proyecto). Se crea al inicializar.
+# Formato: { "player_mission": str, "actors": [ { "name": str, "personality": str, "mission": str } ] }
+# Las misiones son privadas: cada actor/jugador conoce solo la suya.
+GAME_SETUP_PATH = Path(__file__).resolve().parent / "game_setup.json"
 
 # Cargar variables de entorno
 load_dotenv()
@@ -39,19 +46,42 @@ def main():
     
     print("=== Conversation Engine ===")
     print("Inicializando sistema conversacional...\n")
-    
+
+    # Definir misión del jugador y actores (personalidad + misión privada)
+    player_mission = "Conseguir que Alice te preste su libro favorito durante la conversación."
+    actors_setup = [
+        {
+            "name": "Alice",
+            "personality": "Eres curiosa, amigable y entusiasta. Te gusta hacer preguntas y mantener conversaciones interesantes.",
+            "mission": "Descubrir si el jugador es de fiar antes de confiarle algo personal.",
+        },
+    ]
+
+    # Escribir game_setup.json en la inicialización
+    game_setup = {
+        "player_mission": player_mission,
+        "actors": actors_setup,
+    }
+    with open(GAME_SETUP_PATH, "w", encoding="utf-8") as f:
+        json.dump(game_setup, f, indent=2, ensure_ascii=False)
+
+    # Mostrar al jugador su misión (privada) al inicio
+    print("Tu misión (privada):", player_mission)
+    print()
+
     # Inicializar estado
     manager = ConversationManager()
     initial_state: ConversationState = manager.state
-    
-    # Crear agentes
+
+    # Crear actores con personalidad y misión
     character = CharacterAgent(
-        name="Alice",
-        personality="Eres curiosa, amigable y entusiasta. Te gusta hacer preguntas y mantener conversaciones interesantes."
+        name=actors_setup[0]["name"],
+        personality=actors_setup[0]["personality"],
+        mission=actors_setup[0]["mission"],
     )
-    
+
     observer = ObserverAgent()
-    
+
     print(f"Agente creado: {character.name}")
     print(f"Observador creado: {observer.name}\n")
     

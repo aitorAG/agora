@@ -123,11 +123,30 @@ agora/
 │   ├── graph.py              # Construcción del grafo LangGraph
 │   └── renderer.py           # Renderizado en terminal
 ├── main.py                   # Punto de entrada
+├── game_setup.json           # Setup de partida (personalidades y misiones privadas, generado al iniciar)
 ├── pyproject.toml            # Configuración de Poetry
 ├── poetry.lock               # Lock file de dependencias (generado)
 ├── requirements.txt          # Dependencias (opcional, para compatibilidad)
 ├── .env.example
 └── README.md
+```
+
+### game_setup.json
+
+Se crea en la **inicialización** del programa y registra el setup de la partida:
+
+- **player_mission**: Misión privada del jugador (se muestra al inicio; no es pública en el chat).
+- **actors**: Lista de actores, cada uno con `name`, `personality` y `mission` (privada). Cada actor conoce solo su misión y la usa para orientar sus respuestas sin revelarla.
+
+Formato:
+
+```json
+{
+  "player_mission": "Tu misión como jugador...",
+  "actors": [
+    { "name": "Alice", "personality": "...", "mission": "Misión privada de Alice." }
+  ]
+}
 ```
 
 ## Componentes Principales
@@ -148,7 +167,7 @@ Orquestador que:
 Agente actor que:
 - Participa activamente en la conversación
 - Genera respuestas usando DeepSeek
-- Tiene personalidad configurable
+- Tiene personalidad configurable y misión privada opcional (intenta alcanzarla sin revelarla)
 
 ### ObserverAgent
 Agente observador que:
