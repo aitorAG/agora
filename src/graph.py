@@ -9,6 +9,46 @@ from .agents.observer import ObserverAgent
 from .renderer import render_message
 
 
+def route_continuation(
+    continuation_decision: dict,
+    character_agent_names: list[str],
+) -> Literal["character", "user_input", "continue"]:
+    """Decide el siguiente nodo tras el observer: character, user_input o continue.
+    
+    Args:
+        continuation_decision: Dict con needs_response y who_should_respond.
+        character_agent_names: Lista de nombres de agentes (claves del dict de character_agents).
+    
+    Returns:
+        "character", "user_input" o "continue".
+    """
+    if not continuation_decision.get("needs_response", False):
+        return "continue"
+    who_should_respond = continuation_decision.get("who_should_respond", "none")
+    if who_should_respond == "user":
+        return "user_input"
+    if who_should_respond == "character" or who_should_respond in character_agent_names:
+        return "character"
+    return "continue"
+
+
+def route_should_continue(state: ConversationState, max_turns: int) -> Literal["continue", "end"]:
+    """Decide si continuar al siguiente turno o terminar.
+    
+    Args:
+        state: Estado actual de la conversación.
+        max_turns: Número máximo de turnos (intervenciones del jugador).
+    
+    Returns:
+        "continue" o "end".
+    """
+    if state.get("metadata", {}).get("user_exit", False):
+        return "end"
+    if state["turn"] >= max_turns:
+        return "end"
+    return "continue"
+
+
 def create_conversation_graph(
     character_agents: dict[str, CharacterAgent],
     observer_agent: ObserverAgent,
@@ -69,8 +109,9 @@ def create_conversation_graph(
         if not user_input:
             return manager.state
         
-        # Añadir mensaje del usuario al estado
+        # Añadir mensaje del usuario al estado y contar un turno (cada intervención del jugador = 1 turno)
         manager.add_message("Usuario", user_input)
+        manager.increment_turn()
         
         return manager.state
     
@@ -86,47 +127,23 @@ def create_conversation_graph(
         # Guardar decisión de continuación en metadata
         if "continuation_decision" in result:
             manager.update_metadata("continuation_decision", result["continuation_decision"])
+        # Guardar evaluación de misiones (jugador y actores) al final del turno
+        if "mission_evaluation" in result:
+            manager.update_metadata("last_mission_evaluation", result["mission_evaluation"])
+            manager.update_metadata(f"turn_{state['turn']}_mission_evaluation", result["mission_evaluation"])
         
         return manager.state
     
     def increment_turn_node(state: ConversationState) -> ConversationState:
-        """Nodo que incrementa el contador de turnos."""
-        manager.increment_turn()
+        """Passthrough: el turno ya se incrementó en user_input_node al hablar el jugador."""
         return manager.state
     
     def should_allow_continuation(state: ConversationState) -> Literal["character", "user_input", "continue"]:
-        """Decide si alguien debe continuar antes de incrementar el turno.
-        
-        Basado en la decisión del ObserverAgent: character (nombre concreto o "character"),
-        user, o nadie. Si who_should_respond es un nombre en character_agents o "character", va al nodo character.
-        """
-        # Obtener decisión del observer desde metadata
         continuation_decision = state.get("metadata", {}).get("continuation_decision", {})
-        
-        # Si no hay decisión o no se necesita respuesta, continuar normalmente
-        if not continuation_decision.get("needs_response", False):
-            return "continue"
-        
-        # Verificar quién debe responder
-        who_should_respond = continuation_decision.get("who_should_respond", "none")
-        
-        if who_should_respond == "user":
-            return "user_input"
-        if who_should_respond == "character" or who_should_respond in character_agents:
-            return "character"
-        return "continue"
+        return route_continuation(continuation_decision, agent_names_ordered)
     
     def should_continue(state: ConversationState) -> Literal["continue", "end"]:
-        """Condición para decidir si continuar o terminar."""
-        # Verificar si el usuario quiere salir
-        if state.get("metadata", {}).get("user_exit", False):
-            return "end"
-        
-        # Verificar si se alcanzó el máximo de turnos
-        if state["turn"] >= max_turns:
-            return "end"
-        
-        return "continue"
+        return route_should_continue(state, max_turns)
     
     # Construir grafo
     workflow = StateGraph(ConversationState)

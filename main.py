@@ -57,16 +57,20 @@ def main():
     with open(GAME_SETUP_PATH, "w", encoding="utf-8") as f:
         json.dump(game_setup, f, indent=2, ensure_ascii=False)
 
-    # Explicación inicial al jugador (ambientación, problema, relevancia, personajes en escena, misión privada)
-    print("Ambientación:", game_setup["ambientacion"])
-    print()
-    print("Situación:", game_setup.get("contexto_problema", ""))
-    print()
-    print("Por qué te importa:", game_setup.get("relevancia_jugador", ""))
-    print()
-    print("Personajes en la escena:")
-    for a in game_setup["actors"]:
-        print(f"  **{a['name']}**: {a.get('presencia_escena', 'Presente en la escena.')}")
+    # Narrativa inicial en prosa continua (fallback a apartados si viene vacía)
+    narrativa = game_setup.get("narrativa_inicial", "").strip()
+    if narrativa:
+        print(narrativa)
+    else:
+        print("Ambientación:", game_setup.get("ambientacion", ""))
+        print()
+        print("Situación:", game_setup.get("contexto_problema", ""))
+        print()
+        print("Por qué te importa:", game_setup.get("relevancia_jugador", ""))
+        print()
+        print("Personajes en la escena:")
+        for a in game_setup["actors"]:
+            print(f"  **{a['name']}**: {a.get('presencia_escena', 'Presente en la escena.')}")
     print()
     print("Tu misión (privada):", game_setup["player_mission"])
     print()
@@ -87,7 +91,11 @@ def main():
         )
 
     actor_names = [a["name"] for a in game_setup["actors"]]
-    observer = ObserverAgent(actor_names=actor_names)
+    observer = ObserverAgent(
+        actor_names=actor_names,
+        player_mission=game_setup.get("player_mission") or "",
+        actor_missions={a["name"]: a.get("mission", "") for a in game_setup["actors"]},
+    )
 
     print(f"Agentes creados: {', '.join(character_agents.keys())}")
     print(f"Observador creado: {observer.name}\n")

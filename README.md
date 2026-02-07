@@ -8,16 +8,19 @@ Este proyecto implementa un sistema de conversación donde múltiples agentes in
 
 ## Características
 
-- **Estado conversacional persistente**: Mantiene historial completo de mensajes
-- **Múltiples agentes**: Soporte para agentes con distintos roles
-- **Separación actores/observadores**: Agentes que hablan vs. agentes que solo analizan
-- **Arquitectura extensible**: Base para futuras funcionalidades narrativas complejas
+- **Estado conversacional persistente**: Historial completo de mensajes con turno por intervención del jugador
+- **Tres personajes por partida**: El Guionista genera ambientación, situación, relevancia y tres actores con presencia en escena
+- **Narrativa inicial en prosa**: Presentación orgánica (sin apartados) al jugador; misión privada al final
+- **Turno = intervención del jugador**: Cada vez que el jugador escribe se cuenta un turno; `max_turns` limita esas intervenciones
+- **Evaluación de misiones**: El Observer evalúa al final de cada turno si el jugador o algún actor ha alcanzado su misión (metadata para victoria/derrota)
+- **Routing por nombre**: Con varios actores, el Observer indica qué personaje debe hablar; el grafo invoca al agente correcto
+- **Arquitectura extensible**: Lógica de routing y normalización extraída para tests unitarios
 
 ## Requisitos
 
-- Python 3.8+
+- Python 3.10+
 - Poetry (para gestión de dependencias)
-- API Key de DeepSeek
+- API Key de DeepSeek (para ejecutar el juego; los tests no la necesitan)
 
 ## Instalación
 
@@ -107,7 +110,58 @@ agora
 python main.py
 ```
 
-El sistema iniciará una conversación con un CharacterAgent y un ObserverAgent, mostrando los mensajes en terminal.
+El sistema generará un setup con el Guionista (ambientación, situación, tres personajes), mostrará la narrativa inicial y tu misión, y comenzará una conversación por turnos. Los mensajes se muestran en terminal.
+
+## Tests
+
+El proyecto incluye tests unitarios para reducir riesgo en cambios de estado, reglas de turno, routing del grafo y parsing de respuestas (Observer, Guionista). Son deterministas y rápidos; no usan LLM ni entorno gráfico.
+
+### Instalar dependencias de desarrollo
+
+Para ejecutar los tests necesitas las dependencias de desarrollo (p. ej. pytest):
+
+```bash
+poetry install
+```
+
+Con `poetry install` se instalan también las dependencias del grupo `dev` (pytest). Si ya tenías el proyecto instalado y no tienes pytest:
+
+```bash
+poetry install --with dev
+```
+
+### Ejecutar los tests
+
+Desde la raíz del proyecto:
+
+```bash
+# Todos los tests
+poetry run pytest
+
+# Con salida verbose (nombre de cada test)
+poetry run pytest -v
+
+# Solo tests unitarios
+poetry run pytest tests/unit/
+
+# Un archivo concreto
+poetry run pytest tests/unit/test_manager.py -v
+```
+
+Los tests no requieren API key ni red; se ejecutan en local y en CI sin entorno gráfico.
+
+### Estructura de tests
+
+```
+tests/
+├── conftest.py              # Fixtures compartidos (manager, sample state)
+└── unit/
+    ├── test_manager.py      # ConversationManager (estado, turno, metadata)
+    ├── test_graph_routing.py # route_continuation, route_should_continue
+    ├── test_observer_normalization.py # normalize_who_should_respond
+    ├── test_observer_missions_parsing.py # parse_mission_evaluation_response
+    └── test_guionista.py    # _default_setup (claves, actores, narrativa_inicial)
+```
 
 ## Estructura del Proyecto
 
@@ -119,35 +173,44 @@ agora/
 │   ├── agents/
 │   │   ├── base.py           # Clase base Agent
 │   │   ├── character.py      # CharacterAgent
-│   │   ├── observer.py       # ObserverAgent
-│   │   └── guionista.py      # GuionistaAgent
-│   ├── graph.py              # Construcción del grafo LangGraph
+│   │   ├── observer.py       # ObserverAgent (normalize_who_should_respond, parse_mission_evaluation_response)
+│   │   └── guionista.py      # GuionistaAgent (_default_setup)
+│   ├── graph.py              # Grafo LangGraph (route_continuation, route_should_continue)
 │   └── renderer.py           # Renderizado en terminal
+├── tests/                    # Tests unitarios
+│   ├── conftest.py
+│   └── unit/
 ├── main.py                   # Punto de entrada
-├── game_setup.json           # Setup de partida (generado por el Guionista al iniciar: ambientación, misiones, actores con background)
-├── pyproject.toml            # Configuración de Poetry
-├── poetry.lock               # Lock file de dependencias (generado)
-├── requirements.txt          # Dependencias (opcional, para compatibilidad)
+├── game_setup.json           # Setup generado por el Guionista al iniciar
+├── pyproject.toml            # Configuración Poetry + pytest
+├── poetry.lock
+├── requirements.txt
 ├── .env.example
 └── README.md
 ```
 
 ### game_setup.json
 
-Lo genera el **Guionista** en la inicialización del programa y registra el setup de la partida:
+Lo genera el **Guionista** al iniciar la partida. Contiene:
 
-- **ambientacion**: Descripción del escenario (época, lugar, tono). Se muestra al jugador al inicio.
-- **player_mission**: Misión privada del jugador (se muestra al inicio; no es pública en el chat).
-- **actors**: Lista de actores, cada uno con `name`, `personality`, `mission` (privada) y `background` (contexto del personaje). Cada actor conoce solo su misión y su background y actúa de forma coherente con ellos.
+- **ambientacion**: Escenario, época, lugar, tono.
+- **contexto_problema**: Situación o conflicto en juego.
+- **relevancia_jugador**: Por qué le importa al jugador.
+- **player_mission**: Misión privada del jugador (se muestra al inicio).
+- **narrativa_inicial**: Prosa continua que integra todo lo anterior y presenta a los tres personajes en escena (sin apartados).
+- **actors**: Lista de tres actores, cada uno con `name`, `personality`, `mission`, `background` y `presencia_escena` (frase breve para la narrativa inicial).
 
-Formato:
+Formato resumido:
 
 ```json
 {
-  "ambientacion": "Descripción del escenario, época y tono...",
-  "player_mission": "Tu misión como jugador...",
+  "ambientacion": "...",
+  "contexto_problema": "...",
+  "relevancia_jugador": "...",
+  "player_mission": "...",
+  "narrativa_inicial": "Prosa continua con escenario, situación y los tres personajes...",
   "actors": [
-    { "name": "Marcela", "personality": "...", "mission": "...", "background": "Le gusta el chocolate, nació en Alemania en 1660, trabaja como pastelera." }
+    { "name": "...", "personality": "...", "mission": "...", "background": "...", "presencia_escena": "..." }
   ]
 }
 ```
@@ -162,34 +225,30 @@ Estado global que contiene:
 
 ### ConversationManager
 Orquestador que:
-- Gestiona el estado de conversación
-- Valida quién puede escribir
-- Proporciona historial a los agentes
+- Gestiona el estado (messages, turn, metadata)
+- Añade mensajes con el turn actual; el turno se incrementa en el nodo de input del usuario (cada intervención del jugador = 1 turno)
+- Proporciona historial y metadata a los agentes
 
 ### GuionistaAgent
-Agente que al inicio de la partida genera el setup (no es actor):
-- Define la ambientación de la historia
-- Define el objetivo del jugador y de cada actor (personalidad, misión, background)
+Agente que al inicio genera el setup (no es actor):
+- Genera ambientación, contexto_problema, relevancia_jugador, player_mission, narrativa_inicial y tres actores (name, personality, mission, background, presencia_escena)
 - Se invoca una vez al arranque; el resultado se guarda en game_setup.json
+- Si el LLM falla, se usa `_default_setup(num_actors)` con valores por defecto
 
 ### CharacterAgent
 Agente actor que:
-- Participa activamente en la conversación
-- Genera respuestas usando DeepSeek
-- Tiene personalidad, misión privada opcional y background opcional (coherente con la ambientación)
+- Participa en la conversación; con varios actores el grafo elige cuál invocar por nombre
+- Genera respuestas con DeepSeek según personalidad, misión privada y background
 
 ### ObserverAgent
 Agente observador que:
-- Analiza la conversación sin escribir
-- Calcula métricas (participación, longitud, repeticiones, tono)
-- Actualiza metadata del estado
+- Analiza la conversación sin escribir (métricas, participación)
+- **evaluate_continuation**: Decide si alguien debe responder antes de pasar de turno (who_should_respond: user, nombre de personaje o none). La normalización (1 actor → "character", varios → nombre) está en `normalize_who_should_respond`.
+- **evaluate_missions**: Al final de cada turno evalúa si el jugador o los actores han alcanzado su misión; el resultado se guarda en metadata. El parsing del JSON del LLM está en `parse_mission_evaluation_response`.
 
 ### Grafo LangGraph
-Flujo de ejecución:
-1. `character_agent_node`: Genera mensaje
-2. `observer_agent_node`: Analiza estado
-3. `increment_turn_node`: Incrementa contador
-4. Ciclo hasta máximo de turnos
+- **route_continuation** y **route_should_continue**: Funciones puras que deciden el siguiente nodo o el fin de partida (testeables sin ejecutar el grafo).
+- Flujo: `character` → `user_input` (aquí se incrementa el turno al escribir el jugador) → `observer` → según decisión: `character`, `user_input` o `increment_turn` (passthrough) → si turn < max_turns y no user_exit, vuelve a `character`; si no, END.
 
 ## Extensibilidad
 

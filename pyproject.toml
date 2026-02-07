@@ -13,8 +13,14 @@ langchain = "^0.3.0"
 langchain-deepseek = "^0.1.0"
 python-dotenv = "^1.0.0"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+
 [tool.poetry.scripts]
 agora = "main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["poetry-core"]

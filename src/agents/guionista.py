@@ -24,11 +24,13 @@ def _default_setup(num_actors: int) -> Dict[str, Any]:
             "background": "Personaje de una historia generada por defecto.",
             "presencia_escena": "Presente en la escena.",
         })
+    narrativa_default = "Una conversación en un lugar neutro. Hay una situación que requiere tu participación; tu intervención puede cambiar el curso de los acontecimientos. " + " ".join(f"{a['name']} está presente." for a in actors)
     return {
         "ambientacion": "Una conversación en un lugar neutro.",
         "contexto_problema": "Hay una situación que requiere la participación del jugador.",
         "relevancia_jugador": "Tu intervención puede cambiar el curso de los acontecimientos.",
         "player_mission": "Participar en la conversación y lograr conectar con los personajes.",
+        "narrativa_inicial": narrativa_default,
         "actors": actors,
     }
 
@@ -73,6 +75,7 @@ Debes generar un JSON válido con esta estructura exacta (sin comentarios, sin c
   "contexto_problema": "Explicación de la situación o el problema en el que se encuentra la escena (2-4 frases). Qué está en juego, qué conflicto o tensión existe.",
   "relevancia_jugador": "Por qué esta situación es relevante o importante para el jugador (1-2 frases). Qué puede ganar o perder, por qué su participación importa.",
   "player_mission": "Objetivo principal que el jugador debe intentar alcanzar durante la conversación (privado, 1-2 frases).",
+  "narrativa_inicial": "Prosa continua de 1 a 3 párrafos que integre todo: el escenario y la atmósfera, la situación o el problema en juego, por qué le importa al jugador, y la presencia en escena de los tres personajes (nombres y breve descripción de dónde o cómo están). Sin apartados ni títulos dentro del texto; tono dinámico y excitante, como el arranque de una novela o una partida de rol.",
   "actors": [
     {
       "name": "Nombre del personaje",
@@ -85,7 +88,8 @@ Debes generar un JSON válido con esta estructura exacta (sin comentarios, sin c
 }
 
 Reglas:
-- ambientacion, contexto_problema, relevancia_jugador, player_mission y cada actor deben ser coherentes entre sí.
+- ambientacion, contexto_problema, relevancia_jugador, player_mission, narrativa_inicial y cada actor deben ser coherentes entre sí.
+- narrativa_inicial debe ser prosa continua: sin secciones tituladas (no uses "Ambientación:", "Personajes:", etc.). Integra de forma natural escenario, situación, relevancia y los tres personajes con su presencia en la escena.
 - actors debe tener exactamente el número de personajes que se te indique (normalmente 3).
 - presencia_escena debe ser muy breve: una frase por personaje para la descripción inicial.
 - Responde SOLO con el JSON, sin texto antes ni después. Si usas markdown, envuelve el JSON en ```json ... ```."""
@@ -116,6 +120,7 @@ Responde únicamente con el JSON especificado."""
             if "contexto_problema" not in data or "relevancia_jugador" not in data:
                 raise ValueError("Faltan campos obligatorios: contexto_problema, relevancia_jugador")
             actors_list = data["actors"]
+            # narrativa_inicial: si falta o está vacío, se rellena en la normalización
             if not isinstance(actors_list, list) or len(actors_list) < num_actors:
                 raise ValueError("actors debe ser una lista con al menos num_actors elementos")
 
@@ -131,12 +136,21 @@ Responde únicamente con el JSON especificado."""
                     "background": str(a.get("background", "Sin background.")).strip(),
                     "presencia_escena": str(a.get("presencia_escena", "Presente en la escena.")).strip(),
                 })
-
+            ambientacion = str(data.get("ambientacion", "")).strip()
+            contexto_problema = str(data.get("contexto_problema", "")).strip()
+            relevancia_jugador = str(data.get("relevancia_jugador", "")).strip()
+            narrativa_inicial = str(data.get("narrativa_inicial", "")).strip()
+            if not narrativa_inicial:
+                parts = [ambientacion, contexto_problema, relevancia_jugador]
+                for a in normalized_actors:
+                    parts.append(f"{a['name']}: {a['presencia_escena']}.")
+                narrativa_inicial = " ".join(parts)
             return {
-                "ambientacion": str(data.get("ambientacion", "")).strip(),
-                "contexto_problema": str(data.get("contexto_problema", "")).strip(),
-                "relevancia_jugador": str(data.get("relevancia_jugador", "")).strip(),
+                "ambientacion": ambientacion,
+                "contexto_problema": contexto_problema,
+                "relevancia_jugador": relevancia_jugador,
                 "player_mission": str(data.get("player_mission", "")).strip(),
+                "narrativa_inicial": narrativa_inicial,
                 "actors": normalized_actors,
             }
         except Exception as e:
