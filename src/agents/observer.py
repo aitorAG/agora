@@ -138,11 +138,18 @@ class ObserverAgent(Agent):
 
         # Construir prompt según si tenemos lista de personajes o no
         if self._actor_names:
+            authors_in_messages = {m["author"] for m in messages if m["author"] in self._actor_names}
+            actors_who_spoke = [n for n in self._actor_names if n in authors_in_messages]
+            actors_not_yet_spoken = [n for n in self._actor_names if n not in authors_in_messages]
+            spoken_str = ", ".join(actors_who_spoke) if actors_who_spoke else "ninguno"
+            not_spoken_str = ", ".join(actors_not_yet_spoken) if actors_not_yet_spoken else "ninguno"
             names_str = ", ".join(f'"{n}"' for n in self._actor_names)
             who_options = f'uno de los personajes ({names_str}), "user" o "none"'
             system_prompt = f"""Eres un observador experto que analiza conversaciones. Tu tarea es determinar si alguien debe responder antes de pasar al siguiente turno.
 
-Personajes disponibles en la conversación: {", ".join(self._actor_names)}. Algunos pueden no haber hablado aún.
+Personajes en la escena: {", ".join(self._actor_names)}.
+Han intervenido ya en esta conversación: {spoken_str}.
+Aún no han hablado: {not_spoken_str}.
 
 Analiza el contexto de la conversación y decide:
 1. ¿Hay preguntas sin responder?
@@ -158,6 +165,8 @@ Responde SOLO con un JSON válido en este formato exacto:
 
 Reglas:
 - Si debe hablar un personaje, usa su nombre exacto (ej. {names_str}). Si es el jugador, usa "user". Si nadie debe responder, "none".
+- Los personajes pueden hablar entre sí; no es obligatorio que después de un personaje hable el jugador. Si el contexto lo pide (p. ej. una pregunta dirigida a otro personaje, o dar entrada a quien aún no ha intervenido), quien debe responder puede ser otro personaje.
+- El siguiente en hablar puede ser cualquier otro participante (otro personaje o el jugador), según el contexto.
 - Si el último mensaje es una pregunta, quien debe responder es otro participante (personaje o user).
 - Si la conversación está completa o naturalmente pausada, usa "none".
 - Considera dar turno a personajes que todavía no han hablado si el contexto lo pide."""
@@ -284,6 +293,30 @@ Incluye en actor_missions_achieved exactamente un booleano por cada personaje cu
                 "reasoning": f"Error en evaluación: {str(e)}",
             }
 
+    def _compute_game_ended(self, mission_evaluation: Dict[str, Any]) -> tuple[bool, str]:
+        """Determina si la partida debe cerrarse por misión cumplida + evidencia narrativa.
+        
+        Criterio: al menos una misión lograda (jugador o actor) y reasoning no vacío como evidencia.
+        """
+        if not mission_evaluation:
+            return False, ""
+        player_ok = bool(mission_evaluation.get("player_mission_achieved", False))
+        actor_ok = mission_evaluation.get("actor_missions_achieved", {})
+        if not isinstance(actor_ok, dict):
+            actor_ok = {}
+        any_actor_ok = any(actor_ok.get(n, False) for n in actor_ok)
+        reasoning = (mission_evaluation.get("reasoning") or "").strip()
+        if not (player_ok or any_actor_ok) or not reasoning:
+            return False, ""
+        parts = []
+        if player_ok:
+            parts.append("El jugador ha cumplido su misión.")
+        for name, achieved in actor_ok.items():
+            if achieved:
+                parts.append(f"{name} ha cumplido su misión.")
+        reason = " ".join(parts) + " " + reasoning
+        return True, reason.strip()
+
     def process(self, state: ConversationState) -> Dict[str, Any]:
         """Analiza el estado completo de la conversaci?n.
         
@@ -296,10 +329,14 @@ Incluye en actor_missions_achieved exactamente un booleano por cada personaje cu
         messages = state["messages"]
         
         if not messages:
+            mission_eval = self.evaluate_missions(state)
+            game_ended, game_ended_reason = self._compute_game_ended(mission_eval)
             return {
                 "analysis": "No hay mensajes para analizar",
                 "continuation_decision": {"needs_response": False, "who_should_respond": "none", "reason": "Sin mensajes"},
-                "mission_evaluation": self.evaluate_missions(state),
+                "mission_evaluation": mission_eval,
+                "game_ended": game_ended,
+                "game_ended_reason": game_ended_reason,
                 "update_metadata": True,
             }
         
@@ -342,10 +379,14 @@ Incluye en actor_missions_achieved exactamente un booleano por cada personaje cu
         continuation_decision = self.evaluate_continuation(state)
         # Evaluar si el jugador o los actores han alcanzado su misión (al final de cada turno)
         mission_evaluation = self.evaluate_missions(state)
+        # Decisión de cierre: si al menos una misión lograda y hay evidencia narrativa (reasoning), partida terminada
+        game_ended, game_ended_reason = self._compute_game_ended(mission_evaluation)
         
         return {
             "analysis": analysis,
             "continuation_decision": continuation_decision,
             "mission_evaluation": mission_evaluation,
+            "game_ended": game_ended,
+            "game_ended_reason": game_ended_reason,
             "update_metadata": True
         }

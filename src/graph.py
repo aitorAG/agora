@@ -6,7 +6,7 @@ from .state import ConversationState
 from .manager import ConversationManager
 from .agents.character import CharacterAgent
 from .agents.observer import ObserverAgent
-from .renderer import render_message
+from .io_adapters import InputProvider, OutputHandler
 
 
 def route_continuation(
@@ -53,7 +53,10 @@ def create_conversation_graph(
     character_agents: dict[str, CharacterAgent],
     observer_agent: ObserverAgent,
     manager: ConversationManager,
-    max_turns: int = 10
+    max_turns: int = 10,
+    *,
+    input_provider: InputProvider,
+    output_handler: OutputHandler,
 ) -> StateGraph:
     """Crea el grafo de conversación con LangGraph.
     
@@ -62,6 +65,8 @@ def create_conversation_graph(
         observer_agent: Agente observador que analiza
         manager: ConversationManager para gestionar estado
         max_turns: Número máximo de turnos
+        input_provider: Abstracción para obtener input del jugador (inyección de I/O)
+        output_handler: Abstracción para emitir mensajes y errores (inyección de I/O)
         
     Returns:
         Grafo LangGraph configurado
@@ -81,36 +86,30 @@ def create_conversation_graph(
         result = agent.process(state)
         
         if "error" in result:
-            print(f"Error en {agent.name}: {result['error']}")
+            output_handler.on_error(f"Error en {agent.name}: {result['error']}")
             return state
         
         # Añadir mensaje al estado
         manager.add_message(result["author"], result["message"])
         
-        # Renderizar mensaje
+        # Emitir mensaje vía handler (motor no conoce print)
         last_message = manager.state["messages"][-1]
-        render_message(last_message)
+        output_handler.on_message(last_message)
         
         return manager.state
     
     def user_input_node(state: ConversationState) -> ConversationState:
-        """Nodo que solicita entrada del usuario."""
-        # Solicitar input del usuario
-        user_input = input("Tú: ").strip()
+        """Nodo que solicita entrada del usuario vía InputProvider."""
+        user_result = input_provider.get_user_input()
         
-        # Comandos de salida (case-insensitive)
-        exit_commands = {"exit", "quit", "salir", "q"}
-        if user_input.lower() in exit_commands:
-            # Marcar en metadata que el usuario quiere salir
+        if user_result.user_exit:
             manager.update_metadata("user_exit", True)
             return manager.state
         
-        # Si el usuario no escribió nada, no añadir mensaje
-        if not user_input:
+        if not user_result.text or not user_result.text.strip():
             return manager.state
         
-        # Añadir mensaje del usuario al estado y contar un turno (cada intervención del jugador = 1 turno)
-        manager.add_message("Usuario", user_input)
+        manager.add_message("Usuario", user_result.text.strip())
         manager.increment_turn()
         
         return manager.state
@@ -131,14 +130,29 @@ def create_conversation_graph(
         if "mission_evaluation" in result:
             manager.update_metadata("last_mission_evaluation", result["mission_evaluation"])
             manager.update_metadata(f"turn_{state['turn']}_mission_evaluation", result["mission_evaluation"])
+        # Guardar decisión de cierre (partida terminada por misión + evidencia)
+        if "game_ended" in result:
+            manager.update_metadata("game_ended", result["game_ended"])
+        if "game_ended_reason" in result:
+            manager.update_metadata("game_ended_reason", result["game_ended_reason"])
         
         return manager.state
     
     def increment_turn_node(state: ConversationState) -> ConversationState:
         """Passthrough: el turno ya se incrementó en user_input_node al hablar el jugador."""
         return manager.state
+
+    def finalize_node(state: ConversationState) -> ConversationState:
+        """Cierre por misión cumplida: notifica al cliente y termina."""
+        reason = state.get("metadata", {}).get("game_ended_reason", "")
+        evaluation = state.get("metadata", {}).get("last_mission_evaluation", {})
+        output_handler.on_game_ended(reason, evaluation)
+        return manager.state
     
-    def should_allow_continuation(state: ConversationState) -> Literal["character", "user_input", "continue"]:
+    def observer_route(state: ConversationState) -> Literal["finalize", "character", "user_input", "continue"]:
+        """Primero game_ended → finalize; si no, decisión de continuación (character / user_input / continue)."""
+        if state.get("metadata", {}).get("game_ended", False):
+            return "finalize"
         continuation_decision = state.get("metadata", {}).get("continuation_decision", {})
         return route_continuation(continuation_decision, agent_names_ordered)
     
@@ -153,24 +167,27 @@ def create_conversation_graph(
     workflow.add_node("user_input", user_input_node)
     workflow.add_node("observer", observer_agent_node)
     workflow.add_node("increment_turn", increment_turn_node)
+    workflow.add_node("finalize", finalize_node)
     
     # Definir punto de entrada
     workflow.set_entry_point("character")
     
-    # Añadir edges
-    workflow.add_edge("character", "user_input")
+    # Arcos: tras cada intervención (character o user_input) se pasa por observer
+    workflow.add_edge("character", "observer")
     workflow.add_edge("user_input", "observer")
     
-    # Edge condicional desde observer basado en decisión de continuación
+    # Edge condicional desde observer: game_ended → finalize; si no → character | user_input | increment_turn
     workflow.add_conditional_edges(
         "observer",
-        should_allow_continuation,
+        observer_route,
         {
+            "finalize": "finalize",
             "character": "character",
             "user_input": "user_input",
             "continue": "increment_turn"
         }
     )
+    workflow.add_edge("finalize", END)
     
     # Edge condicional desde increment_turn
     workflow.add_conditional_edges(
