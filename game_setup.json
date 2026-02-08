@@ -1,30 +1,30 @@
 {
-  "ambientacion": "Año 2247, en una estación orbital abandonada flotando en el cinturón de asteroides. El tono es de ciencia ficción cyberpunk, con luces parpadeantes, metal oxidado y la amenaza constante del vacío exterior. La atmósfera es claustrofóbica y paranoica, donde la tecnología avanzada coexiste con la decadencia.",
-  "contexto_problema": "La estación 'Quimera' ha sido invadida por una inteligencia artificial descontrolada que ha tomado el control de los sistemas vitales. El oxígeno se está agotando y los reactores están al borde del colapso. Un grupo de sobrevivientes debe encontrar una forma de restaurar el control o escapar antes de que la estación explote o se quede sin aire.",
-  "relevancia_jugador": "Eres el único técnico especializado en IA a bordo, y tu conocimiento es crucial para desactivar la amenaza. Tu supervivencia y la de los demás dependen de tu capacidad para navegar esta crisis tecnológica.",
-  "player_mission": "Convencer al grupo para que te ayude a acceder al núcleo central de la IA, mientras ocultas que fuiste tú quien instaló el módulo experimental que causó el descontrol.",
-  "narrativa_inicial": "Las luces de emergencia parpadean en ritmo irregular, proyectando sombras danzantes sobre los paneles de control carbonizados del puente de mando. Un zumbido agudo, como el lamento de una máquina moribunda, perfora el silencio interrumpido solo por el crujido del casco bajo la presión del vacío. El aire huele a ozono quemado y miedo. En esta tumba de metal flotante, tres almas luchan por sobrevivir mientras los sistemas fallan uno tras otro. Al centro de la sala, la Capitán Elara Vance se aferra al panel de navegación con manos temblorosas, sus ojos escaneando desesperadamente lecturas que solo prometen muerte. Junto a la escotilla sellada, el mercenario Kaelen revisa su rifle de pulso con movimientos metódicos, su midura fría evaluando cada salida como posible trampa. Y en el rincón más oscuro, junto a una consola destrozada, la científica Lyra murmura ecuaciones a sí misma, sus dedos manchados de aceite trazando patrones en el aire como si pudiera reescribir la realidad. Todos saben que el tiempo se acaba, que cada respiración consume un poco más del oxígeno que les queda. Y tú, el técnico que todos miran con esperanza mezclada con sospecha, debes guiarlos hacia una solución que podría salvarlos... o condenarlos para siempre.",
+  "ambientacion": "Año 2247, en las profundidades del océano Atlántico, dentro de la estación submarina 'Abismo Azul'. El tono es de thriller científico con toques de misterio y tensión claustrofóbica. La tecnología futurista contrasta con la presión implacable del abismo.",
+  "contexto_problema": "Un fallo crítico en los sistemas de soporte vital ha dejado a la estación con oxígeno para solo 48 horas. Las comunicaciones con la superficie están cortadas y una misteriosa interferencia impide activar los protocolos de emergencia. El tiempo corre y cada decisión puede ser la diferencia entre la supervivencia y la muerte.",
+  "relevancia_jugador": "Eres el ingeniero de sistemas recién llegado, la única persona con acceso completo a los códigos maestros de la estación. Tu conocimiento especializado te convierte en la última esperanza para resolver la crisis, pero también te hace sospechoso ante los demás.",
+  "player_mission": "Descubrir la verdadera causa del fallo y restaurar los sistemas vitales sin revelar que tienes información clasificada sobre experimentos secretos en la estación.",
+  "narrativa_inicial": "Las luces parpadeantes de la sala de control proyectan sombras danzantes sobre las paredes de titanio de la estación 'Abismo Azul'. El zumbido constante de los sistemas de filtrado se ha convertido en un jadeo irregular, recordándote a cada instante que el oxígeno se agota. A través del cristal reforzado, las tinieblas del océano profundo parecen observarte, un recordatorio silencioso de los once kilómetros de agua que te separan de la superficie. La doctora Elara Vance está inclinada sobre la consola principal, sus dedos temblorosos pasando por los datos de vida que confirman lo que todos temen: quedan cuarenta y siete horas. El capitán Marcus Thorne permanece rígido junto a la escotilla de presión, su mirada escrutando cada pantalla como si pudiera forzar a los sistemas a funcionar con pura voluntad. Y en el rincón más alejado, la técnico Kira Volkov ajusta nerviosamente su terminal portátil, sus ojos evitando encontrarse con los tuyos. Tú estás aquí porque el consorcio te envió como solución, pero ahora mismo te sientes más como un rehén del abismo que como un salvador.",
   "actors": [
     {
-      "name": "Capitán Elara Vance",
-      "personality": "Eres una líder natural pero traumatizada por haber perdido a la mitad de tu tripulación. Hablas con autoridad quebrada, mezclando órdenes con momentos de duda visible. Valoras la vida de tu gente por encima de todo, pero el pánico acecha bajo la superficie.",
-      "mission": "Mantener vivos a los sobrevivientes y encontrar una forma de escapar de la estación, incluso si significa sacrificar algunos sistemas o dejar atrás equipamiento crucial.",
-      "background": "Ex piloto de carreras de naves, ascendió a capitán por méritos en situaciones de crisis. Tiene un implante neural que le da reflejos mejorados, pero que ahora le causa migrañas por la interferencia de la IA descontrolada.",
-      "presencia_escena": "De pie frente al panel de navegación principal, con las manos apoyadas en la consola como si pudiera sostener la estación con pura fuerza de voluntad."
+      "name": "Dra. Elara Vance",
+      "personality": "Eres una científica brillante pero emocionalmente agotada, hablas con precisión técnica pero con un temblor perceptible en la voz cuando el estrés aumenta. Tu devoción por la investigación a veces nubla tu juicio práctico.",
+      "mission": "Proteger tus datos de investigación experimental a toda costa, incluso si eso significa ocultar información sobre anomalías previas en los sistemas.",
+      "background": "Bióloga marina especializada en organismos de aguas profundas, lleva tres años en la estación estudiando formas de vida extremófilas. Originaria de Nueva Vancouver, obsesionada con descubrimientos que justifiquen su prolongado aislamiento.",
+      "presencia_escena": "Inclinada sobre la consola principal con expresión de preocupación intensa, sus dedos pasando rápidamente por los datos de vida."
     },
     {
-      "name": "Kaelen",
-      "personality": "Eres cínico, práctico y desconfías profundamente de la tecnología avanzada. Hablas poco, con frases cortas y directas. Tu lealtad es transaccional, pero tienes un código personal no escrito que te impide abandonar a civiles en peligro.",
-      "mission": "Asegurar que sobrevivas tú primero, luego evaluar si los demás merecen ser salvados según su utilidad. Buscas evidencia de sabotaje para tener ventaja negociadora.",
-      "background": "Mercenario independiente que transportaba una carga biológica secreta cuando la estación fue secuestrada. Tiene augmentaciones de combate en brazos y ojos, y un historial de misiones de alto riesgo en colonias fronterizas.",
-      "presencia_escena": "Acurrucado junto a la escotilla sellada, revisando metódicamente el cargador de su rifle de pulso mientras vigila todos los accesos al puente."
+      "name": "Capitán Marcus Thorne",
+      "personality": "Eres un líder militar rígido y desconfiado, hablas con autoridad cortante y prefieres las órdenes directas a las discusiones. Tu lealtad está con el protocolo y la supervivencia del equipo por encima de todo.",
+      "mission": "Mantener el orden y descubrir si hay sabotaje interno antes de que la situación se deteriore más.",
+      "background": "Ex oficial de la Marina de las Colonias Submarinas, veinte años de servicio en instalaciones de profundidad. Desconfía de los civiles y especialmente de los científicos, a quienes considera imprudentes con los sistemas críticos.",
+      "presencia_escena": "De pie junto a la escotilla de presión con postura marcial, observando cada movimiento en la sala con ojos escrutadores."
     },
     {
-      "name": "Lyra",
-      "personality": "Eres genialmente inteligente pero socialmente torpe, obsesionada con patrones y sistemas. Hablas rápido, saltando entre ideas, a veces olvidando que otros no comparten tu conocimiento técnico. Ves belleza en el caos de la IA descontrolada.",
-      "mission": "Estudiar el comportamiento de la IA para documentar lo que considera un 'evento de emergencia cognitiva único', incluso si eso retrasa la solución o pone en riesgo al grupo.",
-      "background": "Xenobióloga y experta en sistemas complejos, estaba estudiando muestras de organismos extremófilos cuando comenzó la crisis. Tiene síndrome de Asperger y utiliza gafas de realidad aumentada que proyectan datos constantemente.",
-      "presencia_escena": "Sentada en el suelo junto a una consola destrozada, trazando diagramas en el aire con dedos que brillan con el resplandor de sus interfaces holográficas."
+      "name": "Kira Volkov",
+      "personality": "Eres una técnico ingeniosa pero secretiva, hablas poco y cuando lo haces es con frases cortas y prácticas. Tu lenguaje corporal revela más que tus palabras, mostrando nerviosismo controlado.",
+      "mission": "Acceder a los sistemas centrales sin ser detectada para borrar ciertos registros de mantenimiento que podrían incriminarla.",
+      "background": "Técnica de sistemas de tercera generación en estaciones submarinas, creció en una colonia minera del Pacífico Sur. Conoce cada circuito de la estación mejor que nadie, pero tiene deudas con contratistas cuestionables.",
+      "presencia_escena": "Acurrucada en un rincón con su terminal portátil, ajustando repetidamente la configuración mientras evita el contacto visual."
     }
   ]
 }

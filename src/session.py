@@ -1,16 +1,18 @@
-"""Bootstrap de sesión de partida: crea motor (manager, agentes, grafo) con I/O inyectados.
-
-El motor no conoce terminal ni HTTP; solo recibe InputProvider y OutputHandler.
+"""Bootstrap de sesión de partida: crea motor (manager, agentes) con I/O inyectados.
+Sin LangGraph: el Director orquesta el bucle vía crew_roles.
 """
 
-from typing import Any
+from typing import Any, Callable
 from .state import ConversationState
 from .manager import ConversationManager
-from .agents.character import CharacterAgent
-from .agents.observer import ObserverAgent
-from .agents.guionista import GuionistaAgent
-from .graph import create_conversation_graph
 from .io_adapters import InputProvider, OutputHandler
+from .crew_roles import (
+    create_guionista_agent,
+    run_setup_task,
+    create_character_agent,
+    create_observer_agent,
+    run_game_loop,
+)
 
 
 def create_session(
@@ -20,54 +22,55 @@ def create_session(
     max_turns: int = 10,
     input_provider: InputProvider,
     output_handler: OutputHandler,
-) -> tuple[Any, ConversationState, dict[str, Any]]:
-    """Crea una sesión de partida: Guionista genera setup, se crean Manager, agentes y grafo.
+) -> tuple[Callable[[], ConversationState], ConversationState, dict[str, Any]]:
+    """Crea una sesión de partida: Guionista genera setup, se crean Manager y agentes (crew_roles).
+    El Director orquesta el bucle al ejecutar el runner.
 
     Args:
-        theme: Tema opcional para el Guionista (ej. desde GAME_THEME).
+        theme: Tema opcional para el Guionista.
         num_actors: Número de actores (por defecto 3).
         max_turns: Máximo de intervenciones del jugador.
         input_provider: Abstracción para obtener input del jugador.
         output_handler: Abstracción para emitir mensajes y errores.
 
     Returns:
-        (graph, initial_state, setup)
-        - graph: grafo LangGraph compilado listo para invoke(initial_state).
+        (runner, initial_state, setup)
+        - runner: llamable sin argumentos que ejecuta el bucle hasta el fin; devuelve estado final.
         - initial_state: estado inicial (messages=[], turn=0, metadata={}).
-        - setup: dict con narrativa_inicial, player_mission, actors, etc. para que el cliente muestre la pantalla inicial.
+        - setup: dict con narrativa_inicial, player_mission, actors, etc.
     """
-    guionista = GuionistaAgent()
-    game_setup = guionista.generate_setup(theme=theme, num_actors=num_actors)
+    guionista = create_guionista_agent()
+    game_setup = run_setup_task(guionista, theme=theme, num_actors=num_actors)
 
     manager = ConversationManager()
     initial_state: ConversationState = manager.state
 
     actors_list = game_setup["actors"]
-    character_agents: dict[str, CharacterAgent] = {}
+    character_agents: dict[str, Any] = {}
     for a in actors_list:
-        character_agents[a["name"]] = CharacterAgent(
+        character_agents[a["name"]] = create_character_agent(
             name=a["name"],
             personality=a["personality"],
             mission=a.get("mission"),
             background=a.get("background"),
         )
 
-    actor_names = [a["name"] for a in game_setup["actors"]]
-    observer = ObserverAgent(
-        actor_names=actor_names,
+    observer = create_observer_agent(
+        actor_names=[a["name"] for a in actors_list],
         player_mission=game_setup.get("player_mission") or "",
-        actor_missions={a["name"]: a.get("mission", "") for a in game_setup["actors"]},
+        actor_missions={a["name"]: a.get("mission", "") for a in actors_list},
     )
 
-    graph = create_conversation_graph(
-        character_agents=character_agents,
-        observer_agent=observer,
-        manager=manager,
-        max_turns=max_turns,
-        input_provider=input_provider,
-        output_handler=output_handler,
-    )
+    def runner() -> ConversationState:
+        return run_game_loop(
+            manager,
+            character_agents,
+            observer,
+            max_turns,
+            input_provider=input_provider,
+            output_handler=output_handler,
+            max_messages_before_user=3,
+        )
 
-    # setup es el game_setup completo: para mostrar (on_setup_ready) y para persistir (game_setup.json)
     setup = dict(game_setup)
-    return graph, initial_state, setup
+    return runner, initial_state, setup

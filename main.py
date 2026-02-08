@@ -25,7 +25,6 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
 logging.getLogger("langchain").setLevel(logging.WARNING)
-logging.getLogger("langgraph").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ def main():
     input_provider = TerminalInputProvider()
     output_handler = TerminalOutputHandler()
 
-    graph, initial_state, setup = create_session(
+    runner, initial_state, setup = create_session(
         theme=theme,
         num_actors=num_actors,
         max_turns=max_turns,
@@ -76,11 +75,7 @@ def main():
     print("-" * 50)
 
     try:
-        recursion_limit = max(100, 50 + max_turns * 15)
-        final_state = graph.invoke(
-            initial_state,
-            config={"recursion_limit": recursion_limit},
-        )
+        final_state = runner()
         print("-" * 50)
         print(f"\nConversación finalizada después de {final_state['turn']} turnos.")
         print(f"Total de mensajes: {len(final_state['messages'])}")
