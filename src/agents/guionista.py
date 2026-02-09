@@ -60,7 +60,7 @@ class GuionistaAgent(Agent):
         """Genera el setup de la partida: ambientación, contexto del problema, relevancia, player_mission y actores (name, personality, mission, background, presencia_escena).
 
         Args:
-            theme: Tema o semilla opcional (ej. "historia romántica en Alemania siglo XVII"). Si es None, el Guionista inventa.
+            theme: Tema o semilla opcional (ej. "historia romántica en Alemania siglo XVII, trama de detectives en un mundo de fantasia o aventuras de humor en ciberpunk magico"). Si es None, el Guionista inventa.
             num_actors: Número de actores a generar (por defecto 3).
 
         Returns:
