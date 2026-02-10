@@ -1,10 +1,12 @@
 """Director: orquestador central. Gestiona el flujo de turnos, llama a Guionista, Character y Observer."""
 
+import time
 from typing import Literal, Any
 
 from ..state import ConversationState
 from ..manager import ConversationManager
 from ..io_adapters import InputProvider, OutputHandler
+from ..logging_config import get_logger
 
 from .guionista import run_setup_task
 from .character import run_character_response
@@ -59,11 +61,16 @@ def run_game_loop(
     Si no se sabe quién debe hablar se da palabra al usuario. Cada max_messages_before_user
     intervenciones no-usuario se fuerza user_input (0 = desactivado).
     """
+    logger = get_logger("Director")
     agent_names_ordered = list(character_agents.keys())
     next_action: Literal["character", "user_input"] = "character"
 
     while True:
+        t0_turn = time.perf_counter()
+        logger.info("Turn started (next=%s)", next_action)
+
         if next_action == "character":
+            logger.info("Phase: character")
             state = manager.state
             continuation_decision = state.get("metadata", {}).get("continuation_decision", {})
             who = continuation_decision.get("who_should_respond", "")
@@ -75,12 +82,15 @@ def run_game_loop(
             if "error" in result:
                 output_handler.on_error(f"Error en {agent.name}: {result['error']}")
                 return manager.state
+            logger.info("Character response received")
             manager.add_message(result["author"], result["message"])
             output_handler.on_message(manager.state["messages"][-1])
 
         else:
             assert next_action == "user_input"
+            logger.info("Phase: user_input")
             user_result = input_provider.get_user_input()
+            logger.info("User input received")
             if user_result.user_exit:
                 manager.update_metadata("user_exit", True)
                 return manager.state
@@ -90,6 +100,7 @@ def run_game_loop(
 
         state = manager.state
         obs_result = run_observer_tasks(observer_agent, state)
+        logger.info("Observer finished")
         if obs_result.get("update_metadata"):
             if obs_result.get("analysis") is not None:
                 manager.update_metadata(f"turn_{state['turn']}_analysis", obs_result["analysis"])
@@ -105,6 +116,7 @@ def run_game_loop(
         state = manager.state
 
         if state.get("metadata", {}).get("game_ended", False):
+            logger.info("Game ended")
             reason = state.get("metadata", {}).get("game_ended_reason", "")
             evaluation = state.get("metadata", {}).get("last_mission_evaluation", {})
             output_handler.on_game_ended(reason, evaluation)
@@ -124,3 +136,6 @@ def run_game_loop(
             if route_should_continue(state, max_turns) == "end":
                 return manager.state
             next_action = "character"
+
+        elapsed_turn = time.perf_counter() - t0_turn
+        logger.info("Turn finished (next=%s) in %.2f s", next_action, elapsed_turn)

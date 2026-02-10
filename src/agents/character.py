@@ -1,15 +1,16 @@
 """CharacterAgent - Agente actor que participa en la conversación."""
 
 from typing import Dict, Any
-from langchain_deepseek import ChatDeepSeek
-from langchain_core.messages import HumanMessage, SystemMessage
+import os
+
 from ..state import ConversationState
 from .base import Agent
+from .deepseek_adapter import send_message
 
 
 class CharacterAgent(Agent):
     """Agente que representa un personaje en la conversación."""
-    
+
     def __init__(
         self,
         name: str,
@@ -31,7 +32,12 @@ class CharacterAgent(Agent):
         self._personality = personality
         self._mission = mission
         self._background = background
-        self._llm = ChatDeepSeek(model=model, temperature=0.8)
+        # Permitir sobreescribir modelo/temperatura vía entorno
+        self._model = os.getenv("DEEPSEEK_MODEL_CHARACTER", model)
+        try:
+            self._temperature = float(os.getenv("DEEPSEEK_TEMP_CHARACTER", "0.8"))
+        except ValueError:
+            self._temperature = 0.8
 
     @property
     def is_actor(self) -> bool:
@@ -52,21 +58,17 @@ class CharacterAgent(Agent):
     def background(self) -> str | None:
         """Background del personaje (opcional)."""
         return self._background
-    
+
     def process(self, state: ConversationState) -> Dict[str, Any]:
         """Genera una respuesta basada en el historial visible.
-        
+
         Args:
             state: Estado actual de la conversación
-            
+
         Returns:
             Diccionario con 'message' (contenido del mensaje) o 'error'
         """
         try:
-            # Construir historial de mensajes para el LLM
-            messages = []
-            
-            # Mensaje del sistema con personalidad, background (si existe) y misión privada (si existe)
             system_prompt = f"""Eres {self.name}, un personaje en una conversación grupal.
 Tu personalidad: {self.personality}
 
@@ -83,26 +85,24 @@ Actúa de forma coherente con este contexto."""
 
 Tienes una misión secreta que debes intentar cumplir durante la conversación. No la reveles explícitamente.
 Tu misión: {self._mission}"""
-            
-            messages.append(SystemMessage(content=system_prompt))
-            
-            # Añadir historial visible
-            for msg in state["messages"]:
-                messages.append(
-                    HumanMessage(content=f"[{msg['author']}] {msg['content']}")
-                )
-            
-            # Generar respuesta
-            response = self._llm.invoke(messages)
-            content = response.content.strip()
-            
+
+            # Limitar historial a los últimos N mensajes para reducir tokens
+            max_history = int(os.getenv("CHAR_CONTEXT_MESSAGES", "20"))
+            history = state["messages"][-max_history:]
+            messages = [{"role": "system", "content": system_prompt}]
+            for msg in history:
+                messages.append({"role": "user", "content": f"[{msg['author']}] {msg['content']}"})
+
+            content = send_message(
+                messages, model=self._model, temperature=self._temperature, stream=False
+            )
+            assert isinstance(content, str)
             return {
-                "message": content,
-                "author": self.name
+                "message": content.strip(),
+                "author": self.name,
             }
-            
         except Exception as e:
             return {
                 "error": str(e),
-                "author": self.name
+                "author": self.name,
             }

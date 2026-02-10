@@ -2,12 +2,12 @@
 
 import logging
 import json
+import os
 from typing import Dict, Any, List, Counter
 from collections import Counter
-from langchain_deepseek import ChatDeepSeek
-from langchain_core.messages import HumanMessage, SystemMessage
 from ..state import ConversationState
 from .base import Agent
+from .deepseek_adapter import send_message
 
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,8 @@ class ObserverAgent(Agent):
             actor_missions: Diccionario nombre del actor -> texto de su misión privada
         """
         super().__init__(name)
-        self._llm = ChatDeepSeek(model=model, temperature=0.3)
+        self._model = model
+        self._temperature = 0.3
         self._actor_names = actor_names or []
         self._player_mission = (player_mission or "").strip()
         self._actor_missions = actor_missions or {}
@@ -195,13 +196,15 @@ Reglas:
         
         try:
             llm_messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ]
-            
-            response = self._llm.invoke(llm_messages)
-            content = response.content.strip()
-            
+            content = send_message(
+                llm_messages, model=self._model, temperature=self._temperature, stream=False
+            )
+            assert isinstance(content, str)
+            content = content.strip()
+
             # Intentar parsear JSON (puede venir con markdown code blocks)
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
@@ -256,8 +259,9 @@ Reglas:
                 "actor_missions_achieved": {n: False for n in self._actor_missions},
                 "reasoning": "Sin mensajes en la conversación.",
             }
-        # Contexto reciente (últimos 15 mensajes para tener suficiente historia)
-        recent = messages[-15:]
+        # Contexto reciente (últimos N mensajes para tener suficiente historia)
+        max_history = int(os.getenv("OBSERVER_CONTEXT_MESSAGES", "15"))
+        recent = messages[-max_history:]
         context_lines = [f"[{m['author']}] {m['content']}" for m in recent]
         context_text = "\n".join(context_lines)
         missions_text = []
@@ -279,12 +283,15 @@ Reglas: Sé estricto: solo true si la conversación muestra claramente que el ob
 Incluye en actor_missions_achieved exactamente un booleano por cada personaje cuya misión te hayan dado. Responde SOLO con el JSON. Si usas markdown, envuelve en ```json ... ```."""
         user_prompt = f"""Conversación reciente:\n{context_text}\n\nMisiones:\n{missions_block}\n\n¿El jugador (Usuario) o alguno de los personajes ha alcanzado ya su misión? Responde con el JSON especificado."""
         try:
-            response = self._llm.invoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt),
-            ])
-            content = response.content.strip()
-            return parse_mission_evaluation_response(content, list(self._actor_missions.keys()))
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+            content = send_message(
+                messages, model=self._model, temperature=self._temperature, stream=False
+            )
+            assert isinstance(content, str)
+            return parse_mission_evaluation_response(content.strip(), list(self._actor_missions.keys()))
         except Exception as e:
             logger.warning("Error al evaluar misiones: %s. Usando valores por defecto.", e)
             return {
@@ -377,8 +384,21 @@ Incluye en actor_missions_achieved exactamente un booleano por cada personaje cu
         
         # Evaluar si alguien debe continuar la conversación
         continuation_decision = self.evaluate_continuation(state)
-        # Evaluar si el jugador o los actores han alcanzado su misión (al final de cada turno)
-        mission_evaluation = self.evaluate_missions(state)
+        # Evaluar si el jugador o los actores han alcanzado su misión:
+        # solo reevaluar cuando el último mensaje es del Usuario (fin de turno),
+        # para evitar llamadas redundantes al LLM en pasos intermedios.
+        last_author = messages[-1]["author"]
+        if last_author == "Usuario":
+            mission_evaluation = self.evaluate_missions(state)
+        else:
+            meta = state.get("metadata", {})
+            mission_evaluation = meta.get("last_mission_evaluation")
+            if not isinstance(mission_evaluation, dict):
+                mission_evaluation = {
+                    "player_mission_achieved": False,
+                    "actor_missions_achieved": {n: False for n in self._actor_missions},
+                    "reasoning": "Sin nueva evaluación de misiones en este paso.",
+                }
         # Decisión de cierre: si al menos una misión lograda y hay evidencia narrativa (reasoning), partida terminada
         game_ended, game_ended_reason = self._compute_game_ended(mission_evaluation)
         

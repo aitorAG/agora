@@ -6,6 +6,7 @@ from typing import Any, Callable
 from .state import ConversationState
 from .manager import ConversationManager
 from .io_adapters import InputProvider, OutputHandler
+from .logging_config import get_logger
 from .crew_roles import (
     create_guionista_agent,
     run_setup_task,
@@ -39,9 +40,12 @@ def create_session(
         - initial_state: estado inicial (messages=[], turn=0, metadata={}).
         - setup: dict con narrativa_inicial, player_mission, actors, etc.
     """
+    log = get_logger("Session")
+    log.debug("Setup phase: Guionista")
     guionista = create_guionista_agent()
     game_setup = run_setup_task(guionista, theme=theme, num_actors=num_actors)
 
+    log.debug("Setup phase: creating agents")
     manager = ConversationManager()
     initial_state: ConversationState = manager.state
 
@@ -72,5 +76,6 @@ def create_session(
             max_messages_before_user=3,
         )
 
+    log.debug("Runner configured")
     setup = dict(game_setup)
     return runner, initial_state, setup

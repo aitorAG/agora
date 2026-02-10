@@ -3,10 +3,9 @@
 import json
 import logging
 from typing import Dict, Any, List
-from langchain_deepseek import ChatDeepSeek
-from langchain_core.messages import HumanMessage, SystemMessage
 from ..state import ConversationState
 from .base import Agent
+from .deepseek_adapter import send_message
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +41,8 @@ class GuionistaAgent(Agent):
 
     def __init__(self, name: str = "Guionista", model: str = "deepseek-chat"):
         super().__init__(name)
-        self._llm = ChatDeepSeek(model=model, temperature=0.7)
+        self._model = model
+        self._temperature = 0.7
 
     @property
     def is_actor(self) -> bool:
@@ -98,13 +98,16 @@ Reglas:
 Responde únicamente con el JSON especificado."""
 
         try:
-            response = self._llm.invoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt),
-            ])
-            content = response.content.strip()
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+            content = send_message(
+                messages, model=self._model, temperature=self._temperature, stream=False
+            )
+            assert isinstance(content, str)
+            content = content.strip()
 
-            # Extraer JSON si viene en bloque markdown
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
             elif "```" in content:
@@ -112,7 +115,6 @@ Responde únicamente con el JSON especificado."""
 
             data = json.loads(content)
 
-            # Validar estructura mínima
             if not isinstance(data, dict):
                 raise ValueError("La respuesta no es un objeto JSON")
             if "ambientacion" not in data or "player_mission" not in data or "actors" not in data:
@@ -120,11 +122,9 @@ Responde únicamente con el JSON especificado."""
             if "contexto_problema" not in data or "relevancia_jugador" not in data:
                 raise ValueError("Faltan campos obligatorios: contexto_problema, relevancia_jugador")
             actors_list = data["actors"]
-            # narrativa_inicial: si falta o está vacío, se rellena en la normalización
             if not isinstance(actors_list, list) or len(actors_list) < num_actors:
                 raise ValueError("actors debe ser una lista con al menos num_actors elementos")
 
-            # Normalizar cada actor: name, personality, mission, background, presencia_escena
             normalized_actors: List[Dict[str, str]] = []
             for i, a in enumerate(actors_list[:num_actors]):
                 if not isinstance(a, dict):

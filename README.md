@@ -16,6 +16,7 @@ Este proyecto implementa un sistema de conversación donde múltiples agentes in
 - **Evaluación de misiones**: El Observer evalúa quién debe hablar y si se cumplieron misiones (game_ended); el Director aplica el cierre.
 - **Routing por nombre**: El Observer indica qué personaje debe hablar; el Director invoca al Character correcto.
 - **Terminal jugable**: Cliente ligero con InputProvider/OutputHandler; arquitectura lista para cliente Android o UI futura.
+- **DeepSeek vía cliente OpenAI**: Todas las llamadas al LLM pasan por `src/agents/deepseek_adapter.py` (función `send_message`); se usa el paquete `openai` con `base_url` de DeepSeek. No se usa LangChain ni LiteLLM.
 
 ## Requisitos
 
@@ -85,6 +86,7 @@ cp .env.example .env
 ```
 DEEPSEEK_API_KEY=tu_api_key_aqui
 ```
+   Las llamadas al modelo se realizan con el **cliente OpenAI** apuntando al endpoint de DeepSeek (`https://api.deepseek.com`); el adaptador central está en `src/agents/deepseek_adapter.py` y usa esta variable de entorno.
 
 ## Uso
 
@@ -179,6 +181,7 @@ agora/
 │   │   └── observer.py       # create_observer_agent, run_observer_tasks
 │   ├── agents/               # Implementación de agentes (usados por crew_roles)
 │   │   ├── base.py           # Clase base Agent
+│   │   ├── deepseek_adapter.py  # send_message: llamadas a DeepSeek vía cliente OpenAI
 │   │   ├── character.py      # CharacterAgent
 │   │   ├── observer.py       # ObserverAgent
 │   │   └── guionista.py      # GuionistaAgent (_default_setup)
