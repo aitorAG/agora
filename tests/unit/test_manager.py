@@ -22,6 +22,15 @@ def test_add_message_appends_with_current_turn(manager: ConversationManager):
     assert manager.state["turn"] == 0
 
 
+def test_add_message_with_displayed_stores_displayed_flag(manager: ConversationManager):
+    """add_message(..., displayed=True) deja el mensaje con displayed=True."""
+    manager.add_message("Bot", "Hi", displayed=True)
+    assert len(manager.state["messages"]) == 1
+    assert manager.state["messages"][0]["displayed"] is True
+    manager.add_message("User", "Bye", displayed=False)
+    assert manager.state["messages"][1].get("displayed") is False
+
+
 def test_increment_turn_increments_by_one(manager: ConversationManager):
     """Tras increment_turn(), state['turn'] sube 1."""
     assert manager.state["turn"] == 0

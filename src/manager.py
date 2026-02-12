@@ -21,18 +21,22 @@ class ConversationManager:
         """Retorna el estado completo."""
         return self._state
     
-    def add_message(self, author: str, content: str) -> None:
+    def add_message(
+        self, author: str, content: str, displayed: bool = False
+    ) -> None:
         """Añade un mensaje al estado.
-        
+
         Args:
             author: Nombre del agente/autor
             content: Contenido del mensaje
+            displayed: Si True, el mensaje ya fue mostrado (p. ej. por streaming) y el handler no debe reimprimirlo.
         """
         message: Message = {
             "author": author,
             "content": content,
             "timestamp": datetime.now(),
-            "turn": self._state["turn"]
+            "turn": self._state["turn"],
+            "displayed": displayed,
         }
         self._state["messages"].append(message)
     

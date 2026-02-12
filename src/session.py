@@ -2,6 +2,7 @@
 Sin LangGraph: el Director orquesta el bucle vía crew_roles.
 """
 
+import os
 from typing import Any, Callable
 from .state import ConversationState
 from .manager import ConversationManager
@@ -42,8 +43,9 @@ def create_session(
     """
     log = get_logger("Session")
     log.debug("Setup phase: Guionista")
+    stream_guionista = os.environ.get("AGORA_STREAM_GUIONISTA", "").strip().lower() in ("1", "true", "yes")
     guionista = create_guionista_agent()
-    game_setup = run_setup_task(guionista, theme=theme, num_actors=num_actors)
+    game_setup = run_setup_task(guionista, theme=theme, num_actors=num_actors, stream=stream_guionista)
 
     log.debug("Setup phase: creating agents")
     manager = ConversationManager()

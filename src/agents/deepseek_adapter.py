@@ -87,14 +87,18 @@ def send_message(
             logger.warning("High LLM latency: %.2f s", elapsed)
         return content
 
-    # stream=True: devolver generador de chunks
-    def _stream() -> Iterator[str]:
-        for chunk in response:
-            if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
+    # stream=True: devolver generador de chunks; no registrar "duration" aquí (sería engañoso)
+    logger.info("LLM streaming started")
 
-    elapsed = time.perf_counter() - t0
-    logger.info("LLM response received (duration=%.2f s)", elapsed)
-    if elapsed > _HIGH_LATENCY_THRESHOLD_S:
-        logger.warning("High LLM latency: %.2f s", elapsed)
+    def _stream() -> Iterator[str]:
+        try:
+            for chunk in response:
+                if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
+        finally:
+            elapsed = time.perf_counter() - t0
+            logger.info("LLM streaming finished (duration=%.2f s)", elapsed)
+            if elapsed > _HIGH_LATENCY_THRESHOLD_S:
+                logger.warning("High LLM latency: %.2f s", elapsed)
+
     return _stream()

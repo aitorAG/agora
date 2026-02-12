@@ -2,7 +2,8 @@
 
 import json
 import logging
-from typing import Dict, Any, List
+import sys
+from typing import Dict, Any, List, Iterator
 from ..state import ConversationState
 from .base import Agent
 from .deepseek_adapter import send_message
@@ -52,20 +53,10 @@ class GuionistaAgent(Agent):
         """No se usa en el flujo del grafo; el Guionista solo expone generate_setup."""
         return {"update_metadata": False}
 
-    def generate_setup(
-        self,
-        theme: str | None = None,
-        num_actors: int = 3,
-    ) -> Dict[str, Any]:
-        """Genera el setup de la partida: ambientación, contexto del problema, relevancia, player_mission y actores (name, personality, mission, background, presencia_escena).
-
-        Args:
-            theme: Tema o semilla opcional (ej. "historia romántica en Alemania siglo XVII, trama de detectives en un mundo de fantasia o aventuras de humor en ciberpunk magico"). Si es None, el Guionista inventa.
-            num_actors: Número de actores a generar (por defecto 3).
-
-        Returns:
-            Diccionario con keys: ambientacion, contexto_problema, relevancia_jugador, player_mission, actors (lista con name, personality, mission, background, presencia_escena).
-        """
+    def _build_setup_messages(
+        self, theme: str | None, num_actors: int
+    ) -> List[Dict[str, str]]:
+        """Construye la lista de mensajes para el LLM (lógica de dominio)."""
         theme_part = f"El tema o semilla es: «{theme}». " if theme else "Inventa una ambientación atractiva. "
         system_prompt = """Eres un guionista experto. Tu tarea es definir el setup de una partida de juego conversacional.
 
@@ -97,15 +88,69 @@ Reglas:
         user_prompt = f"""Genera el setup de la partida. {theme_part}Debes crear exactamente {num_actors} actor(es).
 Responde únicamente con el JSON especificado."""
 
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+    def _stream_setup_to_stdout(self, messages: List[Dict[str, str]]) -> str:
+        """Consume el stream del modelo y escribe en stdout; devuelve el texto completo."""
+        out = sys.stdout
+        thinking = "[Guionista escribiendo...]"
+        out.write("\r" + thinking)
+        out.flush()
+
+        response = send_message(
+            messages,
+            model=self._model,
+            temperature=self._temperature,
+            stream=True,
+        )
+        assert isinstance(response, Iterator)
+        full_content: List[str] = []
+        first = True
+        for chunk in response:
+            if first:
+                out.write("\r" + " " * len(thinking) + "\r")
+                out.flush()
+                first = False
+            out.write(chunk)
+            out.flush()
+            full_content.append(chunk)
+        if first:
+            out.write("\r" + " " * len(thinking) + "\r")
+        out.write("\n")
+        out.flush()
+        return "".join(full_content)
+
+    def generate_setup(
+        self,
+        theme: str | None = None,
+        num_actors: int = 3,
+        stream: bool = False,
+    ) -> Dict[str, Any]:
+        """Genera el setup de la partida: ambientación, contexto del problema, relevancia, player_mission y actores (name, personality, mission, background, presencia_escena).
+
+        Args:
+            theme: Tema o semilla opcional (ej. "historia romántica en Alemania siglo XVII, trama de detectives en un mundo de fantasia o aventuras de humor en ciberpunk magico"). Si es None, el Guionista inventa.
+            num_actors: Número de actores a generar (por defecto 3).
+            stream: Si True, imprime la salida del modelo (JSON) token a token en stdout.
+
+        Returns:
+            Diccionario con keys: ambientacion, contexto_problema, relevancia_jugador, player_mission, actors (lista con name, personality, mission, background, presencia_escena).
+        """
+        messages = self._build_setup_messages(theme, num_actors)
         try:
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ]
-            content = send_message(
-                messages, model=self._model, temperature=self._temperature, stream=False
-            )
-            assert isinstance(content, str)
+            if stream:
+                content = self._stream_setup_to_stdout(messages)
+            else:
+                content = send_message(
+                    messages,
+                    model=self._model,
+                    temperature=self._temperature,
+                    stream=False,
+                )
+                assert isinstance(content, str)
             content = content.strip()
 
             if "```json" in content:

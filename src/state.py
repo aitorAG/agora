@@ -1,6 +1,6 @@
 """Estado de conversación para LangGraph."""
 
-from typing import TypedDict, List, Dict, Any
+from typing import TypedDict, List, Dict, Any, NotRequired
 from datetime import datetime
 
 
@@ -10,6 +10,7 @@ class Message(TypedDict):
     content: str
     timestamp: datetime
     turn: int
+    displayed: NotRequired[bool]
 
 
 class ConversationState(TypedDict):

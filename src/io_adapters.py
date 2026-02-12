@@ -63,6 +63,8 @@ class TerminalOutputHandler:
     """OutputHandler que imprime en stdout (narrativa, mensajes, errores)."""
 
     def on_message(self, message: Message) -> None:
+        if message.get("displayed"):
+            return
         print(f"[{message['author']}] {message['content']}")
 
     def on_setup_ready(self, setup: dict) -> None:

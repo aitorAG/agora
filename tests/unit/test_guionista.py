@@ -1,7 +1,9 @@
-"""Tests unitarios del Guionista (_default_setup)."""
+"""Tests unitarios del Guionista (_default_setup y generate_setup con/sin streaming)."""
 
 import pytest
-from src.agents.guionista import _default_setup
+from unittest.mock import patch, MagicMock
+
+from src.agents.guionista import _default_setup, GuionistaAgent
 
 
 REQUIRED_KEYS = {
@@ -42,3 +44,45 @@ def test_default_setup_narrativa_inicial_non_empty():
     assert len(narrativa.strip()) > 0
     # Debe incluir al menos el primer actor (Alice)
     assert "Alice" in narrativa or "Personaje" in narrativa
+
+
+# JSON mínimo válido para generate_setup (num_actors=2)
+_MINIMAL_SETUP_JSON = (
+    '{"ambientacion":"A","contexto_problema":"B","relevancia_jugador":"C",'
+    '"player_mission":"D","narrativa_inicial":"E","actors":['
+    '{"name":"X","personality":"P","mission":"M","background":"B","presencia_escena":"S"},'
+    '{"name":"Y","personality":"P2","mission":"M2","background":"B2","presencia_escena":"S2"}'
+    "]}"
+)
+
+
+def test_guionista_generate_setup_stream_false_returns_setup():
+    """Con stream=False, generate_setup devuelve setup con claves requeridas y actors correctos."""
+    agent = GuionistaAgent(name="Guionista", model="deepseek-chat")
+    with patch("src.agents.guionista.send_message", return_value=_MINIMAL_SETUP_JSON):
+        setup = agent.generate_setup(theme=None, num_actors=2, stream=False)
+    for key in REQUIRED_KEYS:
+        assert key in setup, f"Falta clave: {key}"
+    assert len(setup["actors"]) == 2
+    assert setup["actors"][0]["name"] == "X"
+    assert setup["actors"][1]["name"] == "Y"
+
+
+def test_guionista_generate_setup_stream_true_returns_same_setup_and_writes_stdout():
+    """Con stream=True, generate_setup devuelve el mismo setup y escribe en stdout."""
+    agent = GuionistaAgent(name="Guionista", model="deepseek-chat")
+    chunks = [_MINIMAL_SETUP_JSON]
+
+    with patch("src.agents.guionista.send_message", return_value=iter(chunks)):
+        with patch("src.agents.guionista.sys.stdout") as mock_stdout:
+            mock_stdout.write = MagicMock()
+            mock_stdout.flush = MagicMock()
+            setup = agent.generate_setup(theme=None, num_actors=2, stream=True)
+
+    for key in REQUIRED_KEYS:
+        assert key in setup, f"Falta clave: {key}"
+    assert len(setup["actors"]) == 2
+    assert setup["actors"][0]["name"] == "X"
+    assert setup["actors"][1]["name"] == "Y"
+    assert mock_stdout.write.called
+    assert mock_stdout.flush.called

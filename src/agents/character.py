@@ -1,6 +1,7 @@
 """CharacterAgent - Agente actor que participa en la conversación."""
 
-from typing import Dict, Any
+import sys
+from typing import Dict, Any, Iterator
 import os
 
 from ..state import ConversationState
@@ -59,50 +60,104 @@ class CharacterAgent(Agent):
         """Background del personaje (opcional)."""
         return self._background
 
-    def process(self, state: ConversationState) -> Dict[str, Any]:
+    def process(
+        self, state: ConversationState, stream: bool = False
+    ) -> Dict[str, Any]:
         """Genera una respuesta basada en el historial visible.
 
         Args:
             state: Estado actual de la conversación
+            stream: Si True, imprime la respuesta token a token en stdout y devuelve displayed=True.
 
         Returns:
-            Diccionario con 'message' (contenido del mensaje) o 'error'
+            Diccionario con 'message', 'author' y opcionalmente 'displayed' o 'error'.
         """
         try:
-            system_prompt = f"""Eres {self.name}, un personaje en una conversación grupal.
-Tu personalidad: {self.personality}
-
-Responde de manera natural y coherente con tu personalidad.
-Mantén tus respuestas concisas (1-3 frases típicamente).
-Solo responde con el contenido del mensaje, sin prefijos ni explicaciones."""
-            if self._background:
-                system_prompt += f"""
-
-Tu background (contexto de tu personaje): {self._background}
-Actúa de forma coherente con este contexto."""
-            if self._mission:
-                system_prompt += f"""
-
-Tienes una misión secreta que debes intentar cumplir durante la conversación. No la reveles explícitamente.
-Tu misión: {self._mission}"""
-
-            # Limitar historial a los últimos N mensajes para reducir tokens
-            max_history = int(os.getenv("CHAR_CONTEXT_MESSAGES", "20"))
-            history = state["messages"][-max_history:]
-            messages = [{"role": "system", "content": system_prompt}]
-            for msg in history:
-                messages.append({"role": "user", "content": f"[{msg['author']}] {msg['content']}"})
-
-            content = send_message(
-                messages, model=self._model, temperature=self._temperature, stream=False
-            )
-            assert isinstance(content, str)
+            messages = self._build_messages(state)
+            if not stream:
+                content = send_message(
+                    messages,
+                    model=self._model,
+                    temperature=self._temperature,
+                    stream=False,
+                )
+                assert isinstance(content, str)
+                return {
+                    "message": content.strip(),
+                    "author": self.name,
+                }
+            # stream=True: consumir iterador, escribir en stdout, acumular
+            full_content = self._stream_response_to_stdout(messages)
             return {
-                "message": content.strip(),
+                "message": full_content.strip(),
                 "author": self.name,
+                "displayed": True,
             }
         except Exception as e:
             return {
                 "error": str(e),
                 "author": self.name,
             }
+
+    def _build_messages(self, state: ConversationState) -> list[dict[str, str]]:
+        """Construye la lista de mensajes para el LLM (lógica de dominio)."""
+        system_prompt = f"""Eres {self.name}, un personaje en una conversación grupal.
+Tu personalidad: {self.personality}
+
+Responde de manera natural y coherente con tu personalidad.
+Mantén tus respuestas concisas (1-3 frases típicamente).
+Solo responde con el contenido del mensaje, sin prefijos ni explicaciones."""
+        if self._background:
+            system_prompt += f"""
+
+Tu background (contexto de tu personaje): {self._background}
+Actúa de forma coherente con este contexto."""
+        if self._mission:
+            system_prompt += f"""
+
+Tienes una misión secreta que debes intentar cumplir durante la conversación. No la reveles explícitamente.
+Tu misión: {self._mission}"""
+
+        max_history = int(os.getenv("CHAR_CONTEXT_MESSAGES", "20"))
+        history = state["messages"][-max_history:]
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in history:
+            messages.append(
+                {"role": "user", "content": f"[{msg['author']}] {msg['content']}"}
+            )
+        return messages
+
+    def _stream_response_to_stdout(
+        self, messages: list[dict[str, str]]
+    ) -> str:
+        """Consume el stream del modelo y escribe en stdout; devuelve el texto completo."""
+        out = sys.stdout
+        # Indicador opcional antes del primer token
+        thinking = "[Personaje pensando...]"
+        out.write("\r" + thinking)
+        out.flush()
+
+        response = send_message(
+            messages,
+            model=self._model,
+            temperature=self._temperature,
+            stream=True,
+        )
+        assert isinstance(response, Iterator)
+        full_content: list[str] = []
+        first = True
+        for chunk in response:
+            if first:
+                out.write("\r" + " " * len(thinking) + "\r")
+                out.write(f"[{self.name}] ")
+                out.flush()
+                first = False
+            out.write(chunk)
+            out.flush()
+            full_content.append(chunk)
+        if first:
+            out.write("\r" + " " * len(thinking) + "\r")
+            out.write(f"[{self.name}] ")
+        out.write("\n")
+        out.flush()
+        return "".join(full_content)

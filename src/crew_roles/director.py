@@ -1,5 +1,6 @@
 """Director: orquestador central. Gestiona el flujo de turnos, llama a Guionista, Character y Observer."""
 
+import os
 import time
 from typing import Literal, Any
 
@@ -64,6 +65,7 @@ def run_game_loop(
     logger = get_logger("Director")
     agent_names_ordered = list(character_agents.keys())
     next_action: Literal["character", "user_input"] = "character"
+    stream_character = os.environ.get("AGORA_STREAM_CHARACTER", "").strip().lower() in ("1", "true", "yes")
 
     while True:
         t0_turn = time.perf_counter()
@@ -78,12 +80,16 @@ def run_game_loop(
                 agent = character_agents[who]
             else:
                 agent = character_agents[agent_names_ordered[0]]
-            result = run_character_response(agent, state)
+            result = run_character_response(agent, state, stream=stream_character)
             if "error" in result:
                 output_handler.on_error(f"Error en {agent.name}: {result['error']}")
                 return manager.state
             logger.info("Character response received")
-            manager.add_message(result["author"], result["message"])
+            manager.add_message(
+                result["author"],
+                result["message"],
+                displayed=result.get("displayed", False),
+            )
             output_handler.on_message(manager.state["messages"][-1])
 
         else:

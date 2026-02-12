@@ -23,6 +23,10 @@ def create_character_agent(
     )
 
 
-def run_character_response(agent: CharacterAgent, state: ConversationState) -> Dict[str, Any]:
-    """Ejecuta la tarea de generar respuesta. Entrada: state. Salida: dict con message, author o error."""
-    return agent.process(state)
+def run_character_response(
+    agent: CharacterAgent,
+    state: ConversationState,
+    stream: bool = False,
+) -> Dict[str, Any]:
+    """Ejecuta la tarea de generar respuesta. Entrada: state. Salida: dict con message, author o error (y opcionalmente displayed)."""
+    return agent.process(state, stream=stream)

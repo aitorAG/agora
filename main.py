@@ -37,7 +37,7 @@ def main():
     print("Inicializando sistema conversacional...\n")
 
     theme = os.getenv("GAME_THEME")
-    num_actors = 3
+    num_actors = int(os.getenv("NUM_ACTORS", "3"))
     max_turns_str = os.getenv("MAX_TURNS", "10")
     try:
         max_turns = int(max_turns_str)
