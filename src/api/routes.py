@@ -1,6 +1,7 @@
 """Endpoints HTTP para el motor de partida."""
 
 import json
+import os
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
@@ -48,9 +49,10 @@ def new_game(
 ):
     """Crea una partida. Devuelve session_id, estado inicial y contexto."""
     body = body or NewGameRequest()
+    theme = (body.theme or "").strip() or os.getenv("GAME_THEME")
     try:
         session_id, setup = engine.create_game(
-            theme=body.theme,
+            theme=theme or None,
             num_actors=body.num_actors,
             max_turns=body.max_turns,
         )

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agora - UI de prueba</title>
+  <link rel="stylesheet" href="/ui/styles.css" />
+</head>
+<body class="theme-light">
+  <div id="app">
+    <aside class="sidebar">
+      <section class="sidebar-section">
+        <h2>Introducción</h2>
+        <div id="intro-text" class="sidebar-content"></div>
+      </section>
+      <section class="sidebar-section">
+        <h2>Misión</h2>
+        <div id="mission-text" class="sidebar-content"></div>
+      </section>
+      <section class="sidebar-section">
+        <h2>Personajes</h2>
+        <div id="characters-list" class="sidebar-content"></div>
+      </section>
+      <section class="sidebar-section">
+        <h2>Estado del juego</h2>
+        <div id="game-state" class="sidebar-content"></div>
+      </section>
+      <div class="sidebar-actions">
+        <button type="button" id="btn-new-game">Nueva partida</button>
+        <button type="button" id="btn-reset">Reset partida</button>
+        <label class="theme-toggle">
+          <input type="checkbox" id="theme-checkbox" />
+          <span>Modo oscuro</span>
+        </label>
+      </div>
+    </aside>
+    <main class="main">
+      <div id="error-banner" class="error-banner hidden"></div>
+      <div id="chat" class="chat"></div>
+      <div class="input-area">
+        <input type="text" id="player-input" placeholder="Escribe tu mensaje..." disabled />
+        <button type="button" id="btn-send" disabled>Enviar turno</button>
+      </div>
+    </main>
+  </div>
+  <div id="loading-overlay" class="loading-overlay hidden" aria-busy="true" aria-live="polite">
+    <div class="loading-content">
+      <div class="loading-spinner"></div>
+      <p id="loading-message" class="loading-message">Creando partida…</p>
+    </div>
+  </div>
+  <script src="/ui/app.js"></script>
+</body>
+</html>
