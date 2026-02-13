@@ -1,119 +1,171 @@
 """Endpoints HTTP para el motor de partida."""
 
+import json
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 
 from .schemas import (
-    CreateGameRequest,
-    CreateGameResponse,
-    ActorInfo,
-    GameStateResponse,
+    NewGameRequest,
+    NewGameResponse,
+    CharacterInfo,
+    StatusResponse,
     MessageOut,
-    PlayerInputRequest,
-    PlayerInputResponse,
-    TickResponse,
+    GameResultOut,
+    TurnRequest,
+    ContextResponse,
 )
 from .dependencies import get_engine
 
 
-def _state_to_response(state: dict, who_should_speak: str | None = None) -> GameStateResponse:
-    """Convierte ConversationState a GameStateResponse (timestamp -> ISO string)."""
-    messages_raw = state.get("messages", [])
-    messages_out = [
-        MessageOut(
-            author=m.get("author", ""),
-            content=m.get("content", ""),
-            timestamp=m["timestamp"].isoformat() if isinstance(m.get("timestamp"), datetime) else str(m.get("timestamp")) if m.get("timestamp") else None,
-            turn=m.get("turn", 0),
-        )
-        for m in messages_raw
-    ]
-    metadata = state.get("metadata", {})
-    who = who_should_speak or metadata.get("continuation_decision", {}).get("who_should_respond")
-    if who == "user":
-        who = "user"
-    return GameStateResponse(
-        turn=state.get("turn", 0),
-        messages=messages_out,
-        who_should_speak=who,
-        game_ended=bool(metadata.get("game_ended", False)),
-        metadata=metadata,
-    )
+def _serialize_message(m: dict) -> dict:
+    """Convierte mensaje a dict con timestamp serializable."""
+    ts = m.get("timestamp")
+    if isinstance(ts, datetime):
+        ts = ts.isoformat()
+    elif ts is not None:
+        ts = str(ts)
+    return {
+        "author": m.get("author", ""),
+        "content": m.get("content", ""),
+        "timestamp": ts,
+        "turn": m.get("turn", 0),
+    }
 
 
-def _serialize_events(events: list) -> list[dict]:
-    """Asegura que eventos tengan timestamps serializables en 'message'."""
-    out = []
-    for ev in events:
-        if ev.get("type") == "message" and "message" in ev:
-            m = ev["message"]
-            msg = dict(m)
-            if isinstance(msg.get("timestamp"), datetime):
-                msg["timestamp"] = msg["timestamp"].isoformat()
-            out.append({"type": "message", "message": msg})
-        else:
-            out.append(dict(ev))
-    return out
+def _format_sse(event: str, data: str) -> str:
+    """Formato Server-Sent Events: event + data + double newline."""
+    return f"event: {event}\ndata: {data}\n\n"
 
 
 router = APIRouter(prefix="/game", tags=["game"])
 
 
-@router.post("/create", response_model=CreateGameResponse)
-def create_game(
-    body: CreateGameRequest | None = None,
+@router.post("/new", response_model=NewGameResponse)
+def new_game(
+    body: NewGameRequest | None = None,
     engine=Depends(get_engine),
 ):
-    body = body or CreateGameRequest()
-    game_id, setup = engine.create_game(
-        theme=body.theme,
-        num_actors=body.num_actors,
-        max_turns=body.max_turns,
-    )
-    actors = [ActorInfo(name=a["name"], personality=a.get("personality"), mission=a.get("mission"), background=a.get("background")) for a in setup.get("actors", [])]
-    return CreateGameResponse(
-        game_id=game_id,
-        narrativa_inicial=setup.get("narrativa_inicial", ""),
+    """Crea una partida. Devuelve session_id, estado inicial y contexto."""
+    body = body or NewGameRequest()
+    try:
+        session_id, setup = engine.create_game(
+            theme=body.theme,
+            num_actors=body.num_actors,
+            max_turns=body.max_turns,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    status = engine.get_status(session_id)
+    actors = setup.get("actors", [])
+    characters = [
+        CharacterInfo(
+            name=a.get("name", ""),
+            personality=a.get("personality"),
+            mission=a.get("mission"),
+            background=a.get("background"),
+            presencia_escena=a.get("presencia_escena"),
+        )
+        for a in actors
+    ]
+    return NewGameResponse(
+        session_id=session_id,
+        turn_current=status["turn_current"],
+        turn_max=status["turn_max"],
+        player_can_write=status["player_can_write"],
         player_mission=setup.get("player_mission", ""),
-        actors=actors,
+        characters=characters,
+        narrativa_inicial=setup.get("narrativa_inicial", ""),
     )
 
 
-@router.get("/{game_id}/state", response_model=GameStateResponse)
-def get_state(game_id: str, engine=Depends(get_engine)):
+@router.get("/status", response_model=StatusResponse)
+def get_status(session_id: str, engine=Depends(get_engine)):
+    """Devuelve estado actual: turn_current, turn_max, current_speaker, player_can_write, game_finished, result, messages."""
     try:
-        state = engine.get_state(game_id)
+        status = engine.get_status(session_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail="Game not found")
-    return _state_to_response(state)
-
-
-@router.post("/{game_id}/player_input", response_model=PlayerInputResponse)
-def player_input(game_id: str, body: PlayerInputRequest, engine=Depends(get_engine)):
-    try:
-        events, state, game_ended = engine.player_input(game_id, body.text, body.user_exit)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Game not found")
-    mission_evaluation = state.get("metadata", {}).get("last_mission_evaluation") if game_ended else None
-    return PlayerInputResponse(
-        events=_serialize_events(events),
-        mission_evaluation=mission_evaluation,
-        game_ended=game_ended,
-        state=_state_to_response(state),
+        raise HTTPException(status_code=404, detail="Session not found")
+    messages_out = [MessageOut(**_serialize_message(m)) for m in status.get("messages", [])]
+    result = status.get("result")
+    result_out = GameResultOut(**result) if result else None
+    return StatusResponse(
+        turn_current=status["turn_current"],
+        turn_max=status["turn_max"],
+        current_speaker=status.get("current_speaker", ""),
+        player_can_write=status["player_can_write"],
+        game_finished=status["game_finished"],
+        result=result_out,
+        messages=messages_out,
     )
 
 
-@router.post("/{game_id}/tick", response_model=TickResponse)
-def tick(game_id: str, engine=Depends(get_engine)):
+@router.post("/turn")
+def turn(body: TurnRequest, engine=Depends(get_engine)):
+    """Ejecuta el turno con el texto del jugador. Respuesta en streaming (SSE)."""
     try:
-        events, state, game_ended, waiting_for_player = engine.tick(game_id)
+        status = engine.get_status(body.session_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail="Game not found")
-    return TickResponse(
-        events=_serialize_events(events),
-        state=_state_to_response(state),
-        game_ended=game_ended,
-        waiting_for_player=waiting_for_player,
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not status.get("player_can_write", False):
+        raise HTTPException(
+            status_code=400,
+            detail="Player cannot write now; wait for current_speaker or game_finished",
+        )
+
+    def event_stream():
+        for ev in engine.execute_turn_stream(
+            body.session_id,
+            body.text,
+            user_exit=body.user_exit,
+        ):
+            ev_type = ev.get("type", "event")
+            if ev_type == "message_delta":
+                data = json.dumps({"type": "message_delta", "delta": ev.get("delta", "")})
+            elif ev_type == "message":
+                msg = ev.get("message", {})
+                data = json.dumps({"type": "message", "message": _serialize_message(msg)})
+            elif ev_type == "game_ended":
+                data = json.dumps({
+                    "type": "game_ended",
+                    "reason": ev.get("reason", ""),
+                    "mission_evaluation": ev.get("mission_evaluation"),
+                })
+            elif ev_type == "error":
+                data = json.dumps({"type": "error", "message": ev.get("message", "")})
+            else:
+                data = json.dumps(ev)
+            yield _format_sse(ev_type, data)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
+@router.get("/context", response_model=ContextResponse)
+def get_context(session_id: str, engine=Depends(get_engine)):
+    """Devuelve contexto estable: player_mission, personajes, metadata inicial."""
+    try:
+        ctx = engine.get_context(session_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    characters = [
+        CharacterInfo(
+            name=c.get("name", ""),
+            personality=c.get("personality"),
+            mission=c.get("mission"),
+            background=c.get("background"),
+            presencia_escena=c.get("presencia_escena"),
+        )
+        for c in ctx.get("characters", [])
+    ]
+    return ContextResponse(
+        player_mission=ctx.get("player_mission", ""),
+        characters=characters,
+        ambientacion=ctx.get("ambientacion", ""),
+        contexto_problema=ctx.get("contexto_problema", ""),
+        relevancia_jugador=ctx.get("relevancia_jugador", ""),
+        narrativa_inicial=ctx.get("narrativa_inicial", ""),
+    )

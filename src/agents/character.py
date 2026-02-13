@@ -61,13 +61,17 @@ class CharacterAgent(Agent):
         return self._background
 
     def process(
-        self, state: ConversationState, stream: bool = False
+        self,
+        state: ConversationState,
+        stream: bool = False,
+        stream_sink: Any = None,
     ) -> Dict[str, Any]:
         """Genera una respuesta basada en el historial visible.
 
         Args:
             state: Estado actual de la conversación
-            stream: Si True, imprime la respuesta token a token en stdout y devuelve displayed=True.
+            stream: Si True, emite la respuesta token a token (stdout o stream_sink).
+            stream_sink: Si se pasa y stream=True, cada chunk se envía a stream_sink(str); si no, se usa stdout.
 
         Returns:
             Diccionario con 'message', 'author' y opcionalmente 'displayed' o 'error'.
@@ -86,8 +90,7 @@ class CharacterAgent(Agent):
                     "message": content.strip(),
                     "author": self.name,
                 }
-            # stream=True: consumir iterador, escribir en stdout, acumular
-            full_content = self._stream_response_to_stdout(messages)
+            full_content = self._stream_response_to_stdout(messages, stream_sink=stream_sink)
             return {
                 "message": full_content.strip(),
                 "author": self.name,
@@ -128,11 +131,22 @@ Tu misión: {self._mission}"""
         return messages
 
     def _stream_response_to_stdout(
-        self, messages: list[dict[str, str]]
+        self,
+        messages: list[dict[str, str]],
+        stream_sink: Any = None,
     ) -> str:
-        """Consume el stream del modelo y escribe en stdout; devuelve el texto completo."""
-        out = sys.stdout
-        # Indicador opcional antes del primer token
+        """Consume el stream del modelo; escribe en stdout o en stream_sink(str). Devuelve el texto completo."""
+        if stream_sink is None:
+            out = sys.stdout
+        else:
+            class SinkWriter:
+                def __init__(self, sink):
+                    self._sink = sink
+                def write(self, s: str):
+                    self._sink(s)
+                def flush(self):
+                    pass
+            out = SinkWriter(stream_sink)
         thinking = "[Personaje pensando...]"
         out.write("\r" + thinking)
         out.flush()

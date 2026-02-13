@@ -16,9 +16,12 @@ def run_setup_task(
     theme: str | None = None,
     num_actors: int = 3,
     stream: bool = False,
+    stream_sink: Any = None,
 ) -> Dict[str, Any]:
     """Ejecuta la tarea de generar setup. Entrada: theme, num_actors. Salida: game_setup dict."""
-    return agent.generate_setup(theme=theme, num_actors=num_actors, stream=stream)
+    return agent.generate_setup(
+        theme=theme, num_actors=num_actors, stream=stream, stream_sink=stream_sink
+    )
 
 
 def default_setup(num_actors: int) -> Dict[str, Any]:

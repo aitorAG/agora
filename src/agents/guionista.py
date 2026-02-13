@@ -93,9 +93,23 @@ Responde únicamente con el JSON especificado."""
             {"role": "user", "content": user_prompt},
         ]
 
-    def _stream_setup_to_stdout(self, messages: List[Dict[str, str]]) -> str:
-        """Consume el stream del modelo y escribe en stdout; devuelve el texto completo."""
-        out = sys.stdout
+    def _stream_setup_to_stdout(
+        self,
+        messages: List[Dict[str, str]],
+        stream_sink: Any = None,
+    ) -> str:
+        """Consume el stream del modelo; escribe en stdout o en stream_sink(str). Devuelve el texto completo."""
+        if stream_sink is None:
+            out = sys.stdout
+        else:
+            class SinkWriter:
+                def __init__(self, sink):
+                    self._sink = sink
+                def write(self, s: str):
+                    self._sink(s)
+                def flush(self):
+                    pass
+            out = SinkWriter(stream_sink)
         thinking = "[Guionista escribiendo...]"
         out.write("\r" + thinking)
         out.flush()
@@ -128,13 +142,15 @@ Responde únicamente con el JSON especificado."""
         theme: str | None = None,
         num_actors: int = 3,
         stream: bool = False,
+        stream_sink: Any = None,
     ) -> Dict[str, Any]:
         """Genera el setup de la partida: ambientación, contexto del problema, relevancia, player_mission y actores (name, personality, mission, background, presencia_escena).
 
         Args:
             theme: Tema o semilla opcional (ej. "historia romántica en Alemania siglo XVII, trama de detectives en un mundo de fantasia o aventuras de humor en ciberpunk magico"). Si es None, el Guionista inventa.
             num_actors: Número de actores a generar (por defecto 3).
-            stream: Si True, imprime la salida del modelo (JSON) token a token en stdout.
+            stream: Si True, emite la salida del modelo (JSON) token a token (stdout o stream_sink).
+            stream_sink: Si se pasa y stream=True, cada chunk se envía a stream_sink(str); si no, se usa stdout.
 
         Returns:
             Diccionario con keys: ambientacion, contexto_problema, relevancia_jugador, player_mission, actors (lista con name, personality, mission, background, presencia_escena).
@@ -142,7 +158,7 @@ Responde únicamente con el JSON especificado."""
         messages = self._build_setup_messages(theme, num_actors)
         try:
             if stream:
-                content = self._stream_setup_to_stdout(messages)
+                content = self._stream_setup_to_stdout(messages, stream_sink=stream_sink)
             else:
                 content = send_message(
                     messages,
