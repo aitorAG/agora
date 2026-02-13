@@ -108,6 +108,28 @@ def setup_session_logging(session_id: str) -> logging.Logger:
     return _logger
 
 
+def setup_api_logging() -> None:
+    """Configura logging mínimo para modo API: solo stderr, nivel WARNING. Sin archivo por sesión.
+    Los logger.info del Director, Session y LLM no se muestran; solo WARNING/ERROR."""
+    global _logger, _handlers_attached
+    log_level_name = os.getenv("AGORA_LOG_LEVEL", "WARNING").upper()
+    log_level = getattr(logging, log_level_name, logging.WARNING)
+
+    _logger = logging.getLogger(LOGGER_NAME)
+    _logger.setLevel(log_level)
+    _logger.handlers.clear()
+
+    stream_handler = logging.StreamHandler(sys.stderr)
+    stream_handler.setLevel(log_level)
+    stream_handler.setFormatter(PlainFormatter())
+    _logger.addHandler(stream_handler)
+
+    for name in ("httpx", "httpcore", "openai"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+    _handlers_attached = True
+
+
 def get_logger(component: str, session_id: str | None = None) -> logging.LoggerAdapter:
     """Devuelve un LoggerAdapter con session_id y component para esta sesión."""
     sid = session_id if session_id is not None else (get_session_id() or "-")
