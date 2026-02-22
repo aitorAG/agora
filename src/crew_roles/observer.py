@@ -1,4 +1,4 @@
-"""Rol CrewAI: Observer. Evalúa quién debe hablar y si se cumplieron misiones (game_ended)."""
+"""Rol CrewAI: Observer. Evalúa quién debe hablar y si el jugador cumplió su misión (game_ended)."""
 
 from typing import Dict, Any, List
 
@@ -9,7 +9,6 @@ from ..state import ConversationState
 def create_observer_agent(
     actor_names: List[str] | None = None,
     player_mission: str | None = None,
-    actor_missions: dict[str, str] | None = None,
     model: str = "deepseek-chat",
 ) -> ObserverAgent:
     """Crea el agente Observer (rol CrewAI)."""
@@ -18,7 +17,6 @@ def create_observer_agent(
         model=model,
         actor_names=actor_names or [],
         player_mission=player_mission or "",
-        actor_missions=actor_missions or {},
     )
 
 

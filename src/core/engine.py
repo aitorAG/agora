@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-import uuid
 from dataclasses import dataclass
 from queue import Empty, Queue
 from threading import Thread
@@ -16,6 +15,7 @@ from ..crew_roles.guionista import create_guionista_agent, run_setup_task
 from ..crew_roles.character import create_character_agent
 from ..crew_roles.observer import create_observer_agent
 from ..crew_roles.director import run_one_step
+from ..persistence import PersistenceProvider, create_persistence_provider
 
 
 @dataclass
@@ -28,14 +28,16 @@ class GameSession:
     max_turns: int
     max_messages_before_user: int = 3
     next_action: Literal["character", "user_input", "ended"] = "character"
+    persisted_messages: int = 0
 
 
 class GameEngine:
     """Motor de partidas: registro en memoria y ejecución por pasos."""
 
-    def __init__(self) -> None:
+    def __init__(self, persistence_provider: PersistenceProvider | None = None) -> None:
         self._registry: dict[str, GameSession] = {}
         self._logger = logging.getLogger(__name__)
+        self._persistence = persistence_provider or create_persistence_provider()
 
     def create_game(
         self,
@@ -69,10 +71,10 @@ class GameEngine:
         observer = create_observer_agent(
             actor_names=[a["name"] for a in actors_list],
             player_mission=game_setup.get("player_mission") or "",
-            actor_missions={a["name"]: a.get("mission", "") for a in actors_list},
         )
 
-        game_id = str(uuid.uuid4())
+        title = str(game_setup.get("titulo") or theme or "Partida").strip() or "Partida"
+        game_id = self._persistence.create_game(title=title, config_json=dict(game_setup))
         session = GameSession(
             manager=manager,
             character_agents=character_agents,
@@ -81,6 +83,7 @@ class GameEngine:
             max_turns=max_turns,
             max_messages_before_user=3,
             next_action="character",
+            persisted_messages=0,
         )
         self._registry[game_id] = session
         # Avanzar hasta que toque user_input (o partida termine) para que player_can_write sea true al devolver
@@ -107,6 +110,7 @@ class GameEngine:
                 max_messages_before_user=session.max_messages_before_user,
             )
             session.next_action = result["next_action"]
+        self._persist_session_state(game_id, session)
         return game_id, session.setup
 
     def get_state(self, game_id: str) -> ConversationState:
@@ -222,6 +226,7 @@ class GameEngine:
             game_ended,
             elapsed,
         )
+        self._persist_session_state(game_id, session)
         return all_events, state, game_ended
 
     def tick(
@@ -259,6 +264,7 @@ class GameEngine:
             game_ended,
             elapsed,
         )
+        self._persist_session_state(game_id, session)
         return events, state, game_ended, False
 
     def execute_turn_stream(
@@ -277,37 +283,41 @@ class GameEngine:
             queue.put(("delta", chunk))
 
         def run() -> None:
-            all_events: list = []
-            result = run_one_step(
-                session.manager,
-                session.character_agents,
-                session.observer_agent,
-                session.max_turns,
-                current_next_action=session.next_action,
-                pending_user_text=text or "",
-                user_exit=user_exit,
-                max_messages_before_user=session.max_messages_before_user,
-                stream_character=True,
-                character_stream_sink=chunk_sink,
-            )
-            session.next_action = result["next_action"]
-            all_events.extend(result.get("events", []))
-            while result["next_action"] == "character" and not result.get("game_ended"):
+            try:
+                all_events: list = []
                 result = run_one_step(
                     session.manager,
                     session.character_agents,
                     session.observer_agent,
                     session.max_turns,
                     current_next_action=session.next_action,
-                    pending_user_text=None,
-                    user_exit=False,
+                    pending_user_text=text or "",
+                    user_exit=user_exit,
                     max_messages_before_user=session.max_messages_before_user,
                     stream_character=True,
                     character_stream_sink=chunk_sink,
                 )
                 session.next_action = result["next_action"]
                 all_events.extend(result.get("events", []))
-            queue.put(("done", all_events))
+                while result["next_action"] == "character" and not result.get("game_ended"):
+                    result = run_one_step(
+                        session.manager,
+                        session.character_agents,
+                        session.observer_agent,
+                        session.max_turns,
+                        current_next_action=session.next_action,
+                        pending_user_text=None,
+                        user_exit=False,
+                        max_messages_before_user=session.max_messages_before_user,
+                        stream_character=True,
+                        character_stream_sink=chunk_sink,
+                    )
+                    session.next_action = result["next_action"]
+                    all_events.extend(result.get("events", []))
+                self._persist_session_state(game_id, session)
+                queue.put(("done", all_events))
+            except Exception as e:
+                queue.put(("error", str(e)))
 
         thread = Thread(target=run)
         thread.start()
@@ -318,13 +328,66 @@ class GameEngine:
                 break
             if item[0] == "delta":
                 yield {"type": "message_delta", "delta": item[1]}
+            elif item[0] == "error":
+                yield {"type": "error", "message": item[1]}
+                break
             else:
                 for ev in item[1]:
                     yield ev
                 break
         thread.join()
 
+    @staticmethod
+    def _map_role(author: str) -> str:
+        if author == "Usuario":
+            return "player"
+        if author in ("Sistema", "system"):
+            return "director"
+        safe = (author or "actor").strip().replace(" ", "_").lower()
+        return f"actor_{safe}"
 
-def create_engine() -> GameEngine:
+    @staticmethod
+    def _jsonable(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {k: GameEngine._jsonable(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [GameEngine._jsonable(v) for v in value]
+        if hasattr(value, "isoformat"):
+            try:
+                return value.isoformat()
+            except Exception:
+                return str(value)
+        return value
+
+    def _persist_session_state(self, game_id: str, session: GameSession) -> None:
+        state = session.manager.state
+        messages = state.get("messages", [])
+        if not isinstance(messages, list):
+            messages = []
+        for msg in messages[session.persisted_messages :]:
+            author = str(msg.get("author", ""))
+            self._persistence.append_message(
+                game_id=game_id,
+                turn_number=int(msg.get("turn", 0)),
+                role=self._map_role(author),
+                content=str(msg.get("content", "")),
+                metadata_json={
+                    "author": author,
+                    "timestamp": msg.get("timestamp").isoformat() if hasattr(msg.get("timestamp"), "isoformat") else str(msg.get("timestamp")) if msg.get("timestamp") is not None else None,
+                },
+            )
+        session.persisted_messages = len(messages)
+        state_json = {
+            "turn": state.get("turn", 0),
+            "messages": messages,
+            "metadata": state.get("metadata", {}),
+            "next_action": session.next_action,
+            "max_turns": session.max_turns,
+            "max_messages_before_user": session.max_messages_before_user,
+        }
+        self._persistence.save_game_state(game_id, self._jsonable(state_json))
+
+
+def create_engine(persistence_provider: PersistenceProvider | None = None) -> GameEngine:
     """Factory: una instancia del motor (para API o tests)."""
-    return GameEngine()
+    return GameEngine(persistence_provider=persistence_provider)

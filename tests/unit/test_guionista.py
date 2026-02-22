@@ -7,6 +7,8 @@ from src.agents.guionista import _default_setup, GuionistaAgent
 
 
 REQUIRED_KEYS = {
+    "titulo",
+    "descripcion_breve",
     "ambientacion",
     "contexto_problema",
     "relevancia_jugador",
@@ -48,7 +50,8 @@ def test_default_setup_narrativa_inicial_non_empty():
 
 # JSON mínimo válido para generate_setup (num_actors=2)
 _MINIMAL_SETUP_JSON = (
-    '{"ambientacion":"A","contexto_problema":"B","relevancia_jugador":"C",'
+    '{"titulo":"Ecos de Roma Rota","descripcion_breve":"Intrigas en la ciudad eterna.\\nDescubre al asesino del césar.",'
+    '"ambientacion":"A","contexto_problema":"B","relevancia_jugador":"C",'
     '"player_mission":"D","narrativa_inicial":"E","actors":['
     '{"name":"X","personality":"P","mission":"M","background":"B","presencia_escena":"S"},'
     '{"name":"Y","personality":"P2","mission":"M2","background":"B2","presencia_escena":"S2"}'
@@ -66,6 +69,9 @@ def test_guionista_generate_setup_stream_false_returns_setup():
     assert len(setup["actors"]) == 2
     assert setup["actors"][0]["name"] == "X"
     assert setup["actors"][1]["name"] == "Y"
+    assert isinstance(setup["titulo"], str) and setup["titulo"].strip()
+    assert len(setup["titulo"].split()) <= 6
+    assert isinstance(setup["descripcion_breve"], str) and setup["descripcion_breve"].strip()
 
 
 def test_guionista_generate_setup_stream_true_returns_same_setup_and_writes_stdout():
@@ -84,5 +90,7 @@ def test_guionista_generate_setup_stream_true_returns_same_setup_and_writes_stdo
     assert len(setup["actors"]) == 2
     assert setup["actors"][0]["name"] == "X"
     assert setup["actors"][1]["name"] == "Y"
+    assert isinstance(setup["titulo"], str) and setup["titulo"].strip()
+    assert isinstance(setup["descripcion_breve"], str) and setup["descripcion_breve"].strip()
     assert mock_stdout.write.called
     assert mock_stdout.flush.called

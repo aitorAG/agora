@@ -49,11 +49,15 @@ def new_game(
 ):
     """Crea una partida. Devuelve session_id, estado inicial y contexto."""
     body = body or NewGameRequest()
-    theme = (body.theme or "").strip() or os.getenv("GAME_THEME")
+    raw_theme = (body.theme or "").strip()
+    # Solo usar GAME_THEME cuando no hay seed y tampoco num_actors personalizado.
+    use_env_theme = raw_theme == "" and body.num_actors is None
+    theme = os.getenv("GAME_THEME") if use_env_theme else (raw_theme or None)
+    num_actors = body.num_actors if body.num_actors is not None else 3
     try:
         session_id, setup = engine.create_game(
             theme=theme or None,
-            num_actors=body.num_actors,
+            num_actors=num_actors,
             max_turns=body.max_turns,
         )
     except Exception as e:

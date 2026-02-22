@@ -12,6 +12,25 @@ from .deepseek_adapter import send_message
 logger = logging.getLogger(__name__)
 
 
+def _fallback_titulo(ambientacion: str, contexto_problema: str, player_mission: str) -> str:
+    """Genera un título breve (4-5 palabras aprox.) si el LLM no lo devuelve."""
+    source = f"{ambientacion} {contexto_problema} {player_mission}".strip()
+    words = [w.strip(".,;:!?()[]{}\"'") for w in source.split() if w.strip(".,;:!?()[]{}\"'")]
+    if not words:
+        return "Sombras sobre el conflicto"
+    selected = words[:5]
+    if len(selected) < 4:
+        selected = (selected + ["en", "la", "noche", "eterna"])[:4]
+    return " ".join(selected)
+
+
+def _fallback_descripcion_breve(contexto_problema: str, player_mission: str) -> str:
+    """Genera una descripción breve en 2 líneas si el LLM no la devuelve."""
+    linea_1 = (contexto_problema or "Una historia repleta de intrigas y tensión.").strip()
+    linea_2 = (player_mission or "Completa tu objetivo para resolver el conflicto.").strip()
+    return f"{linea_1}\n{linea_2}"
+
+
 def _default_setup(num_actors: int) -> Dict[str, Any]:
     """Setup por defecto si el LLM falla o devuelve JSON inválido."""
     actors = []
@@ -26,6 +45,11 @@ def _default_setup(num_actors: int) -> Dict[str, Any]:
         })
     narrativa_default = "Una conversación en un lugar neutro. Hay una situación que requiere tu participación; tu intervención puede cambiar el curso de los acontecimientos. " + " ".join(f"{a['name']} está presente." for a in actors)
     return {
+        "titulo": "Sombras sobre Baviera rota",
+        "descripcion_breve": (
+            "Una historia de tensión y sospechas tras la guerra.\n"
+            "Descubre la causa del conflicto y cumple tu misión."
+        ),
         "ambientacion": "Una conversación en un lugar neutro.",
         "contexto_problema": "Hay una situación que requiere la participación del jugador.",
         "relevancia_jugador": "Tu intervención puede cambiar el curso de los acontecimientos.",
@@ -43,7 +67,7 @@ class GuionistaAgent(Agent):
     def __init__(self, name: str = "Guionista", model: str = "deepseek-chat"):
         super().__init__(name)
         self._model = model
-        self._temperature = 0.7
+        self._temperature = 2.0
 
     @property
     def is_actor(self) -> bool:
@@ -62,15 +86,17 @@ class GuionistaAgent(Agent):
 
 Debes generar un JSON válido con esta estructura exacta (sin comentarios, sin campos extra):
 {
+  "titulo": "Título de 4-5 palabras, llamativo y tipo película.",
+  "descripcion_breve": "Dos líneas: la primera resume el contexto de alto nivel y la segunda expresa claramente la misión del jugador.",
   "ambientacion": "Descripción del escenario: época, lugar, tono de la historia (2-4 frases).",
   "contexto_problema": "Explicación de la situación o el problema en el que se encuentra la escena (2-4 frases). Qué está en juego, qué conflicto o tensión existe.",
   "relevancia_jugador": "Por qué esta situación es relevante o importante para el jugador (1-2 frases). Qué puede ganar o perder, por qué su participación importa.",
-  "player_mission": "Objetivo principal que el jugador debe intentar alcanzar durante la conversación (privado, 1-2 frases).",
-  "narrativa_inicial": "Prosa continua de 1 a 3 párrafos que integre todo: el escenario y la atmósfera, la situación o el problema en juego, por qué le importa al jugador, y la presencia en escena de los tres personajes (nombres y breve descripción de dónde o cómo están). Sin apartados ni títulos dentro del texto; tono dinámico y excitante, como el arranque de una novela o una partida de rol.",
+  "player_mission": "Objetivo principal que el jugador debe intentar alcanzar durante la conversación (privado, 1-2 frases). es un objetivo concreto que un director puede evaluar que ha ocurrido, no una actitud o disposición a algo.",
+  "narrativa_inicial": "Prosa continua de 1 a 3 párrafos que integre todo: el escenario y la atmósfera, la situación o el problema en juego, por qué le importa al jugador, y la presencia en escena de los tres personajes (nombres y breve descripción de dónde o cómo están). Sin apartados ni títulos dentro del texto pero con parrafos legibles; tono dinámico y excitante, como el arranque de una novela o una partida de rol.",
   "actors": [
     {
       "name": "Nombre del personaje",
-      "personality": "Descripción en segunda persona para el LLM del personaje: cómo es, cómo habla (ej. Eres reservada, te gusta el chocolate...).",
+      "personality": "Descripción en tercera persona para el LLM del personaje: cómo es, cómo habla (ej. Es reservada, le gusta el chocolate...).",
       "mission": "Objetivo privado que este personaje intenta alcanzar durante la conversación (1-2 frases).",
       "background": "Breve contexto del personaje: gustos, origen, profesión, rasgos relevantes, coherente con la ambientación.",
       "presencia_escena": "Una sola frase que describa su presencia en la escena (ej. sentada junto a la ventana, observando la calle; de pie junto a la puerta; acurrucada en el sofá con una taza de té)."
@@ -79,9 +105,11 @@ Debes generar un JSON válido con esta estructura exacta (sin comentarios, sin c
 }
 
 Reglas:
-- ambientacion, contexto_problema, relevancia_jugador, player_mission, narrativa_inicial y cada actor deben ser coherentes entre sí.
-- narrativa_inicial debe ser prosa continua: sin secciones tituladas (no uses "Ambientación:", "Personajes:", etc.). Integra de forma natural escenario, situación, relevancia y los tres personajes con su presencia en la escena.
-- actors debe tener exactamente el número de personajes que se te indique (normalmente 3).
+- titulo, descripcion_breve, ambientacion, contexto_problema, relevancia_jugador, player_mission, narrativa_inicial y cada actor deben ser coherentes entre sí.
+- titulo debe tener entre 4 y 5 palabras y sonar atractivo.
+- descripcion_breve debe tener exactamente dos líneas (usa un salto de línea).
+- narrativa_inicial debe ser prosa continua: sin secciones tituladas (no uses "Ambientación:", "Personajes:", etc.). Integra de forma natural escenario, situación, relevancia y los personajes con su presencia en la escena.
+- actors debe tener exactamente el número de personajes que se te indique.
 - presencia_escena debe ser muy breve: una frase por personaje para la descripción inicial.
 - Responde SOLO con el JSON, sin texto antes ni después. Si usas markdown, envuelve el JSON en ```json ... ```."""
 
@@ -148,7 +176,7 @@ Responde únicamente con el JSON especificado."""
 
         Args:
             theme: Tema o semilla opcional (ej. "historia romántica en Alemania siglo XVII, trama de detectives en un mundo de fantasia o aventuras de humor en ciberpunk magico"). Si es None, el Guionista inventa.
-            num_actors: Número de actores a generar (por defecto 3).
+            num_actors: Número de actores a generar.
             stream: Si True, emite la salida del modelo (JSON) token a token (stdout o stream_sink).
             stream_sink: Si se pasa y stream=True, cada chunk se envía a stream_sink(str); si no, se usa stdout.
 
@@ -178,6 +206,8 @@ Responde únicamente con el JSON especificado."""
 
             if not isinstance(data, dict):
                 raise ValueError("La respuesta no es un objeto JSON")
+            if "titulo" not in data or "descripcion_breve" not in data:
+                raise ValueError("Faltan campos obligatorios: titulo, descripcion_breve")
             if "ambientacion" not in data or "player_mission" not in data or "actors" not in data:
                 raise ValueError("Faltan campos obligatorios: ambientacion, player_mission, actors")
             if "contexto_problema" not in data or "relevancia_jugador" not in data:
@@ -200,17 +230,26 @@ Responde únicamente con el JSON especificado."""
             ambientacion = str(data.get("ambientacion", "")).strip()
             contexto_problema = str(data.get("contexto_problema", "")).strip()
             relevancia_jugador = str(data.get("relevancia_jugador", "")).strip()
+            player_mission = str(data.get("player_mission", "")).strip()
+            titulo = str(data.get("titulo", "")).strip()
+            descripcion_breve = str(data.get("descripcion_breve", "")).strip()
             narrativa_inicial = str(data.get("narrativa_inicial", "")).strip()
+            if not titulo:
+                titulo = _fallback_titulo(ambientacion, contexto_problema, player_mission)
+            if not descripcion_breve:
+                descripcion_breve = _fallback_descripcion_breve(contexto_problema, player_mission)
             if not narrativa_inicial:
                 parts = [ambientacion, contexto_problema, relevancia_jugador]
                 for a in normalized_actors:
                     parts.append(f"{a['name']}: {a['presencia_escena']}.")
                 narrativa_inicial = " ".join(parts)
             return {
+                "titulo": titulo,
+                "descripcion_breve": descripcion_breve,
                 "ambientacion": ambientacion,
                 "contexto_problema": contexto_problema,
                 "relevancia_jugador": relevancia_jugador,
-                "player_mission": str(data.get("player_mission", "")).strip(),
+                "player_mission": player_mission,
                 "narrativa_inicial": narrativa_inicial,
                 "actors": normalized_actors,
             }

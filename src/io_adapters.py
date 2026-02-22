@@ -36,7 +36,7 @@ class OutputHandler(Protocol):
         ...
 
     def on_game_ended(self, reason: str, mission_evaluation: dict) -> None:
-        """Partida terminada por misión cumplida + evidencia narrativa. reason indica quién cumplió objetivo."""
+        """Partida terminada por misión del jugador cumplida + evidencia narrativa."""
         ...
 
     def on_error(self, msg: str) -> None:
@@ -92,9 +92,6 @@ class TerminalOutputHandler:
         ev = mission_evaluation or {}
         if ev.get("player_mission_achieved"):
             print("- El jugador ha cumplido su misión.")
-        for name, achieved in ev.get("actor_missions_achieved", {}).items():
-            if achieved:
-                print(f"- {name} ha cumplido su misión.")
         if ev.get("reasoning"):
             print("Motivo:", ev["reasoning"])
         print()

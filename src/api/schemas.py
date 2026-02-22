@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 
 # --- POST /game/new ---
 class NewGameRequest(BaseModel):
-    theme: Optional[str] = None
-    num_actors: int = 3
+    theme: Optional[str] = Field(default=None, max_length=600)
+    num_actors: Optional[int] = Field(default=None, ge=1, le=5)
     max_turns: int = 10
 
 

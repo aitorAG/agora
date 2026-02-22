@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agora - UI de prueba</title>
-  <link rel="stylesheet" href="/ui/styles.css" />
+  <link rel="stylesheet" href="/ui/styles.css?v=2" />
 </head>
 <body class="theme-light">
   <div id="app">
@@ -39,7 +39,7 @@
       <div id="chat" class="chat"></div>
       <div class="input-area">
         <input type="text" id="player-input" placeholder="Escribe tu mensaje..." disabled />
-        <button type="button" id="btn-send" disabled>Enviar turno</button>
+        <button type="button" id="btn-send" disabled>Enviar</button>
       </div>
     </main>
   </div>
@@ -49,6 +49,51 @@
       <p id="loading-message" class="loading-message">Creando partida…</p>
     </div>
   </div>
-  <script src="/ui/app.js"></script>
+  <div id="new-game-modal" class="new-game-modal hidden" role="dialog" aria-modal="true" aria-labelledby="new-game-title">
+    <div class="new-game-panel">
+      <h2 id="new-game-title">Nueva partida personalizada</h2>
+      <p class="new-game-help">Deja todo en blanco para usar la configuración por defecto.</p>
+      <div class="new-game-fields">
+        <label for="seed-era">Época/contexto</label>
+        <input
+          id="seed-era"
+          type="text"
+          maxlength="200"
+          placeholder="Ej: Roma, siglo II d.C. o Madrid en 2099"
+        />
+
+        <label for="seed-topic">Tema</label>
+        <input
+          id="seed-topic"
+          type="text"
+          maxlength="200"
+          placeholder="Ej: descubrir al sospechoso, extraer la verdad, llegar a un acuerdo"
+        />
+
+        <label for="seed-style">Estilo</label>
+        <input
+          id="seed-style"
+          type="text"
+          maxlength="200"
+          placeholder="Ej: comedia negra, romance histórico, thriller psicológico"
+        />
+
+        <label for="seed-num-actors">Nº de personajes (1-5)</label>
+        <input
+          id="seed-num-actors"
+          type="number"
+          min="1"
+          max="5"
+          step="1"
+          placeholder="3"
+        />
+      </div>
+      <div class="new-game-actions">
+        <button type="button" id="btn-create-game">Crear partida</button>
+        <button type="button" id="btn-cancel-new-game" class="btn-secondary">Cancelar</button>
+      </div>
+    </div>
+  </div>
+  <script src="/ui/app.js?v=2"></script>
 </body>
 </html>

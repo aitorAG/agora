@@ -26,6 +26,21 @@
   };
 
   const $ = (id) => document.getElementById(id);
+
+  function safeGetItem(key, defaultValue) {
+    try {
+      const v = localStorage.getItem(key);
+      return v !== null ? v : defaultValue;
+    } catch (_) {
+      return defaultValue;
+    }
+  }
+  function safeSetItem(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (_) {}
+  }
+
   const $chat = () => $("chat");
   const $errorBanner = () => $("error-banner");
   const $intro = () => $("intro-text");
@@ -38,6 +53,13 @@
   const $btnReset = () => $("btn-reset");
   const $loadingOverlay = () => $("loading-overlay");
   const $loadingMessage = () => $("loading-message");
+  const $newGameModal = () => $("new-game-modal");
+  const $btnCreateGame = () => $("btn-create-game");
+  const $btnCancelNewGame = () => $("btn-cancel-new-game");
+  const $seedEra = () => $("seed-era");
+  const $seedTopic = () => $("seed-topic");
+  const $seedStyle = () => $("seed-style");
+  const $seedNumActors = () => $("seed-num-actors");
 
   function showLoading(message) {
     const msg = message || "Procesando…";
@@ -55,13 +77,16 @@
   function showError(msg) {
     store.error = msg;
     const el = $errorBanner();
-    el.textContent = msg;
-    el.classList.remove("hidden");
+    if (el) {
+      el.textContent = msg;
+      el.classList.remove("hidden");
+    }
   }
 
   function clearError() {
     store.error = null;
-    $errorBanner().classList.add("hidden");
+    const el = $errorBanner();
+    if (el) el.classList.add("hidden");
   }
 
   function apiUrl(path, params) {
@@ -86,7 +111,54 @@
     return res.json();
   }
 
-  async function postNewGame() {
+  function openNewGameModal() {
+    const modal = $newGameModal();
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    const era = $seedEra();
+    if (era) era.focus();
+  }
+
+  function closeNewGameModal() {
+    const modal = $newGameModal();
+    if (!modal) return;
+    modal.classList.add("hidden");
+  }
+
+  function buildSeedPayloadFromForm() {
+    const era = (($seedEra() && $seedEra().value) || "").trim();
+    const topic = (($seedTopic() && $seedTopic().value) || "").trim();
+    const style = (($seedStyle() && $seedStyle().value) || "").trim();
+    const numActorsRaw = (($seedNumActors() && $seedNumActors().value) || "").trim();
+
+    if (era.length > 200 || topic.length > 200 || style.length > 200) {
+      return { error: "Cada campo de texto permite como máximo 200 caracteres." };
+    }
+
+    const hasTextSeed = !!(era || topic || style);
+    const hasNumActors = numActorsRaw !== "";
+    const payload = {};
+
+    if (hasTextSeed) {
+      const parts = [];
+      if (era) parts.push(`Época/contexto: ${era}`);
+      if (topic) parts.push(`Tema: ${topic}`);
+      if (style) parts.push(`Estilo: ${style}`);
+      payload.theme = parts.join(" | ");
+    }
+
+    if (hasNumActors) {
+      const parsed = Number(numActorsRaw);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+        return { error: "El número de personajes debe ser un entero entre 1 y 5." };
+      }
+      payload.num_actors = parsed;
+    }
+
+    return { payload };
+  }
+
+  async function postNewGame(payload = {}) {
     clearError();
     showLoading("Creando partida…");
     try {
@@ -94,7 +166,7 @@
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -114,11 +186,24 @@
       await fetchContext();
       await fetchStatus();
       renderAll();
+      return true;
     } catch (e) {
       showError(e.message || "Error al crear partida");
+      return false;
     } finally {
       hideLoading();
     }
+  }
+
+  async function submitNewGameFromForm() {
+    const built = buildSeedPayloadFromForm();
+    if (built.error) {
+      showError(built.error);
+      return;
+    }
+    const ok = await postNewGame(built.payload || {});
+    if (!ok) return;
+    closeNewGameModal();
   }
 
   async function fetchContext() {
@@ -159,10 +244,14 @@
   }
 
   function renderSidebar() {
-    $intro().textContent = store.context.narrativa_inicial || "—";
-    $mission().textContent = store.context.player_mission || "—";
+    const intro = $intro();
+    const mission = $mission();
+    const charactersEl = $characters();
+    const gameStateEl = $gameState();
+    if (intro) intro.textContent = store.context.narrativa_inicial || "—";
+    if (mission) mission.textContent = store.context.player_mission || "—";
     const chars = store.context.characters || [];
-    $characters().innerHTML = chars.length
+    if (charactersEl) charactersEl.innerHTML = chars.length
       ? chars
           .map(
             (c) =>
@@ -209,7 +298,7 @@
 
   function renderChat() {
     const chat = $chat();
-    const hadStreaming = store.streamingNode != null;
+    if (!chat) return;
     chat.innerHTML = "";
 
     const list = store.streamingMessage
@@ -272,7 +361,8 @@
   }
 
   async function sendTurn() {
-    const text = ($playerInput().value || "").trim();
+    const inputEl = $playerInput();
+    const text = (inputEl && inputEl.value ? inputEl.value : "").trim();
     if (!store.session_id) {
       showError("No hay partida activa. Crea una nueva partida.");
       return;
@@ -286,7 +376,7 @@
       isSystem: false,
     };
     store.messages.push(userMsg);
-    $playerInput().value = "";
+    if (inputEl) inputEl.value = "";
     renderChat();
     updateInputState();
 
@@ -363,7 +453,7 @@
       store.streamingMessage = null;
       await fetchStatus();
     } catch (e) {
-      showError(e.message || "Error al enviar turno");
+      showError(e.message || "Error al enviar");
       store.streamingMessage = null;
       await fetchStatus();
     }
@@ -371,27 +461,38 @@
   }
 
   function initTheme() {
-    const dark = localStorage.getItem("agora-ui-theme") === "dark";
+    const theme = safeGetItem("agora-ui-theme", "light");
+    const dark = theme === "dark";
     const checkbox = $("theme-checkbox");
-    checkbox.checked = dark;
+    if (checkbox) checkbox.checked = dark;
     document.body.classList.toggle("theme-dark", dark);
     document.body.classList.toggle("theme-light", !dark);
   }
 
   function toggleTheme() {
-    const dark = $("theme-checkbox").checked;
-    localStorage.setItem("agora-ui-theme", dark ? "dark" : "light");
+    const checkbox = $("theme-checkbox");
+    const dark = checkbox ? checkbox.checked : false;
+    safeSetItem("agora-ui-theme", dark ? "dark" : "light");
     document.body.classList.toggle("theme-dark", dark);
     document.body.classList.toggle("theme-light", !dark);
   }
 
-  $btnNew().addEventListener("click", postNewGame);
-  $btnReset().addEventListener("click", resetPartida);
-  $btnSend().addEventListener("click", sendTurn);
-  $playerInput().addEventListener("keydown", (e) => {
+  const btnNew = $btnNew();
+  const btnReset = $btnReset();
+  const btnSend = $btnSend();
+  const btnCreateGame = $btnCreateGame();
+  const btnCancelNewGame = $btnCancelNewGame();
+  const playerInput = $playerInput();
+  const themeCheckbox = $("theme-checkbox");
+  if (btnNew) btnNew.addEventListener("click", openNewGameModal);
+  if (btnReset) btnReset.addEventListener("click", resetPartida);
+  if (btnSend) btnSend.addEventListener("click", sendTurn);
+  if (btnCreateGame) btnCreateGame.addEventListener("click", submitNewGameFromForm);
+  if (btnCancelNewGame) btnCancelNewGame.addEventListener("click", closeNewGameModal);
+  if (playerInput) playerInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") sendTurn();
   });
-  $("theme-checkbox").addEventListener("change", toggleTheme);
+  if (themeCheckbox) themeCheckbox.addEventListener("change", toggleTheme);
 
   initTheme();
   renderAll();

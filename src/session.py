@@ -64,7 +64,6 @@ def create_session(
     observer = create_observer_agent(
         actor_names=[a["name"] for a in actors_list],
         player_mission=game_setup.get("player_mission") or "",
-        actor_missions={a["name"]: a.get("mission", "") for a in actors_list},
     )
 
     def runner() -> ConversationState:

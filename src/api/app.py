@@ -30,4 +30,9 @@ if os.getenv("UI_TEST", "").strip().lower() in ("true", "1", "yes"):
         @app.get("/")
         def _redirect_root_to_ui():
             return RedirectResponse(url="/ui/", status_code=302)
+
+        @app.get("/ui")
+        def _redirect_ui_to_ui_slash():
+            return RedirectResponse(url="/ui/", status_code=302)
+
         app.mount("/ui", StaticFiles(directory=_static_dir, html=True), name="ui")

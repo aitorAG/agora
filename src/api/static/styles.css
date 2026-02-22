@@ -304,6 +304,90 @@ body {
   color: var(--text);
 }
 
+/* New game modal */
+.new-game-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.new-game-modal.hidden {
+  display: none;
+}
+
+.new-game-panel {
+  width: min(560px, 100%);
+  background: var(--bg-chat);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.new-game-panel h2 {
+  margin: 0 0 0.35rem 0;
+  font-size: 1.1rem;
+}
+
+.new-game-help {
+  margin: 0 0 0.8rem 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.new-game-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.45rem;
+}
+
+.new-game-fields label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.new-game-fields input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.new-game-fields input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.new-game-actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.new-game-actions button {
+  padding: 0.5rem 0.9rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background: var(--btn-bg);
+  color: var(--btn-color);
+}
+
+.new-game-actions .btn-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   #app {

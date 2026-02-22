@@ -11,6 +11,7 @@ import os
 import sys
 
 from dotenv import load_dotenv
+from src.persistence import create_persistence_provider
 
 load_dotenv()
 
@@ -22,6 +23,9 @@ def main() -> None:
     if mode not in VALID_MODES:
         print(f"INTERFACE_MODE must be 'terminal' or 'api' (got: {repr(mode)}).", file=sys.stderr)
         sys.exit(1)
+
+    # Inicializa persistencia al arranque para fallar rápido en modo db.
+    create_persistence_provider()
 
     if mode == "terminal":
         from src.cli.run import run_terminal

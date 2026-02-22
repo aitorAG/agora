@@ -36,9 +36,9 @@ class CharacterAgent(Agent):
         # Permitir sobreescribir modelo/temperatura vía entorno
         self._model = os.getenv("DEEPSEEK_MODEL_CHARACTER", model)
         try:
-            self._temperature = float(os.getenv("DEEPSEEK_TEMP_CHARACTER", "0.8"))
+            self._temperature = float(os.getenv("DEEPSEEK_TEMP_CHARACTER", "2.0"))
         except ValueError:
-            self._temperature = 0.8
+            self._temperature = 2.0
 
     @property
     def is_actor(self) -> bool:
