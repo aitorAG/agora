@@ -4,18 +4,20 @@ from fastapi.testclient import TestClient
 
 from src.api import routes as routes_module
 from src.api.app import app
+from src.api.schemas import AuthUserResponse
 
 
 class _DummyEngine:
     def __init__(self):
         self.calls = []
 
-    def create_game(self, theme=None, num_actors=3, max_turns=10):
+    def create_game(self, theme=None, num_actors=3, max_turns=10, username=None):
         self.calls.append(
             {
                 "theme": theme,
                 "num_actors": num_actors,
                 "max_turns": max_turns,
+                "username": username,
             }
         )
         setup = {
@@ -37,6 +39,11 @@ class _DummyEngine:
 
 def _client_with_engine(engine):
     app.dependency_overrides[routes_module.get_engine] = lambda: engine
+    app.dependency_overrides[routes_module.get_current_user] = lambda: AuthUserResponse(
+        id="u1",
+        username="usuario",
+        is_active=True,
+    )
     return TestClient(app)
 
 

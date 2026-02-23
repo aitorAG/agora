@@ -58,7 +58,12 @@ class JsonPersistenceProvider(PersistenceProvider):
             raise KeyError(f"Game not found: {game_id}")
         return game_dir
 
-    def create_game(self, title: str, config_json: dict[str, Any]) -> str:
+    def create_game(
+        self,
+        title: str,
+        config_json: dict[str, Any],
+        username: str | None = None,
+    ) -> str:
         if not isinstance(config_json, dict) or not config_json:
             raise ValueError("config_json inválido")
         actors = config_json.get("actors")
@@ -71,7 +76,7 @@ class JsonPersistenceProvider(PersistenceProvider):
         created_at = _utc_now_iso()
         game_info = {
             "id": game_id,
-            "user": self._username,
+            "user": (username or self._username),
             "title": (title or "").strip() or "Partida",
             "status": "active",
             "created_at": created_at,

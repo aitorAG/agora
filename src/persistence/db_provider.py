@@ -117,13 +117,18 @@ class DatabasePersistenceProvider(PersistenceProvider):
                     (user_id, username, _utc_now()),
                 )
 
-    def create_game(self, title: str, config_json: dict[str, Any]) -> str:
+    def create_game(
+        self,
+        title: str,
+        config_json: dict[str, Any],
+        username: str | None = None,
+    ) -> str:
         if not isinstance(config_json, dict) or not config_json:
             raise ValueError("config_json inválido")
         game_id = str(uuid.uuid4())
         with self._connection() as conn:
             with conn.cursor() as cur:
-                user_id = self._get_user_id(cur, "usuario")
+                user_id = self._get_user_id(cur, (username or "usuario"))
                 now = _utc_now()
                 cur.execute(
                     """

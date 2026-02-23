@@ -67,3 +67,25 @@ def test_get_visible_history_returns_copy(manager: ConversationManager):
     assert visible is not manager.state["messages"]
     visible.append({"author": "X", "content": "fake", "timestamp": None, "turn": 0})
     assert len(manager.state["messages"]) == 1
+
+
+def test_restore_state_replaces_manager_state(manager: ConversationManager):
+    manager.add_message("A", "msg1")
+    manager.increment_turn()
+    manager.restore_state(
+        {
+            "messages": [{"author": "B", "content": "msg2", "timestamp": None, "turn": 2}],
+            "turn": 2,
+            "metadata": {"k": "v"},
+        }
+    )
+    assert manager.state["turn"] == 2
+    assert manager.state["messages"][0]["author"] == "B"
+    assert manager.state["metadata"]["k"] == "v"
+
+
+def test_restore_state_handles_invalid_shapes(manager: ConversationManager):
+    manager.restore_state({"messages": "invalid", "turn": "x", "metadata": []})
+    assert manager.state["messages"] == []
+    assert manager.state["turn"] == 0
+    assert manager.state["metadata"] == {}

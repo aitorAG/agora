@@ -10,7 +10,12 @@ class PersistenceProvider(ABC):
     """Interfaz de almacenamiento desacoplada del engine."""
 
     @abstractmethod
-    def create_game(self, title: str, config_json: dict[str, Any]) -> str:
+    def create_game(
+        self,
+        title: str,
+        config_json: dict[str, Any],
+        username: str | None = None,
+    ) -> str:
         """Crea partida + config + estado inicial y devuelve game_id."""
 
     @abstractmethod

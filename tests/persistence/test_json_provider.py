@@ -45,3 +45,12 @@ def test_json_provider_save_game_state_and_list_games(tmp_path):
     assert game["state_json"]["turn"] == 3
     listed = provider.list_games_for_user("usuario")
     assert any(x["id"] == game_id for x in listed)
+
+
+def test_json_provider_create_game_with_explicit_username(tmp_path):
+    provider = JsonPersistenceProvider(base_path=tmp_path)
+    game_id = provider.create_game("Partida Alice", {"actors": []}, username="alice")
+    listed_alice = provider.list_games_for_user("alice")
+    listed_usuario = provider.list_games_for_user("usuario")
+    assert any(x["id"] == game_id for x in listed_alice)
+    assert not any(x["id"] == game_id for x in listed_usuario)

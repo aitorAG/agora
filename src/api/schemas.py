@@ -69,6 +69,51 @@ class ContextResponse(BaseModel):
     narrativa_inicial: str = ""
 
 
+# --- GET /game/list ---
+class GameListItem(BaseModel):
+    id: str
+    title: str = ""
+    status: str = "active"
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class GameListResponse(BaseModel):
+    games: list[GameListItem] = Field(default_factory=list)
+
+
+# --- POST /game/resume ---
+class ResumeGameRequest(BaseModel):
+    session_id: str
+
+
+class ResumeGameResponse(BaseModel):
+    session_id: str
+    loaded_from_memory: bool = False
+
+
+# --- Auth ---
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=6, max_length=200)
+
+
+class AuthUserResponse(BaseModel):
+    id: str
+    username: str
+    is_active: bool = True
+
+
+class LoginResponse(BaseModel):
+    user: AuthUserResponse
+    authenticated: bool = True
+
+
 # --- Health ---
 class HealthResponse(BaseModel):
     status: str = "ok"

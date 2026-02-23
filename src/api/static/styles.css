@@ -47,6 +47,114 @@ body {
   min-height: 100vh;
 }
 
+.login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1rem;
+}
+
+.login-screen.hidden {
+  display: none;
+}
+
+.login-panel {
+  width: min(420px, 100%);
+  background: var(--bg-chat);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.2rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+}
+
+.login-panel h1 {
+  margin: 0 0 0.4rem 0;
+}
+
+.login-help {
+  margin: 0 0 0.9rem 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+#login-form {
+  display: grid;
+  gap: 0.45rem;
+}
+
+#register-form {
+  display: grid;
+  gap: 0.45rem;
+}
+
+#login-form.hidden,
+#register-form.hidden {
+  display: none;
+}
+
+#login-form input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+#register-form input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+#btn-login,
+#btn-register {
+  margin-top: 0.4rem;
+  padding: 0.55rem 0.9rem;
+  border: none;
+  border-radius: 6px;
+  background: var(--btn-bg);
+  color: var(--btn-color);
+  cursor: pointer;
+}
+
+#btn-login:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+#btn-register:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-secondary-auth {
+  margin-top: 0.2rem;
+  padding: 0.52rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.login-error {
+  margin: 0.2rem 0 0.1rem 0;
+  color: var(--error-text);
+  font-size: 0.85rem;
+}
+
+.login-error.hidden {
+  display: none;
+}
+
 #app {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -257,6 +365,60 @@ body {
 .char-item strong {
   display: block;
   margin-bottom: 0.2rem;
+}
+
+.games-list-container {
+  max-height: 210px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.games-list-state {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.games-list-error {
+  color: var(--error-text);
+}
+
+.game-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-chat);
+  color: var(--text);
+  padding: 0.5rem 0.6rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.game-item:hover {
+  border-color: var(--btn-bg);
+}
+
+.game-item.is-active {
+  border-color: var(--btn-bg);
+  background: var(--msg-player-bg);
+}
+
+.game-item-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.game-item-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 /* Loading overlay */

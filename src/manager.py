@@ -83,3 +83,23 @@ class ConversationManager:
             Valor almacenado o default
         """
         return self._state["metadata"].get(key, default)
+
+    def restore_state(self, state: ConversationState) -> None:
+        """Restaura el estado conversacional desde persistencia de forma defensiva."""
+        raw_messages = state.get("messages", []) if isinstance(state, dict) else []
+        messages = raw_messages if isinstance(raw_messages, list) else []
+
+        raw_turn = state.get("turn", 0) if isinstance(state, dict) else 0
+        try:
+            turn = int(raw_turn)
+        except (TypeError, ValueError):
+            turn = 0
+
+        raw_metadata = state.get("metadata", {}) if isinstance(state, dict) else {}
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+
+        self._state = {
+            "messages": messages,
+            "turn": turn,
+            "metadata": metadata,
+        }

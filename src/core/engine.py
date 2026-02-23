@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime
 from dataclasses import dataclass
 from queue import Empty, Queue
 from threading import Thread
@@ -45,6 +46,7 @@ class GameEngine:
         num_actors: int = 3,
         max_turns: int = 10,
         stream_sink: Any = None,
+        username: str | None = None,
     ) -> tuple[str, dict[str, Any]]:
         """Crea una partida: Guionista genera setup, Manager y agentes. Devuelve (game_id, setup).
         Si stream_sink es un Callable[[str], None], se invoca con cada chunk de la narrativa (JSON) durante la generación."""
@@ -74,7 +76,11 @@ class GameEngine:
         )
 
         title = str(game_setup.get("titulo") or theme or "Partida").strip() or "Partida"
-        game_id = self._persistence.create_game(title=title, config_json=dict(game_setup))
+        game_id = self._persistence.create_game(
+            title=title,
+            config_json=dict(game_setup),
+            username=username,
+        )
         session = GameSession(
             manager=manager,
             character_agents=character_agents,
@@ -171,9 +177,166 @@ class GameEngine:
             "narrativa_inicial": setup.get("narrativa_inicial", ""),
         }
 
+    def list_games(self, username: str) -> list[dict[str, Any]]:
+        """Lista partidas para el usuario indicado."""
+        return self._persistence.list_games_for_user(username)
+
+    def game_belongs_to_user(self, game_id: str, username: str) -> bool:
+        game = self._persistence.get_game(game_id)
+        return str(game.get("user", "")) == username
+
+    def resume_game(self, game_id: str) -> dict[str, Any]:
+        """Reanuda sesión existente desde memoria o persistencia."""
+        if game_id in self._registry:
+            return {"session_id": game_id, "loaded_from_memory": True}
+        self._rehydrate_session(game_id)
+        return {"session_id": game_id, "loaded_from_memory": False}
+
+    @staticmethod
+    def _parse_timestamp(value: Any) -> datetime:
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str) and value:
+            normalized = value.replace("Z", "+00:00")
+            try:
+                return datetime.fromisoformat(normalized)
+            except ValueError:
+                pass
+        return datetime.now()
+
+    @staticmethod
+    def _valid_next_action(value: Any) -> Literal["character", "user_input", "ended"]:
+        if value in ("character", "user_input", "ended"):
+            return value
+        return "user_input"
+
+    def _rehydrate_session(self, game_id: str) -> GameSession:
+        """Reconstruye una sesión desde persistencia y la registra en memoria."""
+        if game_id in self._registry:
+            return self._registry[game_id]
+
+        game = self._persistence.get_game(game_id)
+        config_json = game.get("config_json", {})
+        if not isinstance(config_json, dict):
+            raise ValueError("Session cannot be resumed: invalid config")
+
+        state_json = game.get("state_json", {})
+        if not isinstance(state_json, dict):
+            state_json = {}
+
+        actors = config_json.get("actors", [])
+        if not isinstance(actors, list):
+            raise ValueError("Session cannot be resumed: invalid actors")
+
+        character_agents: dict[str, Any] = {}
+        actor_names: list[str] = []
+        for actor in actors:
+            if not isinstance(actor, dict):
+                continue
+            name = str(actor.get("name", "")).strip()
+            if not name:
+                continue
+            actor_names.append(name)
+            character_agents[name] = create_character_agent(
+                name=name,
+                personality=actor.get("personality"),
+                mission=actor.get("mission"),
+                background=actor.get("background"),
+            )
+
+        if not actor_names:
+            raise ValueError("Session cannot be resumed: no valid actors")
+
+        observer = create_observer_agent(
+            actor_names=actor_names,
+            player_mission=str(config_json.get("player_mission") or ""),
+        )
+
+        persisted_records = self._persistence.get_game_messages(game_id)
+        restored_messages: list[dict[str, Any]] = []
+        raw_messages = state_json.get("messages", [])
+        if isinstance(raw_messages, list):
+            for msg in raw_messages:
+                if not isinstance(msg, dict):
+                    continue
+                try:
+                    msg_turn = int(msg.get("turn", 0))
+                except (TypeError, ValueError):
+                    msg_turn = 0
+                restored_messages.append(
+                    {
+                        "author": str(msg.get("author", "")),
+                        "content": str(msg.get("content", "")),
+                        "timestamp": self._parse_timestamp(msg.get("timestamp")),
+                        "turn": msg_turn,
+                        "displayed": bool(msg.get("displayed", False)),
+                    }
+                )
+
+        # Compatibilidad con snapshots antiguos sin messages en state_json.
+        if not restored_messages and isinstance(persisted_records, list):
+            for rec in persisted_records:
+                if not isinstance(rec, dict):
+                    continue
+                metadata = rec.get("metadata_json", {})
+                if not isinstance(metadata, dict):
+                    metadata = {}
+                try:
+                    rec_turn = int(rec.get("turn_number", 0))
+                except (TypeError, ValueError):
+                    rec_turn = 0
+                restored_messages.append(
+                    {
+                        "author": str(metadata.get("author") or rec.get("role") or ""),
+                        "content": str(rec.get("content", "")),
+                        "timestamp": self._parse_timestamp(metadata.get("timestamp") or rec.get("created_at")),
+                        "turn": rec_turn,
+                        "displayed": False,
+                    }
+                )
+
+        raw_metadata = state_json.get("metadata", {})
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+
+        try:
+            restored_turn = int(state_json.get("turn", 0))
+        except (TypeError, ValueError):
+            restored_turn = 0
+
+        manager = ConversationManager()
+        manager.restore_state(
+            {
+                "messages": restored_messages,
+                "turn": restored_turn,
+                "metadata": metadata,
+            }
+        )
+
+        try:
+            max_turns = int(state_json.get("max_turns", 10))
+        except (TypeError, ValueError):
+            max_turns = 10
+        try:
+            max_messages_before_user = int(state_json.get("max_messages_before_user", 3))
+        except (TypeError, ValueError):
+            max_messages_before_user = 3
+
+        session = GameSession(
+            manager=manager,
+            character_agents=character_agents,
+            observer_agent=observer,
+            setup=dict(config_json),
+            max_turns=max_turns,
+            max_messages_before_user=max_messages_before_user,
+            next_action=self._valid_next_action(state_json.get("next_action")),
+            persisted_messages=len(restored_messages),
+        )
+        self._registry[game_id] = session
+        return session
+
     def _get_session(self, game_id: str) -> GameSession:
         if game_id not in self._registry:
-            raise KeyError(f"Game not found: {game_id}")
+            self._rehydrate_session(game_id)
         return self._registry[game_id]
 
     def player_input(

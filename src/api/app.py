@@ -3,12 +3,15 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from .routes import router
+from .routes import router, auth_router
 from .schemas import HealthResponse
+
+load_dotenv()
 
 app = FastAPI(
     title="Agora API",
@@ -16,6 +19,7 @@ app = FastAPI(
     version="0.1.0",
 )
 app.include_router(router)
+app.include_router(auth_router)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -24,8 +28,10 @@ def health():
 
 
 # UI de prueba solo si UI_TEST=true
-if os.getenv("UI_TEST", "").strip().lower() in ("true", "1", "yes"):
-    _static_dir = Path(__file__).resolve().parent / "static"
+_ui_test_raw = os.getenv("UI_TEST", "")
+_ui_enabled = _ui_test_raw.strip().lower() in ("true", "1", "yes")
+_static_dir = Path(__file__).resolve().parent / "static"
+if _ui_enabled:
     if _static_dir.is_dir():
         @app.get("/")
         def _redirect_root_to_ui():

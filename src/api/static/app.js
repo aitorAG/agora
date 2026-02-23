@@ -4,6 +4,13 @@
   const API_BASE = "";
 
   const store = {
+    screen: "login",
+    auth: {
+      user: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+    },
     session_id: null,
     status: {
       turn_current: 0,
@@ -23,6 +30,9 @@
     error: null,
     streamingMessage: null,
     streamingNode: null,
+    games_list: [],
+    games_loading: false,
+    games_error: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -60,6 +70,21 @@
   const $seedTopic = () => $("seed-topic");
   const $seedStyle = () => $("seed-style");
   const $seedNumActors = () => $("seed-num-actors");
+  const $gamesListContainer = () => $("games-list-container");
+  const $app = () => $("app");
+  const $loginScreen = () => $("login-screen");
+  const $loginForm = () => $("login-form");
+  const $loginUsername = () => $("login-username");
+  const $loginPassword = () => $("login-password");
+  const $btnLogin = () => $("btn-login");
+  const $btnOpenRegister = () => $("btn-open-register");
+  const $loginError = () => $("login-error");
+  const $registerForm = () => $("register-form");
+  const $registerUsername = () => $("register-username");
+  const $registerPassword = () => $("register-password");
+  const $btnRegister = () => $("btn-register");
+  const $btnBackLogin = () => $("btn-back-login");
+  const $registerError = () => $("register-error");
 
   function showLoading(message) {
     const msg = message || "Procesando…";
@@ -89,6 +114,31 @@
     if (el) el.classList.add("hidden");
   }
 
+  function setAuthError(msg) {
+    store.auth.error = msg || null;
+    const el = $loginError();
+    if (el) {
+      if (msg) {
+        el.textContent = msg;
+        el.classList.remove("hidden");
+      } else {
+        el.classList.add("hidden");
+      }
+    }
+  }
+
+  function setRegisterError(msg) {
+    const el = $registerError();
+    if (el) {
+      if (msg) {
+        el.textContent = msg;
+        el.classList.remove("hidden");
+      } else {
+        el.classList.add("hidden");
+      }
+    }
+  }
+
   function apiUrl(path, params) {
     const url = new URL(path, window.location.origin);
     if (params) {
@@ -99,7 +149,11 @@
 
   async function apiGet(path, params) {
     const url = API_BASE + apiUrl(path, params);
-    const res = await fetch(url);
+    const res = await fetch(url, { credentials: "include" });
+    if (res.status === 401) {
+      await handleAuthExpired();
+      throw new Error("Necesitas iniciar sesión.");
+    }
     if (res.status === 404) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.detail || "Sesión no encontrada");
@@ -109,6 +163,110 @@
       throw new Error(text || `Error ${res.status}`);
     }
     return res.json();
+  }
+
+  async function apiPost(path, payload) {
+    const url = API_BASE + path;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload || {}),
+    });
+    if (res.status === 401) {
+      await handleAuthExpired();
+      throw new Error("Necesitas iniciar sesión.");
+    }
+    if (res.status === 404) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || "Sesión no encontrada");
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || `Error ${res.status}`);
+    }
+    return res.json();
+  }
+
+  async function handleAuthExpired() {
+    store.auth.user = null;
+    store.auth.isAuthenticated = false;
+    store.screen = "login";
+    store.session_id = null;
+    store.games_list = [];
+    renderAll();
+  }
+
+  async function checkAuth() {
+    store.auth.loading = true;
+    try {
+      const user = await apiGet("/auth/me");
+      store.auth.user = user;
+      store.auth.isAuthenticated = true;
+      store.auth.error = null;
+      store.screen = "app";
+      return true;
+    } catch (_) {
+      store.auth.user = null;
+      store.auth.isAuthenticated = false;
+      store.screen = "login";
+      return false;
+    } finally {
+      store.auth.loading = false;
+    }
+  }
+
+  async function login(username, password) {
+    setAuthError(null);
+    setRegisterError(null);
+    store.auth.loading = true;
+    try {
+      const data = await apiPost("/auth/login", { username, password });
+      store.auth.user = data.user || { username };
+      store.auth.isAuthenticated = true;
+      store.auth.error = null;
+      store.screen = "app";
+      await fetchGamesList();
+      renderAll();
+      return true;
+    } catch (e) {
+      setAuthError(e.message || "No se pudo iniciar sesión");
+      return false;
+    } finally {
+      store.auth.loading = false;
+    }
+  }
+
+  async function register(username, password) {
+    setAuthError(null);
+    setRegisterError(null);
+    store.auth.loading = true;
+    try {
+      const data = await apiPost("/auth/register", { username, password });
+      store.auth.user = data.user || { username };
+      store.auth.isAuthenticated = true;
+      store.auth.error = null;
+      store.screen = "app";
+      await fetchGamesList();
+      renderAll();
+      return true;
+    } catch (e) {
+      setRegisterError(e.message || "No se pudo crear el usuario");
+      return false;
+    } finally {
+      store.auth.loading = false;
+    }
+  }
+
+  async function logout() {
+    try {
+      await apiPost("/auth/logout", {});
+    } catch (_) {}
+    store.auth.user = null;
+    store.auth.isAuthenticated = false;
+    store.screen = "login";
+    resetPartida();
+    renderAll();
   }
 
   function openNewGameModal() {
@@ -159,6 +317,10 @@
   }
 
   async function postNewGame(payload = {}) {
+    if (!store.auth.isAuthenticated) {
+      await handleAuthExpired();
+      return false;
+    }
     clearError();
     showLoading("Creando partida…");
     try {
@@ -166,8 +328,13 @@
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
       });
+      if (res.status === 401) {
+        await handleAuthExpired();
+        throw new Error("Necesitas iniciar sesión.");
+      }
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || `Error ${res.status}`);
@@ -185,6 +352,7 @@
       store.messages = [];
       await fetchContext();
       await fetchStatus();
+      await fetchGamesList();
       renderAll();
       return true;
     } catch (e) {
@@ -207,6 +375,7 @@
   }
 
   async function fetchContext() {
+    if (!store.auth.isAuthenticated) return;
     if (!store.session_id) return;
     try {
       const data = await apiGet("/game/context", { session_id: store.session_id });
@@ -219,6 +388,7 @@
   }
 
   async function fetchStatus() {
+    if (!store.auth.isAuthenticated) return;
     if (!store.session_id) return;
     try {
       const data = await apiGet("/game/status", { session_id: store.session_id });
@@ -240,6 +410,62 @@
       showError(e.message || "Sesión no encontrada");
       store.session_id = null;
       renderAll();
+    }
+  }
+
+  async function fetchGamesList() {
+    if (!store.auth.isAuthenticated) {
+      store.games_list = [];
+      store.games_loading = false;
+      renderGamesList();
+      return;
+    }
+    store.games_loading = true;
+    store.games_error = null;
+    renderGamesList();
+    try {
+      const data = await apiGet("/game/list");
+      store.games_list = Array.isArray(data.games) ? data.games : [];
+    } catch (e) {
+      store.games_list = [];
+      store.games_error = e.message || "Error al cargar partidas";
+    } finally {
+      store.games_loading = false;
+      renderGamesList();
+    }
+  }
+
+  function formatShortDate(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  async function resumeGame(sessionId) {
+    if (!store.auth.isAuthenticated) {
+      await handleAuthExpired();
+      return;
+    }
+    if (!sessionId) return;
+    clearError();
+    showLoading("Reanudando partida…");
+    try {
+      const data = await apiPost("/game/resume", { session_id: sessionId });
+      store.session_id = data.session_id || sessionId;
+      await fetchContext();
+      await fetchStatus();
+      await fetchGamesList();
+      renderAll();
+    } catch (e) {
+      showError(e.message || "No se pudo reanudar la partida");
+    } finally {
+      hideLoading();
     }
   }
 
@@ -281,6 +507,48 @@
       stateHtml = "<p>Sin partida activa.</p>";
     }
     $gameState().innerHTML = stateHtml;
+  }
+
+  function renderGamesList() {
+    const container = $gamesListContainer();
+    if (!container) return;
+
+    if (store.games_loading) {
+      container.innerHTML = '<p class="games-list-state">Cargando partidas…</p>';
+      return;
+    }
+
+    if (store.games_error) {
+      container.innerHTML = `<p class="games-list-state games-list-error">${escapeHtml(store.games_error)}</p>`;
+      return;
+    }
+
+    const games = Array.isArray(store.games_list) ? store.games_list : [];
+    if (!games.length) {
+      container.innerHTML = '<p class="games-list-state">Aún no tienes partidas guardadas.</p>';
+      return;
+    }
+
+    container.innerHTML = games
+      .map((g) => {
+        const gameId = String(g.id || "");
+        const title = String(g.title || "Partida sin título");
+        const status = String(g.status || "active");
+        const updated = formatShortDate(g.updated_at);
+        const activeClass = gameId === store.session_id ? " is-active" : "";
+        const statusLabel = status === "finished" ? "Terminada" : "Activa";
+        const dateHtml = updated ? `<span class="game-item-date">${escapeHtml(updated)}</span>` : "";
+        return `
+          <button type="button" class="game-item${activeClass}" data-game-id="${escapeHtml(gameId)}">
+            <span class="game-item-title">${escapeHtml(title)}</span>
+            <span class="game-item-meta">
+              <span class="game-item-status">${escapeHtml(statusLabel)}</span>
+              ${dateHtml}
+            </span>
+          </button>
+        `;
+      })
+      .join("");
   }
 
   function escapeHtml(s) {
@@ -336,7 +604,23 @@
   }
 
   function renderAll() {
+    const loginScreen = $loginScreen();
+    const app = $app();
+    const loginForm = $loginForm();
+    const registerForm = $registerForm();
+    if (store.screen === "login" || store.screen === "register") {
+      if (loginScreen) loginScreen.classList.remove("hidden");
+      if (app) app.classList.add("hidden");
+      if (loginForm) loginForm.classList.toggle("hidden", store.screen !== "login");
+      if (registerForm) registerForm.classList.toggle("hidden", store.screen !== "register");
+      setAuthError(store.screen === "login" ? store.auth.error : null);
+      setRegisterError(store.screen === "register" ? store.auth.error : null);
+      return;
+    }
+    if (loginScreen) loginScreen.classList.add("hidden");
+    if (app) app.classList.remove("hidden");
     renderSidebar();
+    renderGamesList();
     renderChat();
     updateInputState();
   }
@@ -361,6 +645,10 @@
   }
 
   async function sendTurn() {
+    if (!store.auth.isAuthenticated) {
+      await handleAuthExpired();
+      return;
+    }
     const inputEl = $playerInput();
     const text = (inputEl && inputEl.value ? inputEl.value : "").trim();
     if (!store.session_id) {
@@ -388,9 +676,14 @@
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        credentials: "include",
         body: JSON.stringify({ session_id: store.session_id, text }),
       });
 
+      if (res.status === 401) {
+        await handleAuthExpired();
+        throw new Error("Necesitas iniciar sesión.");
+      }
       if (res.status === 404) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || "Sesión no encontrada");
@@ -452,10 +745,12 @@
 
       store.streamingMessage = null;
       await fetchStatus();
+      await fetchGamesList();
     } catch (e) {
       showError(e.message || "Error al enviar");
       store.streamingMessage = null;
       await fetchStatus();
+      await fetchGamesList();
     }
     renderAll();
   }
@@ -484,6 +779,13 @@
   const btnCancelNewGame = $btnCancelNewGame();
   const playerInput = $playerInput();
   const themeCheckbox = $("theme-checkbox");
+  const gamesListContainer = $gamesListContainer();
+  const loginForm = $loginForm();
+  const btnLogin = $btnLogin();
+  const registerForm = $registerForm();
+  const btnRegister = $btnRegister();
+  const btnOpenRegister = $btnOpenRegister();
+  const btnBackLogin = $btnBackLogin();
   if (btnNew) btnNew.addEventListener("click", openNewGameModal);
   if (btnReset) btnReset.addEventListener("click", resetPartida);
   if (btnSend) btnSend.addEventListener("click", sendTurn);
@@ -493,7 +795,79 @@
     if (e.key === "Enter") sendTurn();
   });
   if (themeCheckbox) themeCheckbox.addEventListener("change", toggleTheme);
+  if (gamesListContainer) {
+    gamesListContainer.addEventListener("click", (e) => {
+      const target = e.target && e.target.closest ? e.target.closest("[data-game-id]") : null;
+      if (!target) return;
+      const gameId = target.getAttribute("data-game-id");
+      if (!gameId) return;
+      if (gameId === store.session_id) return;
+      resumeGame(gameId);
+    });
+  }
 
-  initTheme();
-  renderAll();
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const username = (($loginUsername() && $loginUsername().value) || "").trim();
+      const password = (($loginPassword() && $loginPassword().value) || "").trim();
+      if (!username || !password) {
+        setAuthError("Usuario y contraseña son obligatorios.");
+        return;
+      }
+      if (btnLogin) btnLogin.disabled = true;
+      const ok = await login(username, password);
+      if (!ok && btnLogin) btnLogin.disabled = false;
+      if (ok && btnLogin) btnLogin.disabled = false;
+    });
+  }
+
+  if (btnOpenRegister) {
+    btnOpenRegister.addEventListener("click", () => {
+      setAuthError(null);
+      setRegisterError(null);
+      store.screen = "register";
+      renderAll();
+    });
+  }
+
+  if (btnBackLogin) {
+    btnBackLogin.addEventListener("click", () => {
+      setAuthError(null);
+      setRegisterError(null);
+      store.screen = "login";
+      renderAll();
+    });
+  }
+
+  if (registerForm) {
+    registerForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const username = (($registerUsername() && $registerUsername().value) || "").trim();
+      const password = (($registerPassword() && $registerPassword().value) || "").trim();
+      if (!username || !password) {
+        setRegisterError("Usuario y contraseña son obligatorios.");
+        return;
+      }
+      if (password.length < 6) {
+        setRegisterError("La contraseña debe tener al menos 6 caracteres.");
+        return;
+      }
+      if (btnRegister) btnRegister.disabled = true;
+      const ok = await register(username, password);
+      if (!ok && btnRegister) btnRegister.disabled = false;
+      if (ok && btnRegister) btnRegister.disabled = false;
+    });
+  }
+
+  async function init() {
+    initTheme();
+    await checkAuth();
+    if (store.auth.isAuthenticated) {
+      await fetchGamesList();
+    }
+    renderAll();
+  }
+
+  init();
 })();

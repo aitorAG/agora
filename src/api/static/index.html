@@ -7,6 +7,30 @@
   <link rel="stylesheet" href="/ui/styles.css?v=2" />
 </head>
 <body class="theme-light">
+  <div id="login-screen" class="login-screen hidden">
+    <div class="login-panel">
+      <h1>Agora</h1>
+      <p class="login-help">Inicia sesión para acceder a tus partidas.</p>
+      <form id="login-form" novalidate>
+        <label for="login-username">Usuario</label>
+        <input id="login-username" type="text" maxlength="100" autocomplete="username" required />
+        <label for="login-password">Contraseña</label>
+        <input id="login-password" type="password" maxlength="200" autocomplete="current-password" required />
+        <p id="login-error" class="login-error hidden"></p>
+        <button type="submit" id="btn-login">Entrar</button>
+        <button type="button" id="btn-open-register" class="btn-secondary-auth">Crear nuevo usuario</button>
+      </form>
+      <form id="register-form" class="hidden" novalidate>
+        <label for="register-username">Nuevo usuario</label>
+        <input id="register-username" type="text" maxlength="100" autocomplete="username" required />
+        <label for="register-password">Nueva contraseña</label>
+        <input id="register-password" type="password" maxlength="200" autocomplete="new-password" required />
+        <p id="register-error" class="login-error hidden"></p>
+        <button type="submit" id="btn-register">Crear cuenta</button>
+        <button type="button" id="btn-back-login" class="btn-secondary-auth">Volver a login</button>
+      </form>
+    </div>
+  </div>
   <div id="app">
     <aside class="sidebar">
       <section class="sidebar-section">
@@ -20,6 +44,10 @@
       <section class="sidebar-section">
         <h2>Personajes</h2>
         <div id="characters-list" class="sidebar-content"></div>
+      </section>
+      <section class="sidebar-section">
+        <h2>Tus partidas</h2>
+        <div id="games-list-container" class="sidebar-content games-list-container"></div>
       </section>
       <section class="sidebar-section">
         <h2>Estado del juego</h2>

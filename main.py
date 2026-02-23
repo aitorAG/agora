@@ -11,6 +11,7 @@ import os
 import sys
 
 from dotenv import load_dotenv
+from src.api.auth import ensure_seed_user
 from src.persistence import create_persistence_provider
 
 load_dotenv()
@@ -26,6 +27,7 @@ def main() -> None:
 
     # Inicializa persistencia al arranque para fallar rápido en modo db.
     create_persistence_provider()
+    ensure_seed_user()
 
     if mode == "terminal":
         from src.cli.run import run_terminal
