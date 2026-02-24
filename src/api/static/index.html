@@ -46,16 +46,11 @@
         <div id="characters-list" class="sidebar-content"></div>
       </section>
       <section class="sidebar-section">
-        <h2>Tus partidas</h2>
-        <div id="games-list-container" class="sidebar-content games-list-container"></div>
-      </section>
-      <section class="sidebar-section">
         <h2>Estado del juego</h2>
         <div id="game-state" class="sidebar-content"></div>
       </section>
       <div class="sidebar-actions">
         <button type="button" id="btn-new-game">Nueva partida</button>
-        <button type="button" id="btn-reset">Reset partida</button>
         <label class="theme-toggle">
           <input type="checkbox" id="theme-checkbox" />
           <span>Modo oscuro</span>
@@ -63,6 +58,24 @@
       </div>
     </aside>
     <main class="main">
+      <header class="main-header">
+        <button
+          type="button"
+          id="user-chip"
+          class="user-chip"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls="user-menu"
+        >
+          <span id="user-avatar" class="user-avatar">?</span>
+          <span id="user-name" class="user-name">Usuario</span>
+        </button>
+        <div id="user-menu" class="user-menu hidden" role="menu" aria-labelledby="user-chip">
+          <button type="button" id="menu-games" role="menuitem">Mis partidas</button>
+          <button type="button" id="menu-profile" role="menuitem" disabled title="Próximamente">Perfil</button>
+          <button type="button" id="menu-logout" role="menuitem">Cerrar sesión</button>
+        </div>
+      </header>
       <div id="error-banner" class="error-banner hidden"></div>
       <div id="chat" class="chat"></div>
       <div class="input-area">
@@ -70,6 +83,17 @@
         <button type="button" id="btn-send" disabled>Enviar</button>
       </div>
     </main>
+    <div id="games-drawer-overlay" class="games-drawer-overlay hidden" aria-hidden="true"></div>
+    <aside id="games-drawer" class="games-drawer hidden" aria-hidden="true" aria-labelledby="games-drawer-title">
+      <div class="games-drawer-header">
+        <h3 id="games-drawer-title">Tus partidas</h3>
+        <button type="button" id="btn-close-games-drawer" class="btn-secondary">Cerrar</button>
+      </div>
+      <div id="games-drawer-list" class="games-drawer-list"></div>
+      <div class="games-drawer-actions">
+        <button type="button" id="btn-drawer-new-game">Nueva partida</button>
+      </div>
+    </aside>
   </div>
   <div id="loading-overlay" class="loading-overlay hidden" aria-busy="true" aria-live="polite">
     <div class="loading-content">
@@ -79,45 +103,65 @@
   </div>
   <div id="new-game-modal" class="new-game-modal hidden" role="dialog" aria-modal="true" aria-labelledby="new-game-title">
     <div class="new-game-panel">
-      <h2 id="new-game-title">Nueva partida personalizada</h2>
-      <p class="new-game-help">Deja todo en blanco para usar la configuración por defecto.</p>
-      <div class="new-game-fields">
-        <label for="seed-era">Época/contexto</label>
-        <input
-          id="seed-era"
-          type="text"
-          maxlength="200"
-          placeholder="Ej: Roma, siglo II d.C. o Madrid en 2099"
-        />
+      <h2 id="new-game-title">Nueva partida</h2>
+      <p id="new-game-help" class="new-game-help">Elige cómo quieres iniciar la historia.</p>
 
-        <label for="seed-topic">Tema</label>
-        <input
-          id="seed-topic"
-          type="text"
-          maxlength="200"
-          placeholder="Ej: descubrir al sospechoso, extraer la verdad, llegar a un acuerdo"
-        />
-
-        <label for="seed-style">Estilo</label>
-        <input
-          id="seed-style"
-          type="text"
-          maxlength="200"
-          placeholder="Ej: comedia negra, romance histórico, thriller psicológico"
-        />
-
-        <label for="seed-num-actors">Nº de personajes (1-5)</label>
-        <input
-          id="seed-num-actors"
-          type="number"
-          min="1"
-          max="5"
-          step="1"
-          placeholder="3"
-        />
+      <div id="new-game-step-mode" class="new-game-step">
+        <div class="new-game-mode-actions">
+          <button type="button" id="btn-mode-custom">Modo custom</button>
+          <button type="button" id="btn-mode-standard" class="btn-secondary">Modo standard (plantilla)</button>
+        </div>
       </div>
-      <div class="new-game-actions">
-        <button type="button" id="btn-create-game">Crear partida</button>
+
+      <div id="new-game-step-custom" class="new-game-step hidden">
+        <div class="new-game-fields">
+          <label for="seed-era">Época/contexto</label>
+          <input
+            id="seed-era"
+            type="text"
+            maxlength="200"
+            placeholder="Ej: Roma, siglo II d.C. o Madrid en 2099"
+          />
+
+          <label for="seed-topic">Tema</label>
+          <input
+            id="seed-topic"
+            type="text"
+            maxlength="200"
+            placeholder="Ej: descubrir al sospechoso, extraer la verdad, llegar a un acuerdo"
+          />
+
+          <label for="seed-style">Estilo</label>
+          <input
+            id="seed-style"
+            type="text"
+            maxlength="200"
+            placeholder="Ej: comedia negra, romance histórico, thriller psicológico"
+          />
+
+          <label for="seed-num-actors">Nº de personajes (1-5)</label>
+          <input
+            id="seed-num-actors"
+            type="number"
+            min="1"
+            max="5"
+            step="1"
+            placeholder="3"
+          />
+        </div>
+        <div class="new-game-actions">
+          <button type="button" id="btn-back-from-custom" class="btn-secondary">Volver</button>
+          <button type="button" id="btn-create-game">Crear partida</button>
+        </div>
+      </div>
+
+      <div id="new-game-step-standard" class="new-game-step hidden">
+        <div id="standard-templates-list" class="standard-templates-list"></div>
+        <div class="new-game-actions">
+          <button type="button" id="btn-back-from-standard" class="btn-secondary">Volver</button>
+        </div>
+      </div>
+      <div class="new-game-actions new-game-actions-global">
         <button type="button" id="btn-cancel-new-game" class="btn-secondary">Cancelar</button>
       </div>
     </div>

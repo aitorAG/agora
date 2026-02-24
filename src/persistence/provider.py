@@ -15,6 +15,9 @@ class PersistenceProvider(ABC):
         title: str,
         config_json: dict[str, Any],
         username: str | None = None,
+        game_mode: str = "custom",
+        standard_template_id: str | None = None,
+        template_version: str | None = None,
     ) -> str:
         """Crea partida + config + estado inicial y devuelve game_id."""
 

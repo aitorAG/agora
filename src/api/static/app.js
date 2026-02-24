@@ -33,6 +33,18 @@
     games_list: [],
     games_loading: false,
     games_error: null,
+    ui: {
+      userMenuOpen: false,
+      gamesPanelOpen: false,
+      logoutLoading: false,
+    },
+    newGame: {
+      step: "mode",
+      standardCatalog: [],
+      standardLoading: false,
+      standardError: null,
+      standardSubmitting: false,
+    },
   };
 
   const $ = (id) => document.getElementById(id);
@@ -60,17 +72,25 @@
   const $playerInput = () => $("player-input");
   const $btnSend = () => $("btn-send");
   const $btnNew = () => $("btn-new-game");
-  const $btnReset = () => $("btn-reset");
   const $loadingOverlay = () => $("loading-overlay");
   const $loadingMessage = () => $("loading-message");
   const $newGameModal = () => $("new-game-modal");
+  const $newGameTitle = () => $("new-game-title");
+  const $newGameHelp = () => $("new-game-help");
+  const $newGameStepMode = () => $("new-game-step-mode");
+  const $newGameStepCustom = () => $("new-game-step-custom");
+  const $newGameStepStandard = () => $("new-game-step-standard");
   const $btnCreateGame = () => $("btn-create-game");
   const $btnCancelNewGame = () => $("btn-cancel-new-game");
+  const $btnModeCustom = () => $("btn-mode-custom");
+  const $btnModeStandard = () => $("btn-mode-standard");
+  const $btnBackFromCustom = () => $("btn-back-from-custom");
+  const $btnBackFromStandard = () => $("btn-back-from-standard");
+  const $standardTemplatesList = () => $("standard-templates-list");
   const $seedEra = () => $("seed-era");
   const $seedTopic = () => $("seed-topic");
   const $seedStyle = () => $("seed-style");
   const $seedNumActors = () => $("seed-num-actors");
-  const $gamesListContainer = () => $("games-list-container");
   const $app = () => $("app");
   const $loginScreen = () => $("login-screen");
   const $loginForm = () => $("login-form");
@@ -85,6 +105,17 @@
   const $btnRegister = () => $("btn-register");
   const $btnBackLogin = () => $("btn-back-login");
   const $registerError = () => $("register-error");
+  const $userChip = () => $("user-chip");
+  const $userAvatar = () => $("user-avatar");
+  const $userName = () => $("user-name");
+  const $userMenu = () => $("user-menu");
+  const $menuGames = () => $("menu-games");
+  const $menuLogout = () => $("menu-logout");
+  const $gamesDrawer = () => $("games-drawer");
+  const $gamesDrawerOverlay = () => $("games-drawer-overlay");
+  const $gamesDrawerList = () => $("games-drawer-list");
+  const $btnCloseGamesDrawer = () => $("btn-close-games-drawer");
+  const $btnDrawerNewGame = () => $("btn-drawer-new-game");
 
   function showLoading(message) {
     const msg = message || "Procesando…";
@@ -137,6 +168,19 @@
         el.classList.add("hidden");
       }
     }
+  }
+
+  function currentUsername() {
+    const user = store.auth.user || {};
+    return String(user.username || "").trim() || "Usuario";
+  }
+
+  function formatUserInitials(username) {
+    const clean = String(username || "").trim();
+    if (!clean) return "?";
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return clean.slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
   }
 
   function apiUrl(path, params) {
@@ -194,6 +238,8 @@
     store.screen = "login";
     store.session_id = null;
     store.games_list = [];
+    store.ui.userMenuOpen = false;
+    store.ui.gamesPanelOpen = false;
     renderAll();
   }
 
@@ -259,28 +305,110 @@
   }
 
   async function logout() {
+    store.ui.logoutLoading = true;
     try {
       await apiPost("/auth/logout", {});
     } catch (_) {}
     store.auth.user = null;
     store.auth.isAuthenticated = false;
     store.screen = "login";
+    store.ui.userMenuOpen = false;
+    store.ui.gamesPanelOpen = false;
     resetPartida();
     renderAll();
+    store.ui.logoutLoading = false;
+  }
+
+  function resetNewGameWizard() {
+    store.newGame.step = "mode";
+    store.newGame.standardCatalog = [];
+    store.newGame.standardLoading = false;
+    store.newGame.standardError = null;
+    store.newGame.standardSubmitting = false;
+  }
+
+  function renderStandardTemplates() {
+    const list = $standardTemplatesList();
+    if (!list) return;
+    if (store.newGame.standardLoading) {
+      list.innerHTML = '<p class="games-list-state">Cargando plantillas estándar…</p>';
+      return;
+    }
+    if (store.newGame.standardError) {
+      list.innerHTML = `<p class="games-list-state games-list-error">${escapeHtml(store.newGame.standardError)}</p>`;
+      return;
+    }
+    const templates = Array.isArray(store.newGame.standardCatalog) ? store.newGame.standardCatalog : [];
+    if (!templates.length) {
+      list.innerHTML = '<p class="games-list-state">No hay plantillas estándar disponibles todavía.</p>';
+      return;
+    }
+    list.innerHTML = templates
+      .map((t) => {
+        const templateId = String(t.id || "");
+        const title = String(t.titulo || "Plantilla sin título");
+        const description = String(t.descripcion_breve || "");
+        const version = String(t.version || "1.0.0");
+        const num = Number(t.num_personajes || 0);
+        return `
+          <div class="standard-template-card">
+            <h4>${escapeHtml(title)}</h4>
+            <p>${escapeHtml(description)}</p>
+            <div class="standard-template-meta">
+              <span>v${escapeHtml(version)}</span>
+              <span>${num > 0 ? `${num} personajes` : "Personajes variables"}</span>
+            </div>
+            <button
+              type="button"
+              class="btn-start-standard"
+              data-template-id="${escapeHtml(templateId)}"
+              ${store.newGame.standardSubmitting ? "disabled" : ""}
+            >
+              ${store.newGame.standardSubmitting ? "Iniciando..." : "Jugar plantilla"}
+            </button>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  function showNewGameStep(step) {
+    store.newGame.step = step;
+    const stepMode = $newGameStepMode();
+    const stepCustom = $newGameStepCustom();
+    const stepStandard = $newGameStepStandard();
+    const title = $newGameTitle();
+    const help = $newGameHelp();
+    if (stepMode) stepMode.classList.toggle("hidden", step !== "mode");
+    if (stepCustom) stepCustom.classList.toggle("hidden", step !== "custom");
+    if (stepStandard) stepStandard.classList.toggle("hidden", step !== "standard");
+    if (title) {
+      if (step === "custom") title.textContent = "Nueva partida personalizada";
+      else if (step === "standard") title.textContent = "Partidas estándar";
+      else title.textContent = "Nueva partida";
+    }
+    if (help) {
+      if (step === "custom") help.textContent = "Deja todo en blanco para usar la configuración por defecto.";
+      else if (step === "standard") help.textContent = "Elige una partida tipo ya preconstruida para copiarla e iniciar al instante.";
+      else help.textContent = "Elige cómo quieres iniciar la historia.";
+    }
+    if (step === "standard") renderStandardTemplates();
   }
 
   function openNewGameModal() {
     const modal = $newGameModal();
     if (!modal) return;
+    resetNewGameWizard();
+    showNewGameStep("mode");
     modal.classList.remove("hidden");
-    const era = $seedEra();
-    if (era) era.focus();
   }
 
   function closeNewGameModal() {
     const modal = $newGameModal();
     if (!modal) return;
     modal.classList.add("hidden");
+    resetNewGameWizard();
+    showNewGameStep("mode");
   }
 
   function buildSeedPayloadFromForm() {
@@ -374,6 +502,58 @@
     closeNewGameModal();
   }
 
+  async function fetchStandardCatalog() {
+    store.newGame.standardLoading = true;
+    store.newGame.standardError = null;
+    renderStandardTemplates();
+    try {
+      const data = await apiGet("/game/standard/list");
+      store.newGame.standardCatalog = Array.isArray(data.templates) ? data.templates : [];
+    } catch (e) {
+      store.newGame.standardCatalog = [];
+      store.newGame.standardError = e.message || "No se pudo cargar el catálogo estándar";
+    } finally {
+      store.newGame.standardLoading = false;
+      renderStandardTemplates();
+    }
+  }
+
+  async function startStandardGame(templateId) {
+    if (!templateId) return;
+    if (!store.auth.isAuthenticated) {
+      await handleAuthExpired();
+      return;
+    }
+    store.newGame.standardSubmitting = true;
+    renderStandardTemplates();
+    clearError();
+    showLoading("Cargando plantilla estándar e iniciando partida…");
+    try {
+      const data = await apiPost("/game/standard/start", { template_id: templateId });
+      store.session_id = data.session_id;
+      store.context.narrativa_inicial = data.narrativa_inicial || "";
+      store.context.player_mission = data.player_mission || "";
+      store.context.characters = data.characters || [];
+      store.status.turn_current = data.turn_current ?? 0;
+      store.status.turn_max = data.turn_max ?? 10;
+      store.status.player_can_write = data.player_can_write ?? false;
+      store.status.game_finished = false;
+      store.status.result = null;
+      store.messages = [];
+      await fetchContext();
+      await fetchStatus();
+      await fetchGamesList();
+      closeNewGameModal();
+      renderAll();
+    } catch (e) {
+      showError(e.message || "No se pudo iniciar la partida estándar");
+    } finally {
+      store.newGame.standardSubmitting = false;
+      hideLoading();
+      renderStandardTemplates();
+    }
+  }
+
   async function fetchContext() {
     if (!store.auth.isAuthenticated) return;
     if (!store.session_id) return;
@@ -403,7 +583,7 @@
         author: m.author,
         content: m.content,
         isSystem: m.author === "Sistema" || m.author === "system",
-        isPlayer: m.author === "Usuario",
+        isPlayer: m.author === "Usuario" || m.author === currentUsername(),
       }));
       renderAll();
     } catch (e) {
@@ -417,12 +597,12 @@
     if (!store.auth.isAuthenticated) {
       store.games_list = [];
       store.games_loading = false;
-      renderGamesList();
+      renderGamesDrawer();
       return;
     }
     store.games_loading = true;
     store.games_error = null;
-    renderGamesList();
+    renderGamesDrawer();
     try {
       const data = await apiGet("/game/list");
       store.games_list = Array.isArray(data.games) ? data.games : [];
@@ -431,7 +611,7 @@
       store.games_error = e.message || "Error al cargar partidas";
     } finally {
       store.games_loading = false;
-      renderGamesList();
+      renderGamesDrawer();
     }
   }
 
@@ -445,6 +625,74 @@
       hour: "2-digit",
       minute: "2-digit",
     });
+  }
+
+  function formatRelativeDate(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    const diffMs = Date.now() - d.getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return "justo ahora";
+    if (mins < 60) return `hace ${mins} min`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `hace ${hours} h`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `hace ${days} d`;
+    return formatShortDate(value);
+  }
+
+  function toggleUserMenu(forceOpen) {
+    const next = typeof forceOpen === "boolean" ? forceOpen : !store.ui.userMenuOpen;
+    store.ui.userMenuOpen = next;
+    const chip = $userChip();
+    if (chip) chip.setAttribute("aria-expanded", next ? "true" : "false");
+    const menu = $userMenu();
+    if (menu) menu.classList.toggle("hidden", !next);
+    if (next) {
+      const first = $menuGames();
+      if (first) first.focus();
+    }
+  }
+
+  function openGamesPanel() {
+    store.ui.gamesPanelOpen = true;
+    toggleUserMenu(false);
+    const drawer = $gamesDrawer();
+    const overlay = $gamesDrawerOverlay();
+    if (drawer) {
+      drawer.classList.remove("hidden");
+      drawer.setAttribute("aria-hidden", "false");
+    }
+    if (overlay) {
+      overlay.classList.remove("hidden");
+      overlay.setAttribute("aria-hidden", "false");
+    }
+    renderGamesDrawer();
+  }
+
+  function closeGamesPanel() {
+    store.ui.gamesPanelOpen = false;
+    const drawer = $gamesDrawer();
+    const overlay = $gamesDrawerOverlay();
+    if (drawer) {
+      drawer.classList.add("hidden");
+      drawer.setAttribute("aria-hidden", "true");
+    }
+    if (overlay) {
+      overlay.classList.add("hidden");
+      overlay.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function closeOnOutsideClick(e) {
+    const menu = $userMenu();
+    const chip = $userChip();
+    if (store.ui.userMenuOpen && menu && chip) {
+      const inMenu = menu.contains(e.target);
+      const inChip = chip.contains(e.target);
+      if (!inMenu && !inChip) toggleUserMenu(false);
+    }
   }
 
   async function resumeGame(sessionId) {
@@ -461,6 +709,7 @@
       await fetchContext();
       await fetchStatus();
       await fetchGamesList();
+      closeGamesPanel();
       renderAll();
     } catch (e) {
       showError(e.message || "No se pudo reanudar la partida");
@@ -509,41 +758,53 @@
     $gameState().innerHTML = stateHtml;
   }
 
-  function renderGamesList() {
-    const container = $gamesListContainer();
-    if (!container) return;
+  function renderUserMenu() {
+    const chip = $userChip();
+    const avatar = $userAvatar();
+    const name = $userName();
+    const menu = $userMenu();
+    if (!chip || !avatar || !name || !menu) return;
+    const username = currentUsername();
+    avatar.textContent = formatUserInitials(username);
+    name.textContent = username;
+    chip.setAttribute("aria-expanded", store.ui.userMenuOpen ? "true" : "false");
+    menu.classList.toggle("hidden", !store.ui.userMenuOpen);
+    const logoutBtn = $menuLogout();
+    if (logoutBtn) {
+      logoutBtn.disabled = !!store.ui.logoutLoading;
+      logoutBtn.textContent = store.ui.logoutLoading ? "Cerrando sesión..." : "Cerrar sesión";
+    }
+  }
 
+  function renderGamesDrawer() {
+    const list = $gamesDrawerList();
+    if (!list) return;
+    if (!store.ui.gamesPanelOpen) return;
     if (store.games_loading) {
-      container.innerHTML = '<p class="games-list-state">Cargando partidas…</p>';
+      list.innerHTML = '<p class="games-list-state">Cargando partidas…</p>';
       return;
     }
-
     if (store.games_error) {
-      container.innerHTML = `<p class="games-list-state games-list-error">${escapeHtml(store.games_error)}</p>`;
+      list.innerHTML = `<p class="games-list-state games-list-error">${escapeHtml(store.games_error)}</p>`;
       return;
     }
-
     const games = Array.isArray(store.games_list) ? store.games_list : [];
     if (!games.length) {
-      container.innerHTML = '<p class="games-list-state">Aún no tienes partidas guardadas.</p>';
+      list.innerHTML = '<p class="games-list-state">Aún no tienes partidas guardadas.</p>';
       return;
     }
-
-    container.innerHTML = games
+    list.innerHTML = games
       .map((g) => {
         const gameId = String(g.id || "");
         const title = String(g.title || "Partida sin título");
-        const status = String(g.status || "active");
-        const updated = formatShortDate(g.updated_at);
+        const updatedLabel = formatRelativeDate(g.updated_at);
         const activeClass = gameId === store.session_id ? " is-active" : "";
-        const statusLabel = status === "finished" ? "Terminada" : "Activa";
-        const dateHtml = updated ? `<span class="game-item-date">${escapeHtml(updated)}</span>` : "";
         return `
           <button type="button" class="game-item${activeClass}" data-game-id="${escapeHtml(gameId)}">
             <span class="game-item-title">${escapeHtml(title)}</span>
             <span class="game-item-meta">
-              <span class="game-item-status">${escapeHtml(statusLabel)}</span>
-              ${dateHtml}
+              <span class="game-item-status">${gameId === store.session_id ? "Activa" : "Continuar"}</span>
+              <span class="game-item-date">${escapeHtml(updatedLabel)}</span>
             </span>
           </button>
         `;
@@ -619,8 +880,9 @@
     }
     if (loginScreen) loginScreen.classList.add("hidden");
     if (app) app.classList.remove("hidden");
+    renderUserMenu();
     renderSidebar();
-    renderGamesList();
+    renderGamesDrawer();
     renderChat();
     updateInputState();
   }
@@ -658,7 +920,7 @@
     if (!text) return;
 
     const userMsg = {
-      author: "Usuario",
+      author: currentUsername(),
       content: text,
       isPlayer: true,
       isSystem: false,
@@ -715,7 +977,7 @@
               author: m.author || "",
               content: m.content || "",
               isSystem: m.author === "Sistema" || m.author === "system",
-              isPlayer: m.author === "Usuario",
+              isPlayer: m.author === "Usuario" || m.author === currentUsername(),
             });
             store.streamingMessage = null;
             currentContent = "";
@@ -773,35 +1035,75 @@
   }
 
   const btnNew = $btnNew();
-  const btnReset = $btnReset();
   const btnSend = $btnSend();
   const btnCreateGame = $btnCreateGame();
   const btnCancelNewGame = $btnCancelNewGame();
+  const btnModeCustom = $btnModeCustom();
+  const btnModeStandard = $btnModeStandard();
+  const btnBackFromCustom = $btnBackFromCustom();
+  const btnBackFromStandard = $btnBackFromStandard();
+  const standardTemplatesList = $standardTemplatesList();
   const playerInput = $playerInput();
   const themeCheckbox = $("theme-checkbox");
-  const gamesListContainer = $gamesListContainer();
   const loginForm = $loginForm();
   const btnLogin = $btnLogin();
   const registerForm = $registerForm();
   const btnRegister = $btnRegister();
   const btnOpenRegister = $btnOpenRegister();
   const btnBackLogin = $btnBackLogin();
+  const userChip = $userChip();
+  const menuGames = $menuGames();
+  const menuLogout = $menuLogout();
+  const gamesDrawer = $gamesDrawer();
+  const gamesDrawerOverlay = $gamesDrawerOverlay();
+  const btnCloseGamesDrawer = $btnCloseGamesDrawer();
+  const btnDrawerNewGame = $btnDrawerNewGame();
   if (btnNew) btnNew.addEventListener("click", openNewGameModal);
-  if (btnReset) btnReset.addEventListener("click", resetPartida);
   if (btnSend) btnSend.addEventListener("click", sendTurn);
   if (btnCreateGame) btnCreateGame.addEventListener("click", submitNewGameFromForm);
   if (btnCancelNewGame) btnCancelNewGame.addEventListener("click", closeNewGameModal);
+  if (btnModeCustom) {
+    btnModeCustom.addEventListener("click", () => {
+      showNewGameStep("custom");
+      const era = $seedEra();
+      if (era) era.focus();
+    });
+  }
+  if (btnModeStandard) {
+    btnModeStandard.addEventListener("click", async () => {
+      showNewGameStep("standard");
+      await fetchStandardCatalog();
+    });
+  }
+  if (btnBackFromCustom) {
+    btnBackFromCustom.addEventListener("click", () => showNewGameStep("mode"));
+  }
+  if (btnBackFromStandard) {
+    btnBackFromStandard.addEventListener("click", () => showNewGameStep("mode"));
+  }
+  if (standardTemplatesList) {
+    standardTemplatesList.addEventListener("click", async (e) => {
+      const target = e.target && e.target.closest ? e.target.closest("[data-template-id]") : null;
+      if (!target) return;
+      const templateId = target.getAttribute("data-template-id");
+      if (!templateId || store.newGame.standardSubmitting) return;
+      await startStandardGame(templateId);
+    });
+  }
   if (playerInput) playerInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") sendTurn();
   });
   if (themeCheckbox) themeCheckbox.addEventListener("change", toggleTheme);
-  if (gamesListContainer) {
-    gamesListContainer.addEventListener("click", (e) => {
+  if (gamesDrawer) {
+    gamesDrawer.addEventListener("click", (e) => {
       const target = e.target && e.target.closest ? e.target.closest("[data-game-id]") : null;
       if (!target) return;
       const gameId = target.getAttribute("data-game-id");
       if (!gameId) return;
-      if (gameId === store.session_id) return;
+      if (gameId === store.session_id) {
+        closeGamesPanel();
+        return;
+      }
       resumeGame(gameId);
     });
   }
@@ -859,6 +1161,44 @@
       if (ok && btnRegister) btnRegister.disabled = false;
     });
   }
+
+  if (userChip) {
+    userChip.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleUserMenu();
+    });
+  }
+  if (menuGames) {
+    menuGames.addEventListener("click", async () => {
+      await fetchGamesList();
+      openGamesPanel();
+    });
+  }
+  if (menuLogout) {
+    menuLogout.addEventListener("click", async () => {
+      toggleUserMenu(false);
+      await logout();
+    });
+  }
+  if (gamesDrawerOverlay) {
+    gamesDrawerOverlay.addEventListener("click", () => closeGamesPanel());
+  }
+  if (btnCloseGamesDrawer) {
+    btnCloseGamesDrawer.addEventListener("click", () => closeGamesPanel());
+  }
+  if (btnDrawerNewGame) {
+    btnDrawerNewGame.addEventListener("click", () => {
+      closeGamesPanel();
+      openNewGameModal();
+    });
+  }
+  document.addEventListener("click", closeOnOutsideClick);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      toggleUserMenu(false);
+      closeGamesPanel();
+    }
+  });
 
   async function init() {
     initTheme();

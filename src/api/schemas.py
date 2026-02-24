@@ -74,6 +74,9 @@ class GameListItem(BaseModel):
     id: str
     title: str = ""
     status: str = "active"
+    game_mode: str = "custom"
+    standard_template_id: Optional[str] = None
+    template_version: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -90,6 +93,30 @@ class ResumeGameRequest(BaseModel):
 class ResumeGameResponse(BaseModel):
     session_id: str
     loaded_from_memory: bool = False
+
+
+# --- GET /game/standard/list ---
+class StandardTemplateItem(BaseModel):
+    id: str
+    titulo: str
+    descripcion_breve: str
+    version: str = "1.0.0"
+    num_personajes: int = 0
+
+
+class StandardTemplateListResponse(BaseModel):
+    templates: list[StandardTemplateItem] = Field(default_factory=list)
+
+
+# --- POST /game/standard/start ---
+class StandardStartRequest(BaseModel):
+    template_id: str = Field(min_length=1, max_length=120)
+
+
+class StandardStartResponse(NewGameResponse):
+    game_mode: str = "standard"
+    standard_template_id: str
+    template_version: Optional[str] = None
 
 
 # --- Auth ---

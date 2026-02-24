@@ -63,6 +63,9 @@ class JsonPersistenceProvider(PersistenceProvider):
         title: str,
         config_json: dict[str, Any],
         username: str | None = None,
+        game_mode: str = "custom",
+        standard_template_id: str | None = None,
+        template_version: str | None = None,
     ) -> str:
         if not isinstance(config_json, dict) or not config_json:
             raise ValueError("config_json inválido")
@@ -79,6 +82,9 @@ class JsonPersistenceProvider(PersistenceProvider):
             "user": (username or self._username),
             "title": (title or "").strip() or "Partida",
             "status": "active",
+            "game_mode": (game_mode or "custom"),
+            "standard_template_id": standard_template_id,
+            "template_version": template_version,
             "created_at": created_at,
             "updated_at": created_at,
         }
@@ -139,6 +145,9 @@ class JsonPersistenceProvider(PersistenceProvider):
             "title": game_info.get("title", ""),
             "status": game_info.get("status", "active"),
             "user": game_info.get("user", self._username),
+            "game_mode": game_info.get("game_mode", "custom"),
+            "standard_template_id": game_info.get("standard_template_id"),
+            "template_version": game_info.get("template_version"),
             "created_at": game_info.get("created_at"),
             "updated_at": game_info.get("updated_at"),
             "config_json": config_json,
@@ -171,6 +180,9 @@ class JsonPersistenceProvider(PersistenceProvider):
                     "id": game_info.get("id", child.name),
                     "title": game_info.get("title", ""),
                     "status": game_info.get("status", "active"),
+                    "game_mode": game_info.get("game_mode", "custom"),
+                    "standard_template_id": game_info.get("standard_template_id"),
+                    "template_version": game_info.get("template_version"),
                     "created_at": game_info.get("created_at"),
                     "updated_at": game_info.get("updated_at"),
                 }

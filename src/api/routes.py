@@ -27,12 +27,21 @@ from .schemas import (
     GameListResponse,
     ResumeGameRequest,
     ResumeGameResponse,
+    StandardTemplateItem,
+    StandardTemplateListResponse,
+    StandardStartRequest,
+    StandardStartResponse,
     LoginRequest,
     RegisterRequest,
     LoginResponse,
     AuthUserResponse,
 )
 from .dependencies import get_engine, get_current_user
+from ..core.standard_games import (
+    StandardTemplateError,
+    list_standard_templates,
+    load_standard_template,
+)
 
 
 def _serialize_message(m: dict) -> dict:
@@ -175,6 +184,73 @@ def new_game(
         player_mission=setup.get("player_mission", ""),
         characters=characters,
         narrativa_inicial=setup.get("narrativa_inicial", ""),
+    )
+
+
+@router.get("/standard/list", response_model=StandardTemplateListResponse)
+def list_standard_templates_endpoint(
+    current_user: AuthUserResponse = Depends(get_current_user),
+):
+    """Lista templates estándar disponibles para creación rápida."""
+    _ = current_user  # asegurar autenticación sin alterar lógica adicional.
+    templates = list_standard_templates()
+    return StandardTemplateListResponse(
+        templates=[StandardTemplateItem(**item) for item in templates]
+    )
+
+
+@router.post("/standard/start", response_model=StandardStartResponse)
+def start_standard_game(
+    body: StandardStartRequest,
+    engine=Depends(get_engine),
+    current_user: AuthUserResponse = Depends(get_current_user),
+):
+    """Crea partida copiando un template standard ya preconstruido."""
+    try:
+        loaded = load_standard_template(body.template_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Standard template not found")
+    except StandardTemplateError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid standard template: {exc}")
+
+    setup = loaded.get("setup", {})
+    template_id = str(loaded.get("template_id") or body.template_id)
+    template_version = str(loaded.get("template_version") or "1.0.0")
+    try:
+        session_id, final_setup = engine.create_game_from_setup(
+            setup=setup,
+            username=current_user.username,
+            standard_template_id=template_id,
+            template_version=template_version,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    status = engine.get_status(session_id)
+    actors = final_setup.get("actors", [])
+    characters = [
+        CharacterInfo(
+            name=a.get("name", ""),
+            personality=a.get("personality"),
+            mission=a.get("mission"),
+            background=a.get("background"),
+            presencia_escena=a.get("presencia_escena"),
+        )
+        for a in actors
+    ]
+    return StandardStartResponse(
+        session_id=session_id,
+        turn_current=status["turn_current"],
+        turn_max=status["turn_max"],
+        player_can_write=status["player_can_write"],
+        player_mission=final_setup.get("player_mission", ""),
+        characters=characters,
+        narrativa_inicial=final_setup.get("narrativa_inicial", ""),
+        game_mode="standard",
+        standard_template_id=template_id,
+        template_version=template_version,
     )
 
 

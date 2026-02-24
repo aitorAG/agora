@@ -60,39 +60,99 @@ class GameEngine:
             stream_sink=stream_sink,
         )
 
-        manager = ConversationManager()
-        actors_list = game_setup["actors"]
-        character_agents: dict[str, Any] = {}
-        for a in actors_list:
-            character_agents[a["name"]] = create_character_agent(
-                name=a["name"],
-                personality=a["personality"],
-                mission=a.get("mission"),
-                background=a.get("background"),
-            )
-        observer = create_observer_agent(
-            actor_names=[a["name"] for a in actors_list],
-            player_mission=game_setup.get("player_mission") or "",
-        )
-
         title = str(game_setup.get("titulo") or theme or "Partida").strip() or "Partida"
         game_id = self._persistence.create_game(
             title=title,
             config_json=dict(game_setup),
             username=username,
+            game_mode="custom",
         )
-        session = GameSession(
+        session = self._build_session_from_setup(
+            setup=game_setup,
+            max_turns=max_turns,
+            max_messages_before_user=3,
+        )
+        self._registry[game_id] = session
+        self._warmup_session(game_id, session)
+        return game_id, session.setup
+
+    def create_game_from_setup(
+        self,
+        setup: dict[str, Any],
+        max_turns: int = 10,
+        username: str | None = None,
+        standard_template_id: str | None = None,
+        template_version: str | None = None,
+    ) -> tuple[str, dict[str, Any]]:
+        """Crea una partida desde un setup predefinido (modo standard)."""
+        if not isinstance(setup, dict):
+            raise ValueError("Invalid setup")
+        actors = setup.get("actors")
+        if not isinstance(actors, list) or not actors:
+            raise ValueError("Invalid setup actors")
+
+        title = str(setup.get("titulo") or "Partida estándar").strip() or "Partida estándar"
+        game_id = self._persistence.create_game(
+            title=title,
+            config_json=dict(setup),
+            username=username,
+            game_mode="standard",
+            standard_template_id=standard_template_id,
+            template_version=template_version,
+        )
+        session = self._build_session_from_setup(
+            setup=setup,
+            max_turns=max_turns,
+            max_messages_before_user=3,
+        )
+        self._registry[game_id] = session
+        self._warmup_session(game_id, session)
+        return game_id, session.setup
+
+    def _build_session_from_setup(
+        self,
+        setup: dict[str, Any],
+        max_turns: int,
+        max_messages_before_user: int = 3,
+    ) -> GameSession:
+        actors_list = setup.get("actors", [])
+        if not isinstance(actors_list, list) or not actors_list:
+            raise ValueError("Invalid setup actors")
+        manager = ConversationManager()
+        character_agents: dict[str, Any] = {}
+        actor_names: list[str] = []
+        for actor in actors_list:
+            if not isinstance(actor, dict):
+                continue
+            name = str(actor.get("name", "")).strip()
+            if not name:
+                continue
+            actor_names.append(name)
+            character_agents[name] = create_character_agent(
+                name=name,
+                personality=actor.get("personality"),
+                mission=actor.get("mission"),
+                background=actor.get("background"),
+            )
+        if not actor_names:
+            raise ValueError("Invalid setup actors")
+        observer = create_observer_agent(
+            actor_names=actor_names,
+            player_mission=setup.get("player_mission") or "",
+        )
+        return GameSession(
             manager=manager,
             character_agents=character_agents,
             observer_agent=observer,
-            setup=dict(game_setup),
+            setup=dict(setup),
             max_turns=max_turns,
-            max_messages_before_user=3,
+            max_messages_before_user=max_messages_before_user,
             next_action="character",
             persisted_messages=0,
         )
-        self._registry[game_id] = session
-        # Avanzar hasta que toque user_input (o partida termine) para que player_can_write sea true al devolver
+
+    def _warmup_session(self, game_id: str, session: GameSession) -> None:
+        """Avanza al primer punto de input del usuario y persiste snapshot inicial."""
         result = run_one_step(
             session.manager,
             session.character_agents,
@@ -117,7 +177,6 @@ class GameEngine:
             )
             session.next_action = result["next_action"]
         self._persist_session_state(game_id, session)
-        return game_id, session.setup
 
     def get_state(self, game_id: str) -> ConversationState:
         """Devuelve el estado actual de la partida. Lanza KeyError si no existe."""

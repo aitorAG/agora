@@ -122,6 +122,9 @@ class DatabasePersistenceProvider(PersistenceProvider):
         title: str,
         config_json: dict[str, Any],
         username: str | None = None,
+        game_mode: str = "custom",
+        standard_template_id: str | None = None,
+        template_version: str | None = None,
     ) -> str:
         if not isinstance(config_json, dict) or not config_json:
             raise ValueError("config_json inválido")
@@ -132,10 +135,22 @@ class DatabasePersistenceProvider(PersistenceProvider):
                 now = _utc_now()
                 cur.execute(
                     """
-                    INSERT INTO games (id, user_id, title, status, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO games (
+                        id, user_id, title, status, game_mode, standard_template_id, template_version, created_at, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (game_id, user_id, (title or "").strip() or "Partida", "active", now, now),
+                    (
+                        game_id,
+                        user_id,
+                        (title or "").strip() or "Partida",
+                        "active",
+                        (game_mode or "custom"),
+                        standard_template_id,
+                        template_version,
+                        now,
+                        now,
+                    ),
                 )
                 cur.execute(
                     "INSERT INTO game_configs (game_id, config_json) VALUES (%s, %s::jsonb)",
@@ -205,7 +220,7 @@ class DatabasePersistenceProvider(PersistenceProvider):
                 cur.execute(
                     """
                     SELECT g.id::text, u.username, g.title, g.status, g.created_at, g.updated_at,
-                           gc.config_json, gs.state_json
+                           g.game_mode, g.standard_template_id, g.template_version, gc.config_json, gs.state_json
                     FROM games g
                     JOIN users u ON u.id = g.user_id
                     JOIN game_configs gc ON gc.game_id = g.id
@@ -224,8 +239,11 @@ class DatabasePersistenceProvider(PersistenceProvider):
                     "status": row[3],
                     "created_at": row[4].isoformat() if row[4] else None,
                     "updated_at": row[5].isoformat() if row[5] else None,
-                    "config_json": row[6] or {},
-                    "state_json": row[7] or {},
+                    "game_mode": row[6] or "custom",
+                    "standard_template_id": row[7],
+                    "template_version": row[8],
+                    "config_json": row[9] or {},
+                    "state_json": row[10] or {},
                 }
 
     def get_game_messages(self, game_id: str) -> list[dict[str, Any]]:
@@ -262,7 +280,7 @@ class DatabasePersistenceProvider(PersistenceProvider):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT g.id::text, g.title, g.status, g.created_at, g.updated_at
+                    SELECT g.id::text, g.title, g.status, g.game_mode, g.standard_template_id, g.template_version, g.created_at, g.updated_at
                     FROM games g
                     JOIN users u ON u.id = g.user_id
                     WHERE u.username = %s
@@ -276,8 +294,11 @@ class DatabasePersistenceProvider(PersistenceProvider):
                         "id": r[0],
                         "title": r[1],
                         "status": r[2],
-                        "created_at": r[3].isoformat() if r[3] else None,
-                        "updated_at": r[4].isoformat() if r[4] else None,
+                        "game_mode": r[3] or "custom",
+                        "standard_template_id": r[4],
+                        "template_version": r[5],
+                        "created_at": r[6].isoformat() if r[6] else None,
+                        "updated_at": r[7].isoformat() if r[7] else None,
                     }
                     for r in rows
                 ]

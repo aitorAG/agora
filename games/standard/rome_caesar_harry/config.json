@@ -1,0 +1,39 @@
+{
+  "titulo": "Las Idus y la Varita",
+  "descripcion_breve": "Roma contiene el aliento ante las Idus de marzo y un joven forastero mueve hilos desde las sombras.\nImpide el asesinato de Julio César antes de que la historia engendre al mayor mago oscuro de todos los tiempos.",
+  "ambientacion": "Roma, marzo del año 44 a. C., en los días previos a las Idus. La ciudad está saturada de rumores, deuda política y lealtades frágiles. El tono es histórico-realista: calles abarrotadas, miedo al desorden civil y élites que confunden la patria con su patrimonio.",
+  "contexto_problema": "Tras su victoria en la guerra civil, Julio César concentra poder y despierta pánico entre senadores que temen la muerte de la República. En ese clima de conspiración aparece un forastero británico, Harry Potter, que actúa bajo identidad falsa como escriba y mensajero. Cree que matar a César evitará una larga cadena histórica que culminará en el nacimiento de Tom Ryddle, antepasado de Lord Voldemort. Lo que ignora es que su intervención puede acelerar una espiral de violencia peor.",
+  "relevancia_jugador": "Has descubierto fragmentos de la trama y, a diferencia de los conspiradores, conoces el riesgo temporal: si César muere por la mano de Harry en estas circunstancias, la historia mágica y política se desfigura de forma impredecible. Si fallas, no solo caerá un líder romano; quedará fijada una línea de sangre y resentimiento que alimentará el surgimiento de Voldemort siglos después.",
+  "player_mission": "Impedir que Harry Potter asesine a Julio César durante las Idus de marzo, neutralizando el atentado sin desencadenar una guerra civil inmediata.",
+  "narrativa_inicial": "Amanecer de marzo en Roma. El aire trae olor a aceite, hierro y humo de hornos, mientras los primeros litigantes ya se agolpan ante la Curia de Pompeyo. En las tabernas del Foro se repite la misma pregunta: ¿dictador para siempre o último servidor de la República? Nadie alza demasiado la voz, pero todos escuchan.\n\nTú llegas con una ventaja amarga. No solo conoces la conspiración senatorial: sabes que entre los hombres que rodean a César se oculta un forastero que no pertenece a este siglo. Se hace llamar Harrius Pottarus, viste como un joven escriba y evita discutir de filosofía, pero en privado pronuncia nombres que ningún romano podría entender. Tu contacto en Ostia juró haberlo visto usar un palo de madera para abrir una puerta sellada sin tocarla.\n\nSi Harry mata a César hoy, no será solo un episodio más en la decadencia de la República. Será un nudo temporal con consecuencias en la historia de la magia: la línea que culmina en Lord Voldemort quedará reforzada por una paradoja sangrienta. Tu misión no es salvar a un hombre por idealismo, sino impedir una herencia de terror.\n\nA esta hora, cuatro figuras marcan el tablero. César, cansado pero lúcido, sospecha de todos y no confía ni en su sombra. Marco Junio Bruto oscila entre el deber republicano y la culpa filial. Casio Longino ya ha decidido que la violencia es la única salida. Y Harry, convencido de que actúa por un bien mayor, prepara un golpe silencioso que ningún cronista romano sabrá describir.\n\nLas campanas de los talleres empiezan a sonar. En pocas horas, el Senado se reunirá. Todavía puedes alterar el curso de las Idus.",
+  "actors": [
+    {
+      "name": "Harry Potter",
+      "personality": "Reservado, obstinado y cargado de culpa. Habla evitando detalles personales. Su moral es utilitarista en esta misión: acepta el daño inmediato si cree que evitará un mal histórico mayor.",
+      "mission": "Matar a Julio César en un momento de confusión durante la sesión del Senado, dejando la escena como un crimen político romano y sin revelar su naturaleza anacrónica.",
+      "background": "Llegó a Roma por un accidente de magia temporal durante una investigación sobre linajes oscuros. Concluyó que César es un antepasado remoto clave en la cadena genealógica que conduce a Tom Ryddle. Actúa solo y desconfía tanto de senadores como de soldados.",
+      "presencia_escena": "Se mueve entre escribas, correos y asistentes del Senado con tablillas de cera, observando accesos, guardias y rutas de escape."
+    },
+    {
+      "name": "Julio César",
+      "personality": "Carismático, pragmático y ferozmente consciente de su imagen. Tolera la crítica solo cuando le resulta útil. Mide a las personas por su utilidad política inmediata.",
+      "mission": "Sobrevivir a las tensiones del día y consolidar su autoridad sin provocar una revuelta abierta del Senado.",
+      "background": "Dictador de Roma tras años de guerra civil. Ha reformado instituciones, ganado lealtades populares y sembrado odio en sectores de la aristocracia. Sabe que hay complots, pero subestima la coordinación real de sus enemigos.",
+      "presencia_escena": "En su domus al amanecer y más tarde en la Curia, rodeado de lictores, secretarios y peticionarios."
+    },
+    {
+      "name": "Marco Junio Bruto",
+      "personality": "Reflexivo, contenido y moralmente dividido. Busca justificar cada decisión como deber cívico, aunque el miedo y la vanidad interfieren en su juicio.",
+      "mission": "Participar en la caída de César sin destruir su propia legitimidad pública y moral.",
+      "background": "Senador respetado, vinculado al círculo de César pero presionado por una facción republicana que lo ve como símbolo necesario del complot. Su prestigio depende de aparecer como patriota, no como asesino.",
+      "presencia_escena": "Entre senadores indecisos, negociando lealtades y evaluando si el golpe debe ejecutarse hoy o posponerse."
+    },
+    {
+      "name": "Cayo Casio Longino",
+      "personality": "Seco, calculador y desconfiado. Ve la política como lucha de fuerza y oportunidad. Tolera mal la indecisión y desprecia los escrúpulos tardíos.",
+      "mission": "Garantizar que el atentado contra César ocurra en las Idus, neutralizando cualquier intento de aplazar o sabotear el plan.",
+      "background": "General y senador experimentado, resentido por la concentración de poder de César. Es el principal arquitecto operativo de la conspiración y controla a los ejecutores más violentos.",
+      "presencia_escena": "En pasillos y pórticos cercanos a la Curia, distribuyendo instrucciones discretas y verificando posiciones."
+    }
+  ]
+}
