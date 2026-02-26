@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import importlib
-import json
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _PWD_CONTEXT = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
 
 
@@ -78,38 +75,11 @@ def decode_access_token(token: str) -> dict[str, Any]:
     return jwt.decode(token, _auth_secret(), algorithms=[_auth_algorithm()])
 
 
-def _mode() -> str:
-    return os.getenv("PERSISTENCE_MODE", "json").strip().lower() or "json"
-
-
-def _json_users_path() -> Path:
-    configured = os.getenv("AGORA_GAMES_DIR", "").strip()
-    if configured:
-        base = Path(configured)
-        root = base if base.is_absolute() else (PROJECT_ROOT / base)
-    else:
-        root = PROJECT_ROOT / "games"
-    root.mkdir(parents=True, exist_ok=True)
-    return root / "users.json"
-
-
-def _read_json_users() -> list[dict[str, Any]]:
-    path = _json_users_path()
-    if not path.exists():
-        return []
-    with path.open("r", encoding="utf-8") as f:
-        data = json.load(f)
-    return data if isinstance(data, list) else []
-
-
-def _write_json_users(users: list[dict[str, Any]]) -> None:
-    path = _json_users_path()
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(users, f, indent=2, ensure_ascii=False)
-
-
 def _db_dsn() -> str:
-    return os.getenv("DATABASE_URL", "").strip()
+    dsn = os.getenv("DATABASE_URL", "").strip()
+    if not dsn:
+        raise RuntimeError("DATABASE_URL is required for DB-only auth")
+    return dsn
 
 
 def _db_connect():
@@ -121,85 +91,46 @@ def ensure_seed_user() -> None:
     username = normalize_username(os.getenv("AUTH_SEED_USERNAME", "usuario")) or "usuario"
     password = os.getenv("AUTH_SEED_PASSWORD", "agora123").strip() or "agora123"
     pwd_hash = hash_password(password)
-
-    if _mode() == "db":
-        dsn = _db_dsn()
-        if not dsn:
-            return
-        with _db_connect() as conn:
-            with conn.cursor() as cur:
-                user_id = str(uuid.uuid4())
-                cur.execute(
-                    """
-                    INSERT INTO users (id, username, created_at, password_hash, is_active)
-                    VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT (username) DO UPDATE
-                    SET password_hash = CASE
-                        WHEN users.password_hash IS NULL OR users.password_hash = '' THEN EXCLUDED.password_hash
-                        ELSE users.password_hash
-                    END
-                    """,
-                    (user_id, username, datetime.now(timezone.utc), pwd_hash, True),
-                )
-            conn.commit()
-        return
-
-    users = _read_json_users()
-    existing = next((u for u in users if u.get("username") == username), None)
-    if existing is None:
-        users.append(
-            {
-                "id": str(uuid.uuid4()),
-                "username": username,
-                "password_hash": pwd_hash,
-                "is_active": True,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }
-        )
-        _write_json_users(users)
-    elif not existing.get("password_hash"):
-        existing["password_hash"] = pwd_hash
-        _write_json_users(users)
+    with _db_connect() as conn:
+        with conn.cursor() as cur:
+            user_id = str(uuid.uuid4())
+            cur.execute(
+                """
+                INSERT INTO users (id, username, created_at, password_hash, is_active)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (username) DO UPDATE
+                SET password_hash = CASE
+                    WHEN users.password_hash IS NULL OR users.password_hash = '' THEN EXCLUDED.password_hash
+                    ELSE users.password_hash
+                END
+                """,
+                (user_id, username, datetime.now(timezone.utc), pwd_hash, True),
+            )
+        conn.commit()
 
 
 def get_user_by_username(username: str) -> dict[str, Any] | None:
     normalized = normalize_username(username)
     if not normalized:
         return None
-
-    if _mode() == "db":
-        dsn = _db_dsn()
-        if not dsn:
-            return None
-        with _db_connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id::text, username, password_hash, is_active
-                    FROM users
-                    WHERE LOWER(username) = %s
-                    """,
-                    (normalized,),
-                )
-                row = cur.fetchone()
-        if not row:
-            return None
-        return {
-            "id": row[0],
-            "username": row[1],
-            "password_hash": row[2] or "",
-            "is_active": bool(row[3]) if row[3] is not None else True,
-        }
-
-    users = _read_json_users()
-    row = next((u for u in users if normalize_username(str(u.get("username", ""))) == normalized), None)
-    if not isinstance(row, dict):
+    with _db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id::text, username, password_hash, is_active
+                FROM users
+                WHERE LOWER(username) = %s
+                """,
+                (normalized,),
+            )
+            row = cur.fetchone()
+    if not row:
         return None
     return {
-        "id": str(row.get("id", "")),
-        "username": str(row.get("username", "")),
-        "password_hash": str(row.get("password_hash", "")),
-        "is_active": bool(row.get("is_active", True)),
+        "id": row[0],
+        "username": row[1],
+        "password_hash": row[2] or "",
+        "is_active": bool(row[3]) if row[3] is not None else True,
     }
 
 
@@ -215,47 +146,29 @@ def create_user(username: str, password: str) -> dict[str, Any]:
 
     pwd_hash = hash_password(password)
 
-    if _mode() == "db":
-        dsn = _db_dsn()
-        if not dsn:
-            raise RuntimeError("DATABASE_URL is required for db mode")
-        try:
-            with _db_connect() as conn:
-                with conn.cursor() as cur:
-                    user_id = str(uuid.uuid4())
-                    cur.execute(
-                        """
-                        INSERT INTO users (id, username, created_at, password_hash, is_active)
-                        VALUES (%s, %s, %s, %s, %s)
-                        """,
-                        (user_id, normalized, datetime.now(timezone.utc), pwd_hash, True),
-                    )
-                conn.commit()
-        except Exception as exc:
-            sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
-            if sqlstate == "23505":
-                raise UserAlreadyExistsError("Username already exists") from exc
-            raise
-        return {
-            "id": user_id,
-            "username": normalized,
-            "password_hash": pwd_hash,
-            "is_active": True,
-        }
-
-    users = _read_json_users()
-    if any(normalize_username(str(u.get("username", ""))) == normalized for u in users):
-        raise UserAlreadyExistsError("Username already exists")
-    created = {
-        "id": str(uuid.uuid4()),
+    try:
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                user_id = str(uuid.uuid4())
+                cur.execute(
+                    """
+                    INSERT INTO users (id, username, created_at, password_hash, is_active)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (user_id, normalized, datetime.now(timezone.utc), pwd_hash, True),
+                )
+            conn.commit()
+    except Exception as exc:
+        sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+        if sqlstate == "23505":
+            raise UserAlreadyExistsError("Username already exists") from exc
+        raise
+    return {
+        "id": user_id,
         "username": normalized,
         "password_hash": pwd_hash,
         "is_active": True,
-        "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    users.append(created)
-    _write_json_users(users)
-    return created
 
 
 def authenticate_user(username: str, password: str) -> dict[str, Any] | None:

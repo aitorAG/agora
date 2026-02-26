@@ -1,8 +1,77 @@
 """Tests de rehidratación de sesiones en GameEngine."""
 
+import uuid
+from datetime import datetime, timezone
+
 import src.core.engine as engine_module
 from src.core.engine import GameEngine
-from src.persistence.json_provider import JsonPersistenceProvider
+from src.persistence.provider import PersistenceProvider
+
+
+def _utc_now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+class _InMemoryProvider(PersistenceProvider):
+    def __init__(self):
+        self.games: dict[str, dict] = {}
+        self.messages: dict[str, list[dict]] = {}
+
+    def create_game(
+        self,
+        title,
+        config_json,
+        username=None,
+        game_mode="custom",
+        standard_template_id=None,
+        template_version=None,
+    ) -> str:
+        game_id = str(uuid.uuid4())
+        now = _utc_now_iso()
+        self.games[game_id] = {
+            "id": game_id,
+            "title": title,
+            "status": "active",
+            "user": username or "usuario",
+            "game_mode": game_mode,
+            "standard_template_id": standard_template_id,
+            "template_version": template_version,
+            "created_at": now,
+            "updated_at": now,
+            "config_json": dict(config_json),
+            "state_json": {"turn": 0, "messages": [], "metadata": {}},
+        }
+        self.messages[game_id] = []
+        return game_id
+
+    def save_game_state(self, game_id, state_json):
+        self.games[game_id]["state_json"] = dict(state_json)
+
+    def append_message(self, game_id, turn_number, role, content, metadata_json=None):
+        self.messages[game_id].append(
+            {
+                "id": str(uuid.uuid4()),
+                "game_id": game_id,
+                "turn_number": int(turn_number),
+                "role": role,
+                "content": content,
+                "metadata_json": metadata_json or {},
+                "created_at": _utc_now_iso(),
+            }
+        )
+
+    def get_game(self, game_id):
+        if game_id not in self.games:
+            raise KeyError(game_id)
+        return dict(self.games[game_id])
+
+    def get_game_messages(self, game_id):
+        if game_id not in self.messages:
+            raise KeyError(game_id)
+        return list(self.messages[game_id])
+
+    def list_games_for_user(self, username):
+        return [g for g in self.games.values() if g.get("user") == username]
 
 
 def _build_config():
@@ -23,11 +92,11 @@ def _build_config():
     }
 
 
-def test_engine_rehydrate_restores_state_and_avoids_duplicates(tmp_path, monkeypatch):
+def test_engine_rehydrate_restores_state_and_avoids_duplicates(monkeypatch):
     monkeypatch.setattr(engine_module, "create_character_agent", lambda **_: object())
     monkeypatch.setattr(engine_module, "create_observer_agent", lambda **_: object())
 
-    provider = JsonPersistenceProvider(base_path=tmp_path)
+    provider = _InMemoryProvider()
     game_id = provider.create_game("Partida", _build_config())
     provider.append_message(
         game_id,
@@ -77,11 +146,11 @@ def test_engine_rehydrate_restores_state_and_avoids_duplicates(tmp_path, monkeyp
     assert len(persisted) == 1
 
 
-def test_engine_resume_invalid_game_state_raises_value_error(tmp_path, monkeypatch):
+def test_engine_resume_invalid_game_state_raises_value_error(monkeypatch):
     monkeypatch.setattr(engine_module, "create_character_agent", lambda **_: object())
     monkeypatch.setattr(engine_module, "create_observer_agent", lambda **_: object())
 
-    provider = JsonPersistenceProvider(base_path=tmp_path)
+    provider = _InMemoryProvider()
     game_id = provider.create_game("Partida inválida", {"actors": []})
     engine = GameEngine(persistence_provider=provider)
 

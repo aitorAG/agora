@@ -8,9 +8,7 @@ Definir dirección técnica, prioridades de ejecución y estándares de calidad 
 
 - Motor narrativo en Python con orquestación por roles (`Director`, `Guionista`, `Character`, `Observer`).
 - API FastAPI + UI estática para pruebas.
-- Persistencia dual introducida:
-  - `PERSISTENCE_MODE=json`
-  - `PERSISTENCE_MODE=db` (PostgreSQL)
+- Persistencia DB-only en PostgreSQL.
 - Tests unitarios activos y rápidos.
 
 ## Principios de ingeniería
@@ -18,7 +16,6 @@ Definir dirección técnica, prioridades de ejecución y estándares de calidad 
 - **Separación de responsabilidades**: lógica narrativa separada de persistencia y transporte.
 - **Contratos explícitos**: interfaces claras (`PersistenceProvider`) antes de implementaciones.
 - **Fail-fast en infraestructura crítica**: en modo DB, errores de conexión/migración deben abortar arranque.
-- **Compatibilidad incremental**: convivir con modo JSON mientras madura DB.
 - **Observabilidad primero**: errores de persistencia y latencia visibles en logs.
 
 ## Arquitectura técnica objetivo (mediano plazo)
@@ -28,14 +25,12 @@ flowchart LR
   API[FastAPI Routes]
   Engine[GameEngine]
   Dir[Director/Observer/Character]
-  Provider[PersistenceProvider]
-  Json[JsonProvider]
-  Db[DbProvider]
+  Provider[DatabasePersistenceProvider]
+  Db[(PostgreSQL)]
 
   API --> Engine
   Engine --> Dir
   Engine --> Provider
-  Provider --> Json
   Provider --> Db
 ```
 
@@ -45,7 +40,7 @@ flowchart LR
 
 - Consolidar contrato de persistencia y trazabilidad de errores.
 - Endurecer validaciones de entrada/salida en providers.
-- Asegurar paridad funcional JSON vs DB en casos core.
+- Asegurar robustez de contrato DB en casos core.
 
 ## Fase 2 (fiabilidad operativa)
 
@@ -65,10 +60,9 @@ flowchart LR
 ## Estrategia de testing
 
 - **Unit tests**: reglas de director/observer/manager y parsing.
-- **Contract tests**: mismo suite para `JsonProvider` y `DbProvider`.
+- **Contract tests**: suite de contrato para provider DB.
 - **Integration tests**:
   - creación de partida -> mensajes -> recuperación completa
-  - fallback por modo (`json`/`db`)
 - **Smoke tests operativos**:
   - arranque en modo `db` con Docker
   - migraciones aplicadas correctamente
@@ -87,8 +81,8 @@ Mitigación:
 
 ## Riesgos técnicos y mitigación
 
-- **Riesgo**: divergencia de comportamiento JSON vs DB.
-  - **Mitigación**: tests de contrato + fixtures compartidos.
+- **Riesgo**: regresiones en contrato de persistencia.
+  - **Mitigación**: tests de contrato DB + fixtures compartidos.
 - **Riesgo**: duplicación de mensajes por hooks de persistencia.
   - **Mitigación**: control por delta y/o idempotencia por message id.
 - **Riesgo**: migraciones no idempotentes.

@@ -1,21 +1,31 @@
 """Tests de autenticación API."""
 
-import json
-
 from fastapi.testclient import TestClient
 
+from src.api import dependencies as dependencies_module
+from src.api import routes as routes_module
 from src.api.app import app
 
 
-def test_auth_login_me_logout_json_mode(monkeypatch, tmp_path):
-    monkeypatch.setenv("PERSISTENCE_MODE", "json")
-    monkeypatch.setenv("AGORA_GAMES_DIR", str(tmp_path))
+def test_auth_login_me_logout(monkeypatch):
     monkeypatch.setenv("AUTH_REQUIRED", "true")
-    monkeypatch.setenv("AUTH_SEED_USERNAME", "alice")
-    monkeypatch.setenv("AUTH_SEED_PASSWORD", "secret123")
+    monkeypatch.setattr(routes_module, "ensure_seed_user", lambda: None)
+    monkeypatch.setattr(
+        routes_module,
+        "authenticate_user",
+        lambda username, password: (
+            {"id": "u1", "username": "alice", "is_active": True}
+            if username == "alice" and password == "secret123"
+            else None
+        ),
+    )
+    monkeypatch.setattr(
+        dependencies_module,
+        "get_user_by_username",
+        lambda username: {"id": "u1", "username": username, "is_active": True, "password_hash": "x"},
+    )
 
     client = TestClient(app)
-
     bad = client.post("/auth/login", json={"username": "alice", "password": "wrong"})
     assert bad.status_code == 401
 
@@ -35,18 +45,37 @@ def test_auth_login_me_logout_json_mode(monkeypatch, tmp_path):
     assert me_after.status_code == 401
 
 
-def test_auth_register_success_and_login_json_mode(monkeypatch, tmp_path):
-    monkeypatch.setenv("PERSISTENCE_MODE", "json")
-    monkeypatch.setenv("AGORA_GAMES_DIR", str(tmp_path))
+def test_auth_register_success_and_login(monkeypatch):
     monkeypatch.setenv("AUTH_REQUIRED", "true")
+    monkeypatch.setattr(
+        routes_module,
+        "create_user",
+        lambda username, _password: {
+            "id": "u2",
+            "username": username.strip().lower(),
+            "is_active": True,
+        },
+    )
+    monkeypatch.setattr(
+        routes_module,
+        "authenticate_user",
+        lambda username, password: (
+            {"id": "u2", "username": username.strip().lower(), "is_active": True}
+            if password == "supersecret"
+            else None
+        ),
+    )
+    monkeypatch.setattr(
+        dependencies_module,
+        "get_user_by_username",
+        lambda username: {"id": "u2", "username": username.strip().lower(), "is_active": True, "password_hash": "x"},
+    )
 
     client = TestClient(app)
-
     reg = client.post("/auth/register", json={"username": "Bob", "password": "supersecret"})
     assert reg.status_code == 201
     assert reg.json()["authenticated"] is True
     assert reg.json()["user"]["username"] == "bob"
-    assert "set-cookie" in reg.headers
 
     me = client.get("/auth/me")
     assert me.status_code == 200
@@ -59,21 +88,15 @@ def test_auth_register_success_and_login_json_mode(monkeypatch, tmp_path):
     assert login.status_code == 200
     assert login.json()["user"]["username"] == "bob"
 
-    users_file = tmp_path / "users.json"
-    assert users_file.exists()
-    data = json.loads(users_file.read_text(encoding="utf-8"))
-    assert any(u.get("username") == "bob" for u in data)
 
-
-def test_auth_register_duplicate_returns_409(monkeypatch, tmp_path):
-    monkeypatch.setenv("PERSISTENCE_MODE", "json")
-    monkeypatch.setenv("AGORA_GAMES_DIR", str(tmp_path))
+def test_auth_register_duplicate_returns_409(monkeypatch):
     monkeypatch.setenv("AUTH_REQUIRED", "true")
-
+    monkeypatch.setattr(
+        routes_module,
+        "create_user",
+        lambda _username, _password: (_ for _ in ()).throw(routes_module.UserAlreadyExistsError()),
+    )
     client = TestClient(app)
-
-    first = client.post("/auth/register", json={"username": "alice", "password": "secret123"})
-    assert first.status_code == 201
     second = client.post("/auth/register", json={"username": "ALICE", "password": "another123"})
     assert second.status_code == 409
     assert second.json()["detail"] == "Username already exists"

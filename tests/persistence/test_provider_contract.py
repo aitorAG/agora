@@ -5,7 +5,6 @@ import os
 import pytest
 
 from src.persistence.db_provider import DatabasePersistenceProvider
-from src.persistence.json_provider import JsonPersistenceProvider
 
 
 def assert_provider_contract(provider):
@@ -29,11 +28,6 @@ def assert_provider_contract(provider):
     assert game["id"] == game_id
     assert len(msgs) == 1
     assert any(g["id"] == game_id for g in games)
-
-
-def test_contract_json_provider(tmp_path):
-    provider = JsonPersistenceProvider(base_path=tmp_path)
-    assert_provider_contract(provider)
 
 
 def test_contract_db_provider_if_available():

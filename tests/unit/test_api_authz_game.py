@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from src.api import dependencies as dependencies_module
 from src.api import routes as routes_module
 from src.api.app import app
 from src.api.schemas import AuthUserResponse
@@ -77,10 +78,27 @@ def test_game_resume_returns_not_found_when_not_owner():
         app.dependency_overrides.clear()
 
 
-def test_game_list_is_isolated_by_authenticated_user_after_register(monkeypatch, tmp_path):
-    monkeypatch.setenv("PERSISTENCE_MODE", "json")
-    monkeypatch.setenv("AGORA_GAMES_DIR", str(tmp_path))
+def test_game_list_is_isolated_by_authenticated_user_after_register(monkeypatch):
     monkeypatch.setenv("AUTH_REQUIRED", "true")
+    monkeypatch.setattr(
+        routes_module,
+        "create_user",
+        lambda username, _password: {
+            "id": f"u-{username.strip().lower()}",
+            "username": username.strip().lower(),
+            "is_active": True,
+        },
+    )
+    monkeypatch.setattr(
+        dependencies_module,
+        "get_user_by_username",
+        lambda username: {
+            "id": f"u-{username.strip().lower()}",
+            "username": username.strip().lower(),
+            "is_active": True,
+            "password_hash": "x",
+        },
+    )
 
     engine = _EngineListByUserDummy()
     app.dependency_overrides[routes_module.get_engine] = lambda: engine

@@ -26,12 +26,12 @@ class DatabasePersistenceProvider(PersistenceProvider):
     def __init__(self, dsn: str | None = None, run_migrations: bool = True, ensure_user: bool = True) -> None:
         self._dsn = (dsn or os.getenv("DATABASE_URL", "")).strip()
         if not self._dsn:
-            raise RuntimeError("DATABASE_URL no configurada para PERSISTENCE_MODE=db")
+            raise RuntimeError("DATABASE_URL no configurada para persistencia en PostgreSQL")
         try:
             self._psycopg = importlib.import_module("psycopg")
         except ModuleNotFoundError as exc:
             raise RuntimeError(
-                "Falta dependencia 'psycopg'. Instala el driver PostgreSQL para usar PERSISTENCE_MODE=db."
+                "Falta dependencia 'psycopg'. Instala el driver PostgreSQL para usar persistencia DB-only."
             ) from exc
         if run_migrations:
             self.apply_migrations()

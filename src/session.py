@@ -66,6 +66,13 @@ def create_session(
         player_mission=game_setup.get("player_mission") or "",
     )
 
+    try:
+        max_messages_before_user = int(os.getenv("AGORA_MAX_MESSAGES_BEFORE_USER", "1"))
+        if max_messages_before_user < 0:
+            max_messages_before_user = 1
+    except ValueError:
+        max_messages_before_user = 1
+
     def runner() -> ConversationState:
         return run_game_loop(
             manager,
@@ -74,7 +81,7 @@ def create_session(
             max_turns,
             input_provider=input_provider,
             output_handler=output_handler,
-            max_messages_before_user=3,
+            max_messages_before_user=max_messages_before_user,
         )
 
     log.debug("Runner configured")

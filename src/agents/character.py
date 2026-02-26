@@ -121,7 +121,7 @@ Actúa de forma coherente con este contexto."""
 Tienes una misión secreta que debes intentar cumplir durante la conversación. No la reveles explícitamente.
 Tu misión: {self._mission}"""
 
-        max_history = int(os.getenv("CHAR_CONTEXT_MESSAGES", "20"))
+        max_history = int(os.getenv("CHAR_CONTEXT_MESSAGES", "12"))
         history = state["messages"][-max_history:]
         messages = [{"role": "system", "content": system_prompt}]
         for msg in history:

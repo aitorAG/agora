@@ -1,6 +1,7 @@
 """Aplicación FastAPI: motor de partida vía HTTP."""
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -8,15 +9,26 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from ..observability import flush_langfuse
 from .routes import router, auth_router
 from .schemas import HealthResponse
 
 load_dotenv()
 
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    try:
+        yield
+    finally:
+        flush_langfuse()
+
+
 app = FastAPI(
     title="Agora API",
     description="API del motor narrativo conversacional",
     version="0.1.0",
+    lifespan=_lifespan,
 )
 app.include_router(router)
 app.include_router(auth_router)

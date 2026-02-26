@@ -1,33 +1,21 @@
-"""Tests de selección de modo en factory de persistencia."""
-
-import pytest
+"""Tests de factory DB-only."""
 
 from src.persistence import factory as persistence_factory
-
-
-class _DummyJsonProvider:
-    pass
 
 
 class _DummyDbProvider:
     pass
 
 
-def test_factory_selects_json_mode(monkeypatch):
-    monkeypatch.setenv("PERSISTENCE_MODE", "json")
-    monkeypatch.setattr(persistence_factory, "JsonPersistenceProvider", _DummyJsonProvider)
-    provider = persistence_factory.create_persistence_provider()
-    assert isinstance(provider, _DummyJsonProvider)
-
-
-def test_factory_selects_db_mode(monkeypatch):
+def test_factory_always_returns_db_provider(monkeypatch):
     monkeypatch.setenv("PERSISTENCE_MODE", "db")
     monkeypatch.setattr(persistence_factory, "DatabasePersistenceProvider", _DummyDbProvider)
     provider = persistence_factory.create_persistence_provider()
     assert isinstance(provider, _DummyDbProvider)
 
 
-def test_factory_rejects_invalid_mode(monkeypatch):
-    monkeypatch.setenv("PERSISTENCE_MODE", "otro")
-    with pytest.raises(RuntimeError):
-        persistence_factory.create_persistence_provider()
+def test_factory_ignores_legacy_mode_env(monkeypatch):
+    monkeypatch.setenv("PERSISTENCE_MODE", "json")
+    monkeypatch.setattr(persistence_factory, "DatabasePersistenceProvider", _DummyDbProvider)
+    provider = persistence_factory.create_persistence_provider()
+    assert isinstance(provider, _DummyDbProvider)

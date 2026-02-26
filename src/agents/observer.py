@@ -5,6 +5,7 @@ import json
 import os
 from typing import Dict, Any, List
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from ..state import ConversationState
 from .base import Agent
 from .deepseek_adapter import send_message
@@ -109,6 +110,20 @@ class ObserverAgent(Agent):
                 "needs_response": False,
                 "who_should_respond": "none",
                 "reason": "No hay mensajes en la conversaci?n"
+            }
+
+        # Fast path de latencia: por defecto, tras un mensaje de personaje
+        # se cede turno al usuario sin llamar al LLM.
+        enable_non_user_continuation = os.getenv(
+            "OBSERVER_ENABLE_NON_USER_CONTINUATION",
+            "false",
+        ).strip().lower() in ("1", "true", "yes")
+        last_message = messages[-1]
+        if last_message.get("author") != "Usuario" and not enable_non_user_continuation:
+            return {
+                "needs_response": False,
+                "who_should_respond": "none",
+                "reason": "Último mensaje no es del usuario; se cede turno al usuario."
             }
         
         # Verificar si el usuario quiere salir
@@ -245,7 +260,7 @@ Reglas:
                 "reasoning": "Sin mensajes en la conversación.",
             }
         # Contexto reciente (últimos N mensajes para tener suficiente historia)
-        max_history = int(os.getenv("OBSERVER_CONTEXT_MESSAGES", "15"))
+        max_history = int(os.getenv("OBSERVER_CONTEXT_MESSAGES", "10"))
         recent = messages[-max_history:]
         context_lines = [f"[{m['author']}] {m['content']}" for m in recent]
         context_text = "\n".join(context_lines)
@@ -346,15 +361,26 @@ Responde SOLO con el JSON. Si usas markdown, envuelve en ```json ... ```."""
             "turn": state["turn"]
         }
         
-        # Evaluar si alguien debe continuar la conversación
-        continuation_decision = self.evaluate_continuation(state)
-        # Evaluar si el jugador o los actores han alcanzado su misión:
-        # solo reevaluar cuando el último mensaje es del Usuario (fin de turno),
-        # para evitar llamadas redundantes al LLM en pasos intermedios.
+        # Evaluar si alguien debe continuar y si el jugador alcanzó su misión.
+        # Si el último mensaje es del Usuario, ambas tareas son independientes:
+        # se ejecutan en paralelo para reducir latencia end-to-end.
         last_author = messages[-1]["author"]
         if last_author == "Usuario":
-            mission_evaluation = self.evaluate_missions(state)
+            parallel_eval = os.getenv(
+                "OBSERVER_PARALLEL_EVAL",
+                "true",
+            ).strip().lower() in ("1", "true", "yes")
+            if parallel_eval:
+                with ThreadPoolExecutor(max_workers=2) as ex:
+                    fut_cont = ex.submit(self.evaluate_continuation, state)
+                    fut_miss = ex.submit(self.evaluate_missions, state)
+                    continuation_decision = fut_cont.result()
+                    mission_evaluation = fut_miss.result()
+            else:
+                continuation_decision = self.evaluate_continuation(state)
+                mission_evaluation = self.evaluate_missions(state)
         else:
+            continuation_decision = self.evaluate_continuation(state)
             meta = state.get("metadata", {})
             mission_evaluation = meta.get("last_mission_evaluation")
             if not isinstance(mission_evaluation, dict):

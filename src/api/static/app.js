@@ -36,6 +36,8 @@
     ui: {
       userMenuOpen: false,
       gamesPanelOpen: false,
+      storyPanelOpen: false,
+      briefingOpen: false,
       logoutLoading: false,
     },
     newGame: {
@@ -116,6 +118,17 @@
   const $gamesDrawerList = () => $("games-drawer-list");
   const $btnCloseGamesDrawer = () => $("btn-close-games-drawer");
   const $btnDrawerNewGame = () => $("btn-drawer-new-game");
+  const $btnHistoryToggle = () => $("btn-history-toggle");
+  const $storyPanel = () => $("story-panel");
+  const $storyPanelOverlay = () => $("story-panel-overlay");
+  const $btnCloseStoryPanel = () => $("btn-close-story-panel");
+  const $btnOpenBriefing = () => $("btn-open-briefing");
+  const $briefingModal = () => $("briefing-modal");
+  const $btnCloseBriefing = () => $("btn-close-briefing");
+  const $statusTurn = () => $("status-turn");
+  const $statusSpeaker = () => $("status-speaker");
+  const $statusInput = () => $("status-input");
+  const $statusEnded = () => $("status-ended");
 
   function showLoading(message) {
     const msg = message || "Procesando…";
@@ -240,6 +253,8 @@
     store.games_list = [];
     store.ui.userMenuOpen = false;
     store.ui.gamesPanelOpen = false;
+    store.ui.storyPanelOpen = false;
+    store.ui.briefingOpen = false;
     renderAll();
   }
 
@@ -314,6 +329,8 @@
     store.screen = "login";
     store.ui.userMenuOpen = false;
     store.ui.gamesPanelOpen = false;
+    store.ui.storyPanelOpen = false;
+    store.ui.briefingOpen = false;
     resetPartida();
     renderAll();
     store.ui.logoutLoading = false;
@@ -685,6 +702,46 @@
     }
   }
 
+  function openStoryPanel() {
+    store.ui.storyPanelOpen = true;
+    const panel = $storyPanel();
+    const overlay = $storyPanelOverlay();
+    if (panel) {
+      panel.classList.remove("hidden");
+      panel.setAttribute("aria-hidden", "false");
+    }
+    if (overlay) {
+      overlay.classList.remove("hidden");
+      overlay.setAttribute("aria-hidden", "false");
+    }
+  }
+
+  function closeStoryPanel() {
+    store.ui.storyPanelOpen = false;
+    const panel = $storyPanel();
+    const overlay = $storyPanelOverlay();
+    if (panel) {
+      panel.classList.add("hidden");
+      panel.setAttribute("aria-hidden", "true");
+    }
+    if (overlay) {
+      overlay.classList.add("hidden");
+      overlay.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function openBriefingModal() {
+    store.ui.briefingOpen = true;
+    const modal = $briefingModal();
+    if (modal) modal.classList.remove("hidden");
+  }
+
+  function closeBriefingModal() {
+    store.ui.briefingOpen = false;
+    const modal = $briefingModal();
+    if (modal) modal.classList.add("hidden");
+  }
+
   function closeOnOutsideClick(e) {
     const menu = $userMenu();
     const chip = $userChip();
@@ -722,7 +779,6 @@
     const intro = $intro();
     const mission = $mission();
     const charactersEl = $characters();
-    const gameStateEl = $gameState();
     if (intro) intro.textContent = store.context.narrativa_inicial || "—";
     if (mission) mission.textContent = store.context.player_mission || "—";
     const chars = store.context.characters || [];
@@ -755,7 +811,17 @@
     } else {
       stateHtml = "<p>Sin partida activa.</p>";
     }
-    $gameState().innerHTML = stateHtml;
+    const gameStateEl = $gameState();
+    if (gameStateEl) gameStateEl.innerHTML = stateHtml;
+
+    const sTurn = $statusTurn();
+    const sSpeaker = $statusSpeaker();
+    const sInput = $statusInput();
+    const sEnded = $statusEnded();
+    if (sTurn) sTurn.textContent = store.session_id ? `${s.turn_current} / ${s.turn_max}` : "—";
+    if (sSpeaker) sSpeaker.textContent = store.session_id ? (s.current_speaker || "Jugador") : "—";
+    if (sInput) sInput.textContent = store.session_id ? (s.player_can_write ? "Abierta" : "Bloqueada") : "—";
+    if (sEnded) sEnded.textContent = store.session_id ? (s.game_finished ? "Finalizada" : "En curso") : "—";
   }
 
   function renderUserMenu() {
@@ -810,6 +876,21 @@
         `;
       })
       .join("");
+  }
+
+  function renderOverlayPanels() {
+    const storyPanel = $storyPanel();
+    const storyOverlay = $storyPanelOverlay();
+    if (storyPanel) {
+      storyPanel.classList.toggle("hidden", !store.ui.storyPanelOpen);
+      storyPanel.setAttribute("aria-hidden", store.ui.storyPanelOpen ? "false" : "true");
+    }
+    if (storyOverlay) {
+      storyOverlay.classList.toggle("hidden", !store.ui.storyPanelOpen);
+      storyOverlay.setAttribute("aria-hidden", store.ui.storyPanelOpen ? "false" : "true");
+    }
+    const briefing = $briefingModal();
+    if (briefing) briefing.classList.toggle("hidden", !store.ui.briefingOpen);
   }
 
   function escapeHtml(s) {
@@ -870,10 +951,13 @@
     const loginForm = $loginForm();
     const registerForm = $registerForm();
     if (store.screen === "login" || store.screen === "register") {
+      store.ui.storyPanelOpen = false;
+      store.ui.briefingOpen = false;
       if (loginScreen) loginScreen.classList.remove("hidden");
       if (app) app.classList.add("hidden");
       if (loginForm) loginForm.classList.toggle("hidden", store.screen !== "login");
       if (registerForm) registerForm.classList.toggle("hidden", store.screen !== "register");
+      renderOverlayPanels();
       setAuthError(store.screen === "login" ? store.auth.error : null);
       setRegisterError(store.screen === "register" ? store.auth.error : null);
       return;
@@ -883,6 +967,7 @@
     renderUserMenu();
     renderSidebar();
     renderGamesDrawer();
+    renderOverlayPanels();
     renderChat();
     updateInputState();
   }
@@ -1058,6 +1143,12 @@
   const gamesDrawerOverlay = $gamesDrawerOverlay();
   const btnCloseGamesDrawer = $btnCloseGamesDrawer();
   const btnDrawerNewGame = $btnDrawerNewGame();
+  const btnHistoryToggle = $btnHistoryToggle();
+  const storyPanelOverlay = $storyPanelOverlay();
+  const btnCloseStoryPanel = $btnCloseStoryPanel();
+  const btnOpenBriefing = $btnOpenBriefing();
+  const btnCloseBriefing = $btnCloseBriefing();
+  const briefingModal = $briefingModal();
   if (btnNew) btnNew.addEventListener("click", openNewGameModal);
   if (btnSend) btnSend.addEventListener("click", sendTurn);
   if (btnCreateGame) btnCreateGame.addEventListener("click", submitNewGameFromForm);
@@ -1192,11 +1283,36 @@
       openNewGameModal();
     });
   }
+  if (btnHistoryToggle) {
+    btnHistoryToggle.addEventListener("click", () => {
+      if (store.ui.storyPanelOpen) closeStoryPanel();
+      else openStoryPanel();
+    });
+  }
+  if (storyPanelOverlay) {
+    storyPanelOverlay.addEventListener("click", () => closeStoryPanel());
+  }
+  if (btnCloseStoryPanel) {
+    btnCloseStoryPanel.addEventListener("click", () => closeStoryPanel());
+  }
+  if (btnOpenBriefing) {
+    btnOpenBriefing.addEventListener("click", () => openBriefingModal());
+  }
+  if (btnCloseBriefing) {
+    btnCloseBriefing.addEventListener("click", () => closeBriefingModal());
+  }
+  if (briefingModal) {
+    briefingModal.addEventListener("click", (e) => {
+      if (e.target === briefingModal) closeBriefingModal();
+    });
+  }
   document.addEventListener("click", closeOnOutsideClick);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       toggleUserMenu(false);
       closeGamesPanel();
+      closeStoryPanel();
+      closeBriefingModal();
     }
   });
 

@@ -8,6 +8,7 @@ from ..state import ConversationState
 from ..manager import ConversationManager
 from ..io_adapters import InputProvider, OutputHandler
 from ..logging_config import get_logger
+from ..observability import span_agent
 
 from .guionista import run_setup_task
 from .character import run_character_response
@@ -60,6 +61,8 @@ def run_one_step(
     max_messages_before_user: int = 3,
     stream_character: bool = False,
     character_stream_sink: Any = None,
+    game_id: str | None = None,
+    turn: int | None = None,
 ) -> dict[str, Any]:
     """Ejecuta una sola iteración del bucle: fase character o user_input. Sin I/O; devuelve eventos.
 
@@ -90,12 +93,20 @@ def run_one_step(
             agent = character_agents[who]
         else:
             agent = character_agents[agent_names_ordered[0]]
-        result = run_character_response(
-            agent,
-            state,
-            stream=stream_character and character_stream_sink is not None,
-            stream_sink=character_stream_sink,
-        )
+        with span_agent(
+            "character",
+            metadata={
+                "agent_name": agent.name,
+                "game_id": game_id,
+                "turn": turn,
+            },
+        ):
+            result = run_character_response(
+                agent,
+                state,
+                stream=stream_character and character_stream_sink is not None,
+                stream_sink=character_stream_sink,
+            )
         if "error" in result:
             events.append({"type": "error", "message": result["error"]})
             return {"next_action": "ended", "game_ended": True, "events": events}
@@ -117,7 +128,15 @@ def run_one_step(
             manager.increment_turn()
 
     state = manager.state
-    obs_result = run_observer_tasks(observer_agent, state)
+    with span_agent(
+        "observer",
+        metadata={
+            "agent_name": "Observer",
+            "game_id": game_id,
+            "turn": turn,
+        },
+    ):
+        obs_result = run_observer_tasks(observer_agent, state)
     if obs_result.get("update_metadata"):
         if obs_result.get("analysis") is not None:
             manager.update_metadata(f"turn_{state['turn']}_analysis", obs_result["analysis"])

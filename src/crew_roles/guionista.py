@@ -4,6 +4,7 @@ from typing import Dict, Any
 
 from ..agents.guionista import GuionistaAgent
 from ..state import ConversationState
+from ..observability import span_agent
 
 
 def create_guionista_agent(model: str = "deepseek-chat") -> GuionistaAgent:
@@ -19,9 +20,13 @@ def run_setup_task(
     stream_sink: Any = None,
 ) -> Dict[str, Any]:
     """Ejecuta la tarea de generar setup. Entrada: theme, num_actors. Salida: game_setup dict."""
-    return agent.generate_setup(
-        theme=theme, num_actors=num_actors, stream=stream, stream_sink=stream_sink
-    )
+    with span_agent(
+        "guionista_setup",
+        metadata={"agent_name": "Guionista", "agent_step": "setup"},
+    ):
+        return agent.generate_setup(
+            theme=theme, num_actors=num_actors, stream=stream, stream_sink=stream_sink
+        )
 
 
 def default_setup(num_actors: int) -> Dict[str, Any]:

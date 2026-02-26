@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from datetime import datetime
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from ..crew_roles.character import create_character_agent
 from ..crew_roles.observer import create_observer_agent
 from ..crew_roles.director import run_one_step
 from ..persistence import PersistenceProvider, create_persistence_provider
+from ..observability import trace_interaction, trace_setup
 
 
 @dataclass
@@ -39,6 +41,16 @@ class GameEngine:
         self._registry: dict[str, GameSession] = {}
         self._logger = logging.getLogger(__name__)
         self._persistence = persistence_provider or create_persistence_provider()
+        self._default_max_messages_before_user = self._read_max_messages_before_user()
+
+    @staticmethod
+    def _read_max_messages_before_user() -> int:
+        raw = str(os.environ.get("AGORA_MAX_MESSAGES_BEFORE_USER", "1")).strip()
+        try:
+            value = int(raw)
+            return max(0, value)
+        except ValueError:
+            return 1
 
     def create_game(
         self,
@@ -52,13 +64,14 @@ class GameEngine:
         Si stream_sink es un Callable[[str], None], se invoca con cada chunk de la narrativa (JSON) durante la generación."""
         guionista = create_guionista_agent()
         stream = stream_sink is not None
-        game_setup = run_setup_task(
-            guionista,
-            theme=theme,
-            num_actors=num_actors,
-            stream=stream,
-            stream_sink=stream_sink,
-        )
+        with trace_setup(user_id=username or "", name="setup"):
+            game_setup = run_setup_task(
+                guionista,
+                theme=theme,
+                num_actors=num_actors,
+                stream=stream,
+                stream_sink=stream_sink,
+            )
 
         title = str(game_setup.get("titulo") or theme or "Partida").strip() or "Partida"
         game_id = self._persistence.create_game(
@@ -70,7 +83,7 @@ class GameEngine:
         session = self._build_session_from_setup(
             setup=game_setup,
             max_turns=max_turns,
-            max_messages_before_user=3,
+            max_messages_before_user=self._default_max_messages_before_user,
         )
         self._registry[game_id] = session
         self._warmup_session(game_id, session)
@@ -103,7 +116,7 @@ class GameEngine:
         session = self._build_session_from_setup(
             setup=setup,
             max_turns=max_turns,
-            max_messages_before_user=3,
+            max_messages_before_user=self._default_max_messages_before_user,
         )
         self._registry[game_id] = session
         self._warmup_session(game_id, session)
@@ -153,18 +166,10 @@ class GameEngine:
 
     def _warmup_session(self, game_id: str, session: GameSession) -> None:
         """Avanza al primer punto de input del usuario y persiste snapshot inicial."""
-        result = run_one_step(
-            session.manager,
-            session.character_agents,
-            session.observer_agent,
-            session.max_turns,
-            current_next_action=session.next_action,
-            pending_user_text=None,
-            user_exit=False,
-            max_messages_before_user=session.max_messages_before_user,
-        )
-        session.next_action = result["next_action"]
-        while result["next_action"] == "character" and not result.get("game_ended"):
+        game = self._persistence.get_game(game_id)
+        user_id = str(game.get("user", "")) if game else ""
+        interaction_id = f"{game_id}:warmup"
+        with trace_interaction(game_id, user_id, interaction_id, name="warmup"):
             result = run_one_step(
                 session.manager,
                 session.character_agents,
@@ -174,8 +179,24 @@ class GameEngine:
                 pending_user_text=None,
                 user_exit=False,
                 max_messages_before_user=session.max_messages_before_user,
+                game_id=game_id,
+                turn=session.manager.state.get("turn", 0),
             )
             session.next_action = result["next_action"]
+            while result["next_action"] == "character" and not result.get("game_ended"):
+                result = run_one_step(
+                    session.manager,
+                    session.character_agents,
+                    session.observer_agent,
+                    session.max_turns,
+                    current_next_action=session.next_action,
+                    pending_user_text=None,
+                    user_exit=False,
+                    max_messages_before_user=session.max_messages_before_user,
+                    game_id=game_id,
+                    turn=session.manager.state.get("turn", 0),
+                )
+                session.next_action = result["next_action"]
         self._persist_session_state(game_id, session)
 
     def get_state(self, game_id: str) -> ConversationState:
@@ -376,9 +397,11 @@ class GameEngine:
         except (TypeError, ValueError):
             max_turns = 10
         try:
-            max_messages_before_user = int(state_json.get("max_messages_before_user", 3))
+            max_messages_before_user = int(
+                state_json.get("max_messages_before_user", self._default_max_messages_before_user)
+            )
         except (TypeError, ValueError):
-            max_messages_before_user = 3
+            max_messages_before_user = self._default_max_messages_before_user
 
         session = GameSession(
             manager=manager,
@@ -409,34 +432,43 @@ class GameEngine:
         Devuelve (events, state, game_ended).
         """
         session = self._get_session(game_id)
+        game = self._persistence.get_game(game_id)
+        user_id = str(game.get("user", "")) if game else ""
+        state = session.manager.state
+        interaction_id = f"{game_id}:turn:{state.get('turn', 0)}"
         all_events: list = []
         t0 = time.perf_counter()
-        result = run_one_step(
-            session.manager,
-            session.character_agents,
-            session.observer_agent,
-            session.max_turns,
-            current_next_action=session.next_action,
-            pending_user_text=text or "",
-            user_exit=user_exit,
-            max_messages_before_user=session.max_messages_before_user,
-        )
-        session.next_action = result["next_action"]
-        all_events.extend(result.get("events", []))
-
-        while result["next_action"] == "character" and not result.get("game_ended"):
+        with trace_interaction(game_id, user_id, interaction_id):
             result = run_one_step(
                 session.manager,
                 session.character_agents,
                 session.observer_agent,
                 session.max_turns,
                 current_next_action=session.next_action,
-                pending_user_text=None,
-                user_exit=False,
+                pending_user_text=text or "",
+                user_exit=user_exit,
                 max_messages_before_user=session.max_messages_before_user,
+                game_id=game_id,
+                turn=session.manager.state.get("turn", 0),
             )
             session.next_action = result["next_action"]
             all_events.extend(result.get("events", []))
+
+            while result["next_action"] == "character" and not result.get("game_ended"):
+                result = run_one_step(
+                    session.manager,
+                    session.character_agents,
+                    session.observer_agent,
+                    session.max_turns,
+                    current_next_action=session.next_action,
+                    pending_user_text=None,
+                    user_exit=False,
+                    max_messages_before_user=session.max_messages_before_user,
+                    game_id=game_id,
+                    turn=session.manager.state.get("turn", 0),
+                )
+                session.next_action = result["next_action"]
+                all_events.extend(result.get("events", []))
 
         state = session.manager.state
         game_ended = bool(result.get("game_ended", False))
@@ -463,17 +495,23 @@ class GameEngine:
         if session.next_action != "character":
             return [], session.manager.state, False, True
 
+        game = self._persistence.get_game(game_id)
+        user_id = str(game.get("user", "")) if game else ""
+        interaction_id = f"{game_id}:tick:{session.manager.state.get('turn', 0)}"
         t0 = time.perf_counter()
-        result = run_one_step(
-            session.manager,
-            session.character_agents,
-            session.observer_agent,
-            session.max_turns,
-            current_next_action=session.next_action,
-            pending_user_text=None,
-            user_exit=False,
-            max_messages_before_user=session.max_messages_before_user,
-        )
+        with trace_interaction(game_id, user_id, interaction_id, name="tick"):
+            result = run_one_step(
+                session.manager,
+                session.character_agents,
+                session.observer_agent,
+                session.max_turns,
+                current_next_action=session.next_action,
+                pending_user_text=None,
+                user_exit=False,
+                max_messages_before_user=session.max_messages_before_user,
+                game_id=game_id,
+                turn=session.manager.state.get("turn", 0),
+            )
         session.next_action = result["next_action"]
         events = result.get("events", [])
         state = session.manager.state
@@ -499,6 +537,9 @@ class GameEngine:
         Genera eventos en streaming: message_delta (chunks), luego message, turn_end, game_ended si aplica.
         """
         session = self._get_session(game_id)
+        game = self._persistence.get_game(game_id)
+        user_id = str(game.get("user", "")) if game else ""
+        interaction_id = f"{game_id}:turn:{session.manager.state.get('turn', 0)}"
         queue: Queue = Queue()
 
         def chunk_sink(chunk: str) -> None:
@@ -506,38 +547,43 @@ class GameEngine:
 
         def run() -> None:
             try:
-                all_events: list = []
-                result = run_one_step(
-                    session.manager,
-                    session.character_agents,
-                    session.observer_agent,
-                    session.max_turns,
-                    current_next_action=session.next_action,
-                    pending_user_text=text or "",
-                    user_exit=user_exit,
-                    max_messages_before_user=session.max_messages_before_user,
-                    stream_character=True,
-                    character_stream_sink=chunk_sink,
-                )
-                session.next_action = result["next_action"]
-                all_events.extend(result.get("events", []))
-                while result["next_action"] == "character" and not result.get("game_ended"):
+                with trace_interaction(game_id, user_id, interaction_id, name="turn_stream"):
+                    all_events: list = []
                     result = run_one_step(
                         session.manager,
                         session.character_agents,
                         session.observer_agent,
                         session.max_turns,
                         current_next_action=session.next_action,
-                        pending_user_text=None,
-                        user_exit=False,
+                        pending_user_text=text or "",
+                        user_exit=user_exit,
                         max_messages_before_user=session.max_messages_before_user,
                         stream_character=True,
                         character_stream_sink=chunk_sink,
+                        game_id=game_id,
+                        turn=session.manager.state.get("turn", 0),
                     )
                     session.next_action = result["next_action"]
                     all_events.extend(result.get("events", []))
-                self._persist_session_state(game_id, session)
-                queue.put(("done", all_events))
+                    while result["next_action"] == "character" and not result.get("game_ended"):
+                        result = run_one_step(
+                            session.manager,
+                            session.character_agents,
+                            session.observer_agent,
+                            session.max_turns,
+                            current_next_action=session.next_action,
+                            pending_user_text=None,
+                            user_exit=False,
+                            max_messages_before_user=session.max_messages_before_user,
+                            stream_character=True,
+                            character_stream_sink=chunk_sink,
+                            game_id=game_id,
+                            turn=session.manager.state.get("turn", 0),
+                        )
+                        session.next_action = result["next_action"]
+                        all_events.extend(result.get("events", []))
+                    self._persist_session_state(game_id, session)
+                    queue.put(("done", all_events))
             except Exception as e:
                 queue.put(("error", str(e)))
 

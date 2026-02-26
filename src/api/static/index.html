@@ -7,6 +7,11 @@
   <link rel="stylesheet" href="/ui/styles.css?v=2" />
 </head>
 <body class="theme-light">
+  <div class="bg-atmosphere">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="grid-noise"></div>
+  </div>
   <div id="login-screen" class="login-screen hidden">
     <div class="login-panel">
       <h1>Agora</h1>
@@ -32,33 +37,17 @@
     </div>
   </div>
   <div id="app">
-    <aside class="sidebar">
-      <section class="sidebar-section">
-        <h2>Introducción</h2>
-        <div id="intro-text" class="sidebar-content"></div>
-      </section>
-      <section class="sidebar-section">
-        <h2>Misión</h2>
-        <div id="mission-text" class="sidebar-content"></div>
-      </section>
-      <section class="sidebar-section">
-        <h2>Personajes</h2>
-        <div id="characters-list" class="sidebar-content"></div>
-      </section>
-      <section class="sidebar-section">
-        <h2>Estado del juego</h2>
-        <div id="game-state" class="sidebar-content"></div>
-      </section>
-      <div class="sidebar-actions">
-        <button type="button" id="btn-new-game">Nueva partida</button>
-        <label class="theme-toggle">
-          <input type="checkbox" id="theme-checkbox" />
-          <span>Modo oscuro</span>
-        </label>
+    <header class="topbar">
+      <div class="topbar-left">
+        <p class="brand-title">Agora</p>
+        <p class="brand-subtitle">Motor narrativo interactivo</p>
       </div>
-    </aside>
-    <main class="main">
-      <header class="main-header">
+      <div class="topbar-center">
+        <button type="button" id="btn-history-toggle" class="btn-ghost">Historia</button>
+        <button type="button" id="btn-open-briefing" class="btn-ghost">Misión y personajes</button>
+      </div>
+      <div class="topbar-right">
+        <button type="button" id="btn-new-game">Nueva partida</button>
         <button
           type="button"
           id="user-chip"
@@ -75,14 +64,66 @@
           <button type="button" id="menu-profile" role="menuitem" disabled title="Próximamente">Perfil</button>
           <button type="button" id="menu-logout" role="menuitem">Cerrar sesión</button>
         </div>
-      </header>
-      <div id="error-banner" class="error-banner hidden"></div>
-      <div id="chat" class="chat"></div>
-      <div class="input-area">
-        <input type="text" id="player-input" placeholder="Escribe tu mensaje..." disabled />
-        <button type="button" id="btn-send" disabled>Enviar</button>
       </div>
-    </main>
+    </header>
+    <div class="workspace">
+      <main class="main">
+        <div id="error-banner" class="error-banner hidden"></div>
+        <div id="chat" class="chat"></div>
+        <div class="input-area">
+          <input type="text" id="player-input" placeholder="Escribe tu mensaje..." disabled />
+          <button type="button" id="btn-send" disabled>Enviar</button>
+        </div>
+      </main>
+      <aside class="right-rail">
+        <section class="rail-card">
+          <h2>Estado de la partida</h2>
+          <div id="game-state" class="sidebar-content"></div>
+        </section>
+        <section class="rail-card rail-metrics">
+          <div class="metric">
+            <span class="metric-label">Turno</span>
+            <strong id="status-turn">—</strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Habla</span>
+            <strong id="status-speaker">—</strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Entrada</span>
+            <strong id="status-input">—</strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Partida</span>
+            <strong id="status-ended">—</strong>
+          </div>
+        </section>
+      </aside>
+    </div>
+    <div id="story-panel-overlay" class="story-panel-overlay hidden" aria-hidden="true"></div>
+    <aside id="story-panel" class="story-panel hidden" aria-hidden="true" aria-labelledby="story-panel-title">
+      <div class="story-panel-header">
+        <h3 id="story-panel-title">Historia</h3>
+        <button type="button" id="btn-close-story-panel" class="btn-secondary">Cerrar</button>
+      </div>
+      <div id="intro-text" class="story-panel-content"></div>
+    </aside>
+    <div id="briefing-modal" class="briefing-modal hidden" role="dialog" aria-modal="true" aria-labelledby="briefing-title">
+      <div class="briefing-panel">
+        <div class="briefing-header">
+          <h2 id="briefing-title">Misión y personajes</h2>
+          <button type="button" id="btn-close-briefing" class="btn-secondary">Cerrar</button>
+        </div>
+        <section class="briefing-section">
+          <h3>Tu misión</h3>
+          <div id="mission-text" class="briefing-content"></div>
+        </section>
+        <section class="briefing-section">
+          <h3>Jugadores en escena</h3>
+          <div id="characters-list" class="briefing-content"></div>
+        </section>
+      </div>
+    </div>
     <div id="games-drawer-overlay" class="games-drawer-overlay hidden" aria-hidden="true"></div>
     <aside id="games-drawer" class="games-drawer hidden" aria-hidden="true" aria-labelledby="games-drawer-title">
       <div class="games-drawer-header">

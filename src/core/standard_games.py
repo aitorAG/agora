@@ -6,15 +6,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .game_persistence import ensure_games_structure
-
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 class StandardTemplateError(ValueError):
     """Error de validación/carga de plantilla estándar."""
 
 
 def _standard_root() -> Path:
-    return ensure_games_structure() / "standard"
+    return PROJECT_ROOT / "game_templates"
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -57,7 +56,10 @@ def _validate_setup(config: dict[str, Any]) -> dict[str, Any]:
 def list_standard_templates() -> list[dict[str, Any]]:
     """Lista templates estándar disponibles usando manifest.json."""
     templates: list[dict[str, Any]] = []
-    for child in sorted(_standard_root().iterdir(), key=lambda p: p.name):
+    root = _standard_root()
+    if not root.exists() or not root.is_dir():
+        return templates
+    for child in sorted(root.iterdir(), key=lambda p: p.name):
         if not child.is_dir():
             continue
         manifest_path = child / "manifest.json"
