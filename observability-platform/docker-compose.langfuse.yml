@@ -88,8 +88,10 @@ services:
       REDIS_PORT: 6379
       REDIS_AUTH: ${REDIS_AUTH:-myredissecret}
     networks:
-      - default
-      - agora_edge
+      default:
+      agora_edge:
+        aliases:
+          - langfuse-web
 
   postgres-langfuse:
     image: docker.io/postgres:17
