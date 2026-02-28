@@ -1,0 +1,64 @@
+name: agora-prod
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-agora}
+      POSTGRES_USER: ${POSTGRES_USER:-agora_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - agora_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agora_user} -d ${POSTGRES_DB:-agora}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - agora_net
+
+  engine:
+    build:
+      context: .
+      dockerfile: engine/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      INTERFACE_MODE: api
+      UI_TEST: "true"
+      AGORA_API_HOST: 0.0.0.0
+      AGORA_API_PORT: 8000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agora_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-agora}
+    networks:
+      - agora_net
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      engine:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+    networks:
+      - agora_net
+      - agora_edge
+
+volumes:
+  agora_pg_data:
+    driver: local
+
+networks:
+  agora_net:
+    driver: bridge
+  agora_edge:
+    name: agora_edge
+    driver: bridge

@@ -1,0 +1,45 @@
+# GAME CONFIG
+GAME_SETUP_PATH=game_setup.json
+GAME_THEME=historia satirica tetrica en Alemania siglo XVII
+MAX_TURNS=20
+NUM_ACTORS=3
+CHAR_CONTEXT_MESSAGES=12
+OBSERVER_CONTEXT_MESSAGES=10
+AGORA_MAX_MESSAGES_BEFORE_USER=3
+OBSERVER_PARALLEL_EVAL=true
+OBSERVER_ENABLE_NON_USER_CONTINUATION=false
+AGORA_STREAM_CHARACTER=yes # yes o no
+AGORA_STREAM_GUIONISTA=yes # yes o no
+
+# API CONFIG
+AGORA_API_HOST=0.0.0.0
+AGORA_API_PORT=8000
+
+# Server config (nombres en MAYÚSCULAS para que el código los encuentre)
+AGORA_LOG_LEVEL=WARNING   # DEBUG, INFO, WARNING, ERROR, CRITICAL
+INTERFACE_MODE=api # terminal o api
+UI_TEST=true # true o false
+
+# Persistence config
+PERSISTENCE_MODE=db # json o db
+DATABASE_URL=postgresql://agora_user:agora_pass@localhost:5432/agora
+
+
+DEEPSEEK_API_KEY=sk-4814a295cc1a4cb7ab7594031f6a89a5 # tu API key de DeepSeek
+
+# Auth config
+AUTH_REQUIRED=true
+#AUTH_SECRET_KEY=cambia-esto-en-produccion
+AUTH_ALGORITHM=HS256
+AUTH_TOKEN_EXPIRE_MINUTES=480
+AUTH_COOKIE_NAME=agora_auth_token
+AUTH_SEED_USERNAME=usuario
+AUTH_SEED_PASSWORD=agora123
+
+# Langfuse (opcional, para observabilidad)
+# Obtener keys en http://localhost:3000 tras desplegar Langfuse
+LANGFUSE_PUBLIC_KEY=pk-lf-74a6162d-8019-4fae-a909-9d4dd15ba868
+LANGFUSE_SECRET_KEY=sk-lf-948f1607-a545-4f15-be04-4bfb10846991
+LANGFUSE_HOST=http://localhost:3000
+DEEPSEEK_OUTPUT_COST_PER_1M_TOKENS=1.10
+DEEPSEEK_INPUT_COST_PER_1M_TOKENS=0.28

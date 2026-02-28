@@ -1,0 +1,16 @@
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE games
+    ADD COLUMN IF NOT EXISTS game_mode VARCHAR(20) NOT NULL DEFAULT 'custom';
+
+ALTER TABLE games
+    ADD COLUMN IF NOT EXISTS standard_template_id VARCHAR(120);
+
+ALTER TABLE games
+    ADD COLUMN IF NOT EXISTS template_version VARCHAR(50);
+
+CREATE INDEX IF NOT EXISTS idx_games_mode ON games(game_mode);

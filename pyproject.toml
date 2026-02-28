@@ -1,33 +1,16 @@
 [tool.poetry]
-name = "agora"
+name = "agora-root"
 version = "0.1.0"
-description = "Motor narrativo conversacional para videojuego basado en agentes"
+description = "Root launcher for Agora monorepo"
 authors = ["Agora Team"]
 readme = "README.md"
-packages = [{include = "src"}]
+packages = [{ include = "root_launcher" }]
 
 [tool.poetry.dependencies]
 python = ">=3.12,<=3.13"
-crewai = "^0.70.0"
-openai = "^1.0.0"
-python-dotenv = "^1.0.0"
-colorama = "^0.4.6"
-fastapi = "^0.115.0"
-uvicorn = {extras = ["standard"], version = "^0.32.0"}
-psycopg = {extras = ["binary"], version = "^3.3.3"}
-passlib = "1.7.4"
-python-jose = {extras = ["cryptography"], version = "^3.5.0"}
-bcrypt = "4.0.1"
-langfuse = "^2.0.0"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
 
 [tool.poetry.scripts]
-agora = "main:main"
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
+agora = "root_launcher:main"
 
 [build-system]
 requires = ["poetry-core"]

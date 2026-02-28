@@ -13,7 +13,10 @@ from ..observability import flush_langfuse
 from .routes import router, auth_router
 from .schemas import HealthResponse
 
-load_dotenv()
+_engine_root = Path(__file__).resolve().parents[2]
+_repo_root = _engine_root.parent
+load_dotenv(_engine_root / ".env")
+load_dotenv(_repo_root / ".env")
 
 
 @asynccontextmanager
@@ -42,7 +45,7 @@ def health():
 # UI de prueba solo si UI_TEST=true
 _ui_test_raw = os.getenv("UI_TEST", "")
 _ui_enabled = _ui_test_raw.strip().lower() in ("true", "1", "yes")
-_static_dir = Path(__file__).resolve().parent / "static"
+_static_dir = _repo_root / "frontend" / "static"
 if _ui_enabled:
     if _static_dir.is_dir():
         @app.get("/")
