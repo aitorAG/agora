@@ -1,6 +1,6 @@
 """Dependencias FastAPI: motor de partida singleton."""
 
-from fastapi import HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 
 from .auth import auth_required, get_user_by_username, username_from_token, auth_cookie_name
 from .schemas import AuthUserResponse
@@ -36,6 +36,7 @@ def get_current_user(request: Request) -> AuthUserResponse:
                 id=str(user.get("id", "")),
                 username=str(user.get("username", "")),
                 is_active=bool(user.get("is_active", True)),
+                role=str(user.get("role", "user")),
             )
 
     if not auth_required():
@@ -44,9 +45,19 @@ def get_current_user(request: Request) -> AuthUserResponse:
             id=str(fallback.get("id", "fallback")),
             username=str(fallback.get("username", "usuario")),
             is_active=bool(fallback.get("is_active", True)),
+            role=str(fallback.get("role", "user")),
         )
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated",
     )
+
+
+def require_admin(current_user: AuthUserResponse = Depends(get_current_user)) -> AuthUserResponse:
+    if str(current_user.role).lower() != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin required",
+        )
+    return current_user

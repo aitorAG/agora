@@ -122,6 +122,7 @@ body {
 #btn-send,
 #btn-new-game,
 #btn-create-game,
+#btn-send-feedback,
 #btn-drawer-new-game,
 .new-game-mode-actions button,
 .new-game-actions button,
@@ -526,6 +527,57 @@ body {
   color: #dce7ff;
 }
 
+.feedback-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(4, 8, 16, 0.56);
+  animation: fadeIn 200ms ease;
+}
+
+.feedback-panel {
+  width: min(560px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #0f1b31 0%, #112745 100%);
+  box-shadow: var(--shadow);
+  padding: 1rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.feedback-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.feedback-label {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.feedback-text {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--input);
+  color: var(--text);
+  padding: 0.72rem;
+  line-height: 1.44;
+}
+
+.feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .char-item {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -822,7 +874,8 @@ body {
 
   .story-panel,
   .games-drawer,
-  .briefing-panel {
+  .briefing-panel,
+  .feedback-panel {
     width: 100%;
     max-width: 100%;
   }

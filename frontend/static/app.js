@@ -39,6 +39,9 @@
       storyPanelOpen: false,
       briefingOpen: false,
       logoutLoading: false,
+      feedbackOpen: false,
+      feedbackSubmitting: false,
+      feedbackError: null,
     },
     newGame: {
       step: "mode",
@@ -112,6 +115,8 @@
   const $userName = () => $("user-name");
   const $userMenu = () => $("user-menu");
   const $menuGames = () => $("menu-games");
+  const $menuFeedbackAdmin = () => $("menu-feedback-admin");
+  const $menuObservability = () => $("menu-observability");
   const $menuLogout = () => $("menu-logout");
   const $gamesDrawer = () => $("games-drawer");
   const $gamesDrawerOverlay = () => $("games-drawer-overlay");
@@ -125,6 +130,12 @@
   const $btnOpenBriefing = () => $("btn-open-briefing");
   const $briefingModal = () => $("briefing-modal");
   const $btnCloseBriefing = () => $("btn-close-briefing");
+  const $btnOpenFeedback = () => $("btn-open-feedback");
+  const $feedbackModal = () => $("feedback-modal");
+  const $feedbackText = () => $("feedback-text");
+  const $feedbackError = () => $("feedback-error");
+  const $btnCancelFeedback = () => $("btn-cancel-feedback");
+  const $btnSendFeedback = () => $("btn-send-feedback");
   const $statusTurn = () => $("status-turn");
   const $statusSpeaker = () => $("status-speaker");
   const $statusInput = () => $("status-input");
@@ -186,6 +197,24 @@
   function currentUsername() {
     const user = store.auth.user || {};
     return String(user.username || "").trim() || "Usuario";
+  }
+
+  function setFeedbackError(msg) {
+    store.ui.feedbackError = msg || null;
+    const el = $feedbackError();
+    if (!el) return;
+    if (msg) {
+      el.textContent = msg;
+      el.classList.remove("hidden");
+    } else {
+      el.textContent = "";
+      el.classList.add("hidden");
+    }
+  }
+
+  function isCurrentUserAdmin() {
+    const user = store.auth.user || {};
+    return String(user.role || "").trim().toLowerCase() === "admin";
   }
 
   function formatUserInitials(username) {
@@ -255,6 +284,9 @@
     store.ui.gamesPanelOpen = false;
     store.ui.storyPanelOpen = false;
     store.ui.briefingOpen = false;
+    store.ui.feedbackOpen = false;
+    store.ui.feedbackSubmitting = false;
+    store.ui.feedbackError = null;
     renderAll();
   }
 
@@ -331,6 +363,9 @@
     store.ui.gamesPanelOpen = false;
     store.ui.storyPanelOpen = false;
     store.ui.briefingOpen = false;
+    store.ui.feedbackOpen = false;
+    store.ui.feedbackSubmitting = false;
+    store.ui.feedbackError = null;
     resetPartida();
     renderAll();
     store.ui.logoutLoading = false;
@@ -742,6 +777,73 @@
     if (modal) modal.classList.add("hidden");
   }
 
+  function openFeedbackModal() {
+    if (!store.session_id) {
+      showError("No hay partida activa para adjuntar el feedback.");
+      return;
+    }
+    clearError();
+    store.ui.feedbackOpen = true;
+    store.ui.feedbackSubmitting = false;
+    setFeedbackError(null);
+    const modal = $feedbackModal();
+    const text = $feedbackText();
+    if (modal) modal.classList.remove("hidden");
+    if (text) {
+      text.value = "";
+      text.focus();
+    }
+  }
+
+  function closeFeedbackModal() {
+    store.ui.feedbackOpen = false;
+    store.ui.feedbackSubmitting = false;
+    setFeedbackError(null);
+    const modal = $feedbackModal();
+    const text = $feedbackText();
+    if (modal) modal.classList.add("hidden");
+    if (text) text.value = "";
+    renderOverlayPanels();
+  }
+
+  async function submitFeedback() {
+    if (!store.auth.isAuthenticated) {
+      await handleAuthExpired();
+      return;
+    }
+    if (!store.session_id) {
+      showError("No hay partida activa para adjuntar el feedback.");
+      closeFeedbackModal();
+      return;
+    }
+    const textEl = $feedbackText();
+    const text = ((textEl && textEl.value) || "").trim();
+    if (!text) {
+      setFeedbackError("Escribe feedback antes de enviar.");
+      return;
+    }
+    store.ui.feedbackSubmitting = true;
+    setFeedbackError(null);
+    const sendBtn = $btnSendFeedback();
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Enviando...";
+    }
+    try {
+      await apiPost("/game/feedback", { session_id: store.session_id, text });
+      closeFeedbackModal();
+    } catch (e) {
+      setFeedbackError(e.message || "No se pudo enviar el feedback.");
+    } finally {
+      store.ui.feedbackSubmitting = false;
+      const btn = $btnSendFeedback();
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Enviar";
+      }
+    }
+  }
+
   function closeOnOutsideClick(e) {
     const menu = $userMenu();
     const chip = $userChip();
@@ -835,6 +937,10 @@
     name.textContent = username;
     chip.setAttribute("aria-expanded", store.ui.userMenuOpen ? "true" : "false");
     menu.classList.toggle("hidden", !store.ui.userMenuOpen);
+    const feedbackAdminBtn = $menuFeedbackAdmin();
+    if (feedbackAdminBtn) feedbackAdminBtn.classList.toggle("hidden", !isCurrentUserAdmin());
+    const observabilityBtn = $menuObservability();
+    if (observabilityBtn) observabilityBtn.classList.toggle("hidden", !isCurrentUserAdmin());
     const logoutBtn = $menuLogout();
     if (logoutBtn) {
       logoutBtn.disabled = !!store.ui.logoutLoading;
@@ -891,6 +997,8 @@
     }
     const briefing = $briefingModal();
     if (briefing) briefing.classList.toggle("hidden", !store.ui.briefingOpen);
+    const feedback = $feedbackModal();
+    if (feedback) feedback.classList.toggle("hidden", !store.ui.feedbackOpen);
   }
 
   function escapeHtml(s) {
@@ -953,6 +1061,9 @@
     if (store.screen === "login" || store.screen === "register") {
       store.ui.storyPanelOpen = false;
       store.ui.briefingOpen = false;
+      store.ui.feedbackOpen = false;
+      store.ui.feedbackSubmitting = false;
+      store.ui.feedbackError = null;
       if (loginScreen) loginScreen.classList.remove("hidden");
       if (app) app.classList.add("hidden");
       if (loginForm) loginForm.classList.toggle("hidden", store.screen !== "login");
@@ -1138,6 +1249,8 @@
   const btnBackLogin = $btnBackLogin();
   const userChip = $userChip();
   const menuGames = $menuGames();
+  const menuFeedbackAdmin = $menuFeedbackAdmin();
+  const menuObservability = $menuObservability();
   const menuLogout = $menuLogout();
   const gamesDrawer = $gamesDrawer();
   const gamesDrawerOverlay = $gamesDrawerOverlay();
@@ -1149,6 +1262,10 @@
   const btnOpenBriefing = $btnOpenBriefing();
   const btnCloseBriefing = $btnCloseBriefing();
   const briefingModal = $briefingModal();
+  const btnOpenFeedback = $btnOpenFeedback();
+  const btnCancelFeedback = $btnCancelFeedback();
+  const btnSendFeedback = $btnSendFeedback();
+  const feedbackModal = $feedbackModal();
   if (btnNew) btnNew.addEventListener("click", openNewGameModal);
   if (btnSend) btnSend.addEventListener("click", sendTurn);
   if (btnCreateGame) btnCreateGame.addEventListener("click", submitNewGameFromForm);
@@ -1271,6 +1388,18 @@
       await logout();
     });
   }
+  if (menuFeedbackAdmin) {
+    menuFeedbackAdmin.addEventListener("click", () => {
+      toggleUserMenu(false);
+      window.location.assign("/admin/feedback/");
+    });
+  }
+  if (menuObservability) {
+    menuObservability.addEventListener("click", () => {
+      toggleUserMenu(false);
+      window.location.assign("/admin/observability/");
+    });
+  }
   if (gamesDrawerOverlay) {
     gamesDrawerOverlay.addEventListener("click", () => closeGamesPanel());
   }
@@ -1301,9 +1430,23 @@
   if (btnCloseBriefing) {
     btnCloseBriefing.addEventListener("click", () => closeBriefingModal());
   }
+  if (btnOpenFeedback) {
+    btnOpenFeedback.addEventListener("click", () => openFeedbackModal());
+  }
+  if (btnCancelFeedback) {
+    btnCancelFeedback.addEventListener("click", () => closeFeedbackModal());
+  }
+  if (btnSendFeedback) {
+    btnSendFeedback.addEventListener("click", () => submitFeedback());
+  }
   if (briefingModal) {
     briefingModal.addEventListener("click", (e) => {
       if (e.target === briefingModal) closeBriefingModal();
+    });
+  }
+  if (feedbackModal) {
+    feedbackModal.addEventListener("click", (e) => {
+      if (e.target === feedbackModal) closeFeedbackModal();
     });
   }
   document.addEventListener("click", closeOnOutsideClick);
@@ -1313,6 +1456,7 @@
       closeGamesPanel();
       closeStoryPanel();
       closeBriefingModal();
+      closeFeedbackModal();
     }
   });
 

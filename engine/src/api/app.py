@@ -1,6 +1,7 @@
 """Aplicación FastAPI: motor de partida vía HTTP."""
 
 import os
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,11 +11,14 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..observability import flush_langfuse
-from .routes import router, auth_router
+from .dependencies import get_persistence_provider
+from .auth import ensure_seed_user
+from .routes import router, auth_router, authz_router, admin_router
 from .schemas import HealthResponse
 
 _engine_root = Path(__file__).resolve().parents[2]
 _repo_root = _engine_root.parent
+_logger = logging.getLogger(__name__)
 load_dotenv(_engine_root / ".env")
 load_dotenv(_repo_root / ".env")
 
@@ -22,6 +26,12 @@ load_dotenv(_repo_root / ".env")
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     try:
+        try:
+            # Intenta bootstrap de esquema y usuario admin seed.
+            get_persistence_provider()
+            ensure_seed_user()
+        except Exception as exc:
+            _logger.warning("Startup auth bootstrap skipped: %s", exc)
         yield
     finally:
         flush_langfuse()
@@ -35,6 +45,8 @@ app = FastAPI(
 )
 app.include_router(router)
 app.include_router(auth_router)
+app.include_router(authz_router)
+app.include_router(admin_router)
 
 
 @app.get("/health", response_model=HealthResponse)

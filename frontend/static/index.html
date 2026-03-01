@@ -45,6 +45,7 @@
       <div class="topbar-center">
         <button type="button" id="btn-history-toggle" class="btn-ghost">Historia</button>
         <button type="button" id="btn-open-briefing" class="btn-ghost">Misión y personajes</button>
+        <button type="button" id="btn-open-feedback" class="btn-ghost">Feedback</button>
       </div>
       <div class="topbar-right">
         <button type="button" id="btn-new-game">Nueva partida</button>
@@ -61,6 +62,8 @@
         </button>
         <div id="user-menu" class="user-menu hidden" role="menu" aria-labelledby="user-chip">
           <button type="button" id="menu-games" role="menuitem">Mis partidas</button>
+          <button type="button" id="menu-feedback-admin" role="menuitem" class="hidden">Feedback admin</button>
+          <button type="button" id="menu-observability" role="menuitem" class="hidden">Observabilidad</button>
           <button type="button" id="menu-profile" role="menuitem" disabled title="Próximamente">Perfil</button>
           <button type="button" id="menu-logout" role="menuitem">Cerrar sesión</button>
         </div>
@@ -122,6 +125,25 @@
           <h3>Jugadores en escena</h3>
           <div id="characters-list" class="briefing-content"></div>
         </section>
+      </div>
+    </div>
+    <div id="feedback-modal" class="feedback-modal hidden" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
+      <div class="feedback-panel">
+        <div class="feedback-header">
+          <h2 id="feedback-title">Enviar feedback</h2>
+        </div>
+        <label for="feedback-text" class="feedback-label">Cuéntanos tu feedback</label>
+        <textarea
+          id="feedback-text"
+          class="feedback-text"
+          maxlength="4000"
+          placeholder="Escribe aquí tu feedback..."
+        ></textarea>
+        <p id="feedback-error" class="login-error hidden"></p>
+        <div class="feedback-actions">
+          <button type="button" id="btn-cancel-feedback" class="btn-secondary">Cancelar</button>
+          <button type="button" id="btn-send-feedback">Enviar</button>
+        </div>
       </div>
     </div>
     <div id="games-drawer-overlay" class="games-drawer-overlay hidden" aria-hidden="true"></div>

@@ -16,7 +16,8 @@ services:
     ports:
       - "127.0.0.1:3030:3030"
     environment:
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      HOSTNAME: 0.0.0.0
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost/admin/observability}
       DATABASE_URL: postgresql://postgres:postgres@postgres-langfuse:5432/postgres
       SALT: ${SALT:-mysalt}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
@@ -25,6 +26,7 @@ services:
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clickhouse}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_CLUSTER_ENABLED: ${CLICKHOUSE_CLUSTER_ENABLED:-false}
       LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
       LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
       LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
@@ -44,6 +46,7 @@ services:
       REDIS_AUTH: ${REDIS_AUTH:-myredissecret}
     networks:
       - default
+      - agora_edge
 
   langfuse-web:
     image: docker.io/langfuse/langfuse:3
@@ -60,7 +63,7 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     environment:
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost/admin/observability}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-mysecret}
       DATABASE_URL: postgresql://postgres:postgres@postgres-langfuse:5432/postgres
       SALT: ${SALT:-mysalt}
@@ -70,6 +73,7 @@ services:
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clickhouse}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_CLUSTER_ENABLED: ${CLICKHOUSE_CLUSTER_ENABLED:-false}
       LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
       LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
       LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
@@ -88,7 +92,6 @@ services:
       REDIS_PORT: 6379
       REDIS_AUTH: ${REDIS_AUTH:-myredissecret}
     networks:
-      default:
       agora_edge:
         aliases:
           - langfuse-web
@@ -113,6 +116,7 @@ services:
       retries: 10
     networks:
       - default
+      - agora_edge
 
   clickhouse:
     image: docker.io/clickhouse/clickhouse-server:latest
@@ -136,6 +140,7 @@ services:
       start_period: 1s
     networks:
       - default
+      - agora_edge
 
   minio:
     image: cgr.dev/chainguard/minio:latest
@@ -158,6 +163,7 @@ services:
       start_period: 10s
     networks:
       - default
+      - agora_edge
 
   redis:
     image: docker.io/redis:7
@@ -175,6 +181,7 @@ services:
       retries: 10
     networks:
       - default
+      - agora_edge
 
 volumes:
   langfuse_postgres_data:

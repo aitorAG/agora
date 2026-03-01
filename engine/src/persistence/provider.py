@@ -47,3 +47,11 @@ class PersistenceProvider(ABC):
     @abstractmethod
     def list_games_for_user(self, username: str) -> list[dict[str, Any]]:
         """Lista partidas de un usuario."""
+
+    @abstractmethod
+    def create_feedback(self, game_id: str, user_id: str, feedback_text: str) -> str:
+        """Guarda feedback libre asociado a partida y usuario. Devuelve feedback_id."""
+
+    @abstractmethod
+    def list_feedback(self, limit: int = 500) -> list[dict[str, Any]]:
+        """Lista feedback global para panel admin (ordenado por fecha desc)."""

@@ -24,10 +24,12 @@ def assert_provider_contract(provider):
     game = provider.get_game(game_id)
     msgs = provider.get_game_messages(game_id)
     games = provider.list_games_for_user("usuario")
+    feedback_id = provider.create_feedback(game_id=game_id, user_id=game["user_id"], feedback_text="todo bien")
 
     assert game["id"] == game_id
     assert len(msgs) == 1
     assert any(g["id"] == game_id for g in games)
+    assert feedback_id
 
 
 def test_contract_db_provider_if_available():

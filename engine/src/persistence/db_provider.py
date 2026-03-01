@@ -219,7 +219,7 @@ class DatabasePersistenceProvider(PersistenceProvider):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT g.id::text, u.username, g.title, g.status, g.created_at, g.updated_at,
+                    SELECT g.id::text, g.user_id::text, u.username, g.title, g.status, g.created_at, g.updated_at,
                            g.game_mode, g.standard_template_id, g.template_version, gc.config_json, gs.state_json
                     FROM games g
                     JOIN users u ON u.id = g.user_id
@@ -234,16 +234,17 @@ class DatabasePersistenceProvider(PersistenceProvider):
                     raise KeyError(f"Game not found: {game_id}")
                 return {
                     "id": row[0],
-                    "user": row[1],
-                    "title": row[2],
-                    "status": row[3],
-                    "created_at": row[4].isoformat() if row[4] else None,
-                    "updated_at": row[5].isoformat() if row[5] else None,
-                    "game_mode": row[6] or "custom",
-                    "standard_template_id": row[7],
-                    "template_version": row[8],
-                    "config_json": row[9] or {},
-                    "state_json": row[10] or {},
+                    "user_id": row[1],
+                    "user": row[2],
+                    "title": row[3],
+                    "status": row[4],
+                    "created_at": row[5].isoformat() if row[5] else None,
+                    "updated_at": row[6].isoformat() if row[6] else None,
+                    "game_mode": row[7] or "custom",
+                    "standard_template_id": row[8],
+                    "template_version": row[9],
+                    "config_json": row[10] or {},
+                    "state_json": row[11] or {},
                 }
 
     def get_game_messages(self, game_id: str) -> list[dict[str, Any]]:
@@ -299,6 +300,55 @@ class DatabasePersistenceProvider(PersistenceProvider):
                         "template_version": r[5],
                         "created_at": r[6].isoformat() if r[6] else None,
                         "updated_at": r[7].isoformat() if r[7] else None,
+                    }
+                    for r in rows
+                ]
+
+    def create_feedback(self, game_id: str, user_id: str, feedback_text: str) -> str:
+        text = str(feedback_text or "").strip()
+        if not text:
+            raise ValueError("feedback_text cannot be empty")
+        feedback_id = str(uuid.uuid4())
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM games WHERE id = %s", (game_id,))
+                if not cur.fetchone():
+                    raise KeyError(f"Game not found: {game_id}")
+                cur.execute("SELECT 1 FROM users WHERE id = %s", (user_id,))
+                if not cur.fetchone():
+                    raise KeyError(f"User not found: {user_id}")
+                cur.execute(
+                    """
+                    INSERT INTO game_feedback (id, game_id, user_id, feedback_text, created_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (feedback_id, game_id, user_id, text, _utc_now()),
+                )
+        return feedback_id
+
+    def list_feedback(self, limit: int = 500) -> list[dict[str, Any]]:
+        safe_limit = max(1, min(int(limit), 2000))
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT f.id::text, f.game_id::text, f.user_id::text, u.username, f.feedback_text, f.created_at
+                    FROM game_feedback f
+                    JOIN users u ON u.id = f.user_id
+                    ORDER BY f.created_at DESC
+                    LIMIT %s
+                    """,
+                    (safe_limit,),
+                )
+                rows = cur.fetchall()
+                return [
+                    {
+                        "id": r[0],
+                        "game_id": r[1],
+                        "user_id": r[2],
+                        "username": r[3],
+                        "feedback_text": r[4],
+                        "created_at": r[5].isoformat() if r[5] else None,
                     }
                     for r in rows
                 ]

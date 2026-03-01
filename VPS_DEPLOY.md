@@ -41,17 +41,31 @@ Variables mínimas que debes rellenar:
 - `DATABASE_URL` (coherente con el password)
 - `DEEPSEEK_API_KEY`
 - `AUTH_SEED_PASSWORD`
+- `AGORA_DEPLOY_TARGET=vps`
+- `AGORA_BASE_URL_VPS=https://<tu-dominio>` (o `http://85.17.246.141` temporal)
+
+Para admin bootstrap (creado automáticamente incluso si recreas DB):
+
+- `AUTH_SEED_USERNAME=admin`
+- `AUTH_SEED_PASSWORD=4dmin` (cámbiala en producción)
+- `AUTH_SEED_ROLE=admin`
 
 Opcional observabilidad:
 
 - `LANGFUSE_PUBLIC_KEY`
 - `LANGFUSE_SECRET_KEY`
-- `LANGFUSE_HOST`
+- `LANGFUSE_HOST` (si lo dejas vacío se autocalcula)
 
 ## 4. Levantar stack de producción
 
 ```bash
 ./deploy/up.sh
+```
+
+En Windows (PowerShell, para pruebas locales):
+
+```powershell
+.\deploy\up.ps1
 ```
 
 Comprobar salud:
@@ -73,44 +87,24 @@ Parar stack:
 ```
 
 ## 5. Observabilidad en servidor (Langfuse)
+Con `./deploy/up.sh` se levanta también observabilidad y se autocalculan:
 
-Prepara la red compartida entre stacks (idempotente):
+- `NEXTAUTH_URL`
+- `LANGFUSE_HOST`
 
-```bash
-docker network create agora_edge || true
-```
+en función de:
 
-```bash
-docker compose -f observability-platform/docker-compose.langfuse.yml up -d
-```
+- `AGORA_DEPLOY_TARGET=local|vps`
+- `AGORA_BASE_URL_LOCAL`
+- `AGORA_BASE_URL_VPS`
 
-### Exponer Langfuse públicamente con usuario/contraseña
-
-1. Crea un subdominio `obs.<tu-dominio>` apuntando al VPS.
-2. En `.env`, configura:
-
-```bash
-NEXTAUTH_URL=https://obs.<tu-dominio>
-```
-
-3. Crea el fichero de credenciales para Nginx:
-
-```bash
-cp nginx/.htpasswd.example nginx/.htpasswd
-printf "admin:$(openssl passwd -apr1 'cambia_esta_password')\n" > nginx/.htpasswd
-```
-
-4. Levanta o reinicia el stack principal (Nginx):
-
-```bash
-./deploy/up.sh
-```
-
-Con esto, Langfuse queda accesible en `https://obs.<tu-dominio>` con Basic Auth y sin exponer `3000` públicamente.
+Acceso:
+- Usuario admin autenticado en Agora: `https://<tu-dominio>/admin/observability/`
+- Usuario no admin: `403`
 
 ## 6. TLS/HTTPS
 
-El archivo `nginx/nginx.prod.conf` está preparado para proxy HTTP básico.  
+El archivo `nginx/nginx.prod.conf` está preparado para proxy vía autorización admin (`/authz/admin`).  
 En producción real debes activar HTTPS (Let's Encrypt con certbot o usar Caddy).
 
 ## 7. Backups de base de datos
@@ -129,9 +123,18 @@ Restaurar backup:
 
 ## 8. Actualización del servicio
 
+Linux:
+
 ```bash
 git pull
 ./deploy/up.sh
+```
+
+Windows (PowerShell):
+
+```powershell
+git pull
+.\deploy\up.ps1
 ```
 
 ## 9. Checklist de hardening mínimo

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from datetime import datetime
 from dataclasses import dataclass
@@ -41,16 +40,6 @@ class GameEngine:
         self._registry: dict[str, GameSession] = {}
         self._logger = logging.getLogger(__name__)
         self._persistence = persistence_provider or create_persistence_provider()
-        self._default_max_messages_before_user = self._read_max_messages_before_user()
-
-    @staticmethod
-    def _read_max_messages_before_user() -> int:
-        raw = str(os.environ.get("AGORA_MAX_MESSAGES_BEFORE_USER", "1")).strip()
-        try:
-            value = int(raw)
-            return max(0, value)
-        except ValueError:
-            return 1
 
     def create_game(
         self,
@@ -83,7 +72,6 @@ class GameEngine:
         session = self._build_session_from_setup(
             setup=game_setup,
             max_turns=max_turns,
-            max_messages_before_user=self._default_max_messages_before_user,
         )
         self._registry[game_id] = session
         self._warmup_session(game_id, session)
@@ -116,7 +104,6 @@ class GameEngine:
         session = self._build_session_from_setup(
             setup=setup,
             max_turns=max_turns,
-            max_messages_before_user=self._default_max_messages_before_user,
         )
         self._registry[game_id] = session
         self._warmup_session(game_id, session)
@@ -126,7 +113,6 @@ class GameEngine:
         self,
         setup: dict[str, Any],
         max_turns: int,
-        max_messages_before_user: int = 3,
     ) -> GameSession:
         actors_list = setup.get("actors", [])
         if not isinstance(actors_list, list) or not actors_list:
@@ -149,6 +135,7 @@ class GameEngine:
             )
         if not actor_names:
             raise ValueError("Invalid setup actors")
+        max_messages_before_user = len(actor_names)
         observer = create_observer_agent(
             actor_names=actor_names,
             player_mission=setup.get("player_mission") or "",
@@ -264,6 +251,16 @@ class GameEngine:
     def game_belongs_to_user(self, game_id: str, username: str) -> bool:
         game = self._persistence.get_game(game_id)
         return str(game.get("user", "")) == username
+
+    def submit_feedback(self, game_id: str, user_id: str, feedback_text: str) -> str:
+        return self._persistence.create_feedback(
+            game_id=game_id,
+            user_id=user_id,
+            feedback_text=feedback_text,
+        )
+
+    def list_feedback(self, limit: int = 500) -> list[dict[str, Any]]:
+        return self._persistence.list_feedback(limit=limit)
 
     def resume_game(self, game_id: str) -> dict[str, Any]:
         """Reanuda sesión existente desde memoria o persistencia."""
@@ -396,12 +393,7 @@ class GameEngine:
             max_turns = int(state_json.get("max_turns", 10))
         except (TypeError, ValueError):
             max_turns = 10
-        try:
-            max_messages_before_user = int(
-                state_json.get("max_messages_before_user", self._default_max_messages_before_user)
-            )
-        except (TypeError, ValueError):
-            max_messages_before_user = self._default_max_messages_before_user
+        max_messages_before_user = len(actor_names)
 
         session = GameSession(
             manager=manager,

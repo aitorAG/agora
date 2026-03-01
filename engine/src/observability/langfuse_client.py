@@ -25,6 +25,22 @@ _current_observation_metadata: ContextVar[dict[str, str]] = ContextVar(
 )
 
 
+def _resolve_langfuse_host() -> str | None:
+    explicit = (os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL") or "").strip()
+    if explicit:
+        return explicit
+
+    resolved_base = (os.getenv("AGORA_RESOLVED_BASE_URL") or "").strip()
+    if resolved_base:
+        return f"{resolved_base.rstrip('/')}/admin/observability"
+
+    target = (os.getenv("AGORA_DEPLOY_TARGET", "local") or "local").strip().lower()
+    local_base = (os.getenv("AGORA_BASE_URL_LOCAL", "http://localhost") or "http://localhost").strip()
+    vps_base = (os.getenv("AGORA_BASE_URL_VPS", "http://85.17.246.141") or "http://85.17.246.141").strip()
+    base = vps_base if target == "vps" else local_base
+    return f"{base.rstrip('/')}/admin/observability"
+
+
 def get_langfuse() -> Any | None:
     """Devuelve la instancia de Langfuse si está configurada, None en caso contrario."""
     global _langfuse_instance
@@ -35,7 +51,7 @@ def get_langfuse() -> Any | None:
     try:
         from langfuse import Langfuse
 
-        host = os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL")
+        host = _resolve_langfuse_host()
         _langfuse_instance = Langfuse(host=host) if host else Langfuse()
         # En SDK v2 tracing_enabled puede existir con valor None.
         # Solo deshabilitamos explícitamente si el cliente lo marca en False.

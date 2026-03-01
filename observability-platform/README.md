@@ -5,12 +5,13 @@ Esta carpeta contiene el stack de Langfuse desacoplado del servicio principal.
 ## Arranque
 
 ```bash
-docker network create agora_edge || true
-docker compose -f observability-platform/docker-compose.langfuse.yml up -d
+./deploy/up.sh
 ```
 
 ## Exposición pública recomendada
 
 - `langfuse-web` se publica solo en `127.0.0.1:3000`.
-- El acceso externo debe hacerse a través del Nginx del stack principal, con Basic Auth.
-- El vhost público esperado es `obs.<tu-dominio>`.
+- El acceso externo debe hacerse a través del Nginx del stack principal, con autorización admin.
+- Ruta pública recomendada: `https://<tu-dominio>/admin/observability/`.
+- La URL pública se resuelve automáticamente según `AGORA_DEPLOY_TARGET` y `AGORA_BASE_URL_*`.
+- Para despliegue single-node, usa `CLICKHOUSE_CLUSTER_ENABLED=false`.

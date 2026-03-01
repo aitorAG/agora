@@ -59,6 +59,33 @@ class TurnRequest(BaseModel):
     user_exit: bool = False
 
 
+# --- POST /game/feedback ---
+class FeedbackRequest(BaseModel):
+    session_id: str = Field(min_length=1, max_length=120)
+    text: str = Field(min_length=1, max_length=4000)
+
+
+class FeedbackResponse(BaseModel):
+    feedback_id: str
+    session_id: str
+    user_id: str
+    stored: bool = True
+
+
+# --- GET /admin/feedback/list ---
+class AdminFeedbackItem(BaseModel):
+    id: str
+    game_id: str
+    user_id: str
+    username: str
+    feedback_text: str
+    created_at: Optional[str] = None
+
+
+class AdminFeedbackListResponse(BaseModel):
+    items: list[AdminFeedbackItem] = Field(default_factory=list)
+
+
 # --- GET /game/context ---
 class ContextResponse(BaseModel):
     player_mission: str = ""
@@ -134,6 +161,7 @@ class AuthUserResponse(BaseModel):
     id: str
     username: str
     is_active: bool = True
+    role: str = "user"
 
 
 class LoginResponse(BaseModel):

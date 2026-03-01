@@ -2,9 +2,10 @@
 
 import json
 import os
+from pathlib import Path
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 
 from .auth import (
     authenticate_user,
@@ -22,6 +23,10 @@ from .schemas import (
     MessageOut,
     GameResultOut,
     TurnRequest,
+    FeedbackRequest,
+    FeedbackResponse,
+    AdminFeedbackItem,
+    AdminFeedbackListResponse,
     ContextResponse,
     GameListItem,
     GameListResponse,
@@ -36,7 +41,7 @@ from .schemas import (
     LoginResponse,
     AuthUserResponse,
 )
-from .dependencies import get_engine, get_current_user
+from .dependencies import get_engine, get_current_user, require_admin, get_persistence_provider
 from ..core.standard_games import (
     StandardTemplateError,
     list_standard_templates,
@@ -66,6 +71,11 @@ def _format_sse(event: str, data: str) -> str:
 
 router = APIRouter(prefix="/game", tags=["game"])
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
+authz_router = APIRouter(prefix="/authz", tags=["authz"])
+admin_router = APIRouter(prefix="/admin", tags=["admin"])
+
+_repo_root = Path(__file__).resolve().parents[3]
+_admin_feedback_page = _repo_root / "frontend" / "static" / "admin-feedback.html"
 
 
 def _ensure_game_ownership(engine, game_id: str, username: str) -> None:
@@ -79,6 +89,7 @@ def _ensure_game_ownership(engine, game_id: str, username: str) -> None:
 
 @auth_router.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest, response: Response):
+    get_persistence_provider()
     ensure_seed_user()
     user = authenticate_user(body.username, body.password)
     if not user:
@@ -98,6 +109,7 @@ def login(body: LoginRequest, response: Response):
             id=str(user.get("id", "")),
             username=str(user.get("username", "")),
             is_active=bool(user.get("is_active", True)),
+            role=str(user.get("role", "user")),
         ),
         authenticated=True,
     )
@@ -105,6 +117,7 @@ def login(body: LoginRequest, response: Response):
 
 @auth_router.post("/register", response_model=LoginResponse, status_code=201)
 def register(body: RegisterRequest, response: Response):
+    get_persistence_provider()
     try:
         user = create_user(body.username, body.password)
     except UserAlreadyExistsError:
@@ -126,6 +139,7 @@ def register(body: RegisterRequest, response: Response):
             id=str(user.get("id", "")),
             username=str(user.get("username", "")),
             is_active=bool(user.get("is_active", True)),
+            role=str(user.get("role", "user")),
         ),
         authenticated=True,
     )
@@ -134,6 +148,28 @@ def register(body: RegisterRequest, response: Response):
 @auth_router.get("/me", response_model=AuthUserResponse)
 def me(current_user: AuthUserResponse = Depends(get_current_user)):
     return current_user
+
+
+@authz_router.get("/admin")
+def authz_admin(_current_user: AuthUserResponse = Depends(require_admin)):
+    return {"authorized": True}
+
+
+@admin_router.get("/feedback/")
+def admin_feedback_page(_current_user: AuthUserResponse = Depends(require_admin)):
+    if not _admin_feedback_page.is_file():
+        raise HTTPException(status_code=404, detail="Admin feedback page not found")
+    return FileResponse(_admin_feedback_page)
+
+
+@admin_router.get("/feedback/list", response_model=AdminFeedbackListResponse)
+def admin_feedback_list(
+    limit: int = 500,
+    engine=Depends(get_engine),
+    _current_user: AuthUserResponse = Depends(require_admin),
+):
+    items = engine.list_feedback(limit=limit)
+    return AdminFeedbackListResponse(items=[AdminFeedbackItem(**item) for item in items])
 
 
 @auth_router.post("/logout")
@@ -326,6 +362,35 @@ def turn(
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/feedback", response_model=FeedbackResponse, status_code=201)
+def submit_feedback(
+    body: FeedbackRequest,
+    engine=Depends(get_engine),
+    current_user: AuthUserResponse = Depends(get_current_user),
+):
+    """Guarda feedback libre de usuario asociado a una partida."""
+    _ensure_game_ownership(engine, body.session_id, current_user.username)
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Feedback text is required")
+    try:
+        feedback_id = engine.submit_feedback(
+            game_id=body.session_id,
+            user_id=current_user.id,
+            feedback_text=text,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return FeedbackResponse(
+        feedback_id=feedback_id,
+        session_id=body.session_id,
+        user_id=current_user.id,
+        stored=True,
     )
 
 

@@ -22,6 +22,11 @@ def normalize_username(username: str) -> str:
     return (username or "").strip().lower()
 
 
+def normalize_role(role: str | None) -> str:
+    value = (role or "user").strip().lower()
+    return "admin" if value == "admin" else "user"
+
+
 def auth_cookie_name() -> str:
     return os.getenv("AUTH_COOKIE_NAME", "agora_auth_token").strip() or "agora_auth_token"
 
@@ -90,21 +95,23 @@ def _db_connect():
 def ensure_seed_user() -> None:
     username = normalize_username(os.getenv("AUTH_SEED_USERNAME", "usuario")) or "usuario"
     password = os.getenv("AUTH_SEED_PASSWORD", "agora123").strip() or "agora123"
+    role = normalize_role(os.getenv("AUTH_SEED_ROLE", "admin"))
     pwd_hash = hash_password(password)
     with _db_connect() as conn:
         with conn.cursor() as cur:
             user_id = str(uuid.uuid4())
             cur.execute(
                 """
-                INSERT INTO users (id, username, created_at, password_hash, is_active)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO users (id, username, created_at, password_hash, is_active, role)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (username) DO UPDATE
                 SET password_hash = CASE
                     WHEN users.password_hash IS NULL OR users.password_hash = '' THEN EXCLUDED.password_hash
                     ELSE users.password_hash
-                END
+                END,
+                    role = EXCLUDED.role
                 """,
-                (user_id, username, datetime.now(timezone.utc), pwd_hash, True),
+                (user_id, username, datetime.now(timezone.utc), pwd_hash, True, role),
             )
         conn.commit()
 
@@ -115,14 +122,27 @@ def get_user_by_username(username: str) -> dict[str, Any] | None:
         return None
     with _db_connect() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT id::text, username, password_hash, is_active
-                FROM users
-                WHERE LOWER(username) = %s
-                """,
-                (normalized,),
-            )
+            try:
+                cur.execute(
+                    """
+                    SELECT id::text, username, password_hash, is_active, role
+                    FROM users
+                    WHERE LOWER(username) = %s
+                    """,
+                    (normalized,),
+                )
+            except Exception as exc:
+                sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+                if sqlstate != "42703":
+                    raise
+                cur.execute(
+                    """
+                    SELECT id::text, username, password_hash, is_active
+                    FROM users
+                    WHERE LOWER(username) = %s
+                    """,
+                    (normalized,),
+                )
             row = cur.fetchone()
     if not row:
         return None
@@ -131,6 +151,7 @@ def get_user_by_username(username: str) -> dict[str, Any] | None:
         "username": row[1],
         "password_hash": row[2] or "",
         "is_active": bool(row[3]) if row[3] is not None else True,
+        "role": normalize_role(row[4] if len(row) > 4 else "user"),
     }
 
 
@@ -152,10 +173,10 @@ def create_user(username: str, password: str) -> dict[str, Any]:
                 user_id = str(uuid.uuid4())
                 cur.execute(
                     """
-                    INSERT INTO users (id, username, created_at, password_hash, is_active)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO users (id, username, created_at, password_hash, is_active, role)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     """,
-                    (user_id, normalized, datetime.now(timezone.utc), pwd_hash, True),
+                    (user_id, normalized, datetime.now(timezone.utc), pwd_hash, True, "user"),
                 )
             conn.commit()
     except Exception as exc:
@@ -168,6 +189,7 @@ def create_user(username: str, password: str) -> dict[str, Any]:
         "username": normalized,
         "password_hash": pwd_hash,
         "is_active": True,
+        "role": "user",
     }
 
 

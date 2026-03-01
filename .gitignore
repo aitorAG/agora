@@ -1,6 +1,7 @@
 __pycache__/
 .venv/
 .env
+.env.runtime
 .vscode/
 .cursor/
 logs/

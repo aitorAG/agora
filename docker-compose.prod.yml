@@ -47,7 +47,6 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
     networks:
       - agora_net
       - agora_edge
