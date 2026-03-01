@@ -8,3 +8,4 @@ games/custom/
 .pytest_cache/
 migrations/*
 nginx/.htpasswd
+.env1
