@@ -1,0 +1,39 @@
+{
+  "titulo": "Rosas y Tierras de Invierno",
+  "descripcion_breve": "En una Alemania del siglo XII con estetica victoriana, amas a la hija del librero, pero tu madre quiere casarte con la hija de un conde.\nConvence a tu familia para evitar un matrimonio de conveniencia y salvar tu amor.",
+  "ambientacion": "Alemania alternativa del siglo XII, con ciudades amuralladas, carruajes de vapor primitivo y salones de etiqueta victoriana. El tono es romantico, melancolico y de conflicto familiar.",
+  "contexto_problema": "Estas enamorado de Elise, la hija del librero, que trabaja como florista y llena de color una ciudad gobernada por pactos de sangre y herencia. Tu madre, presionada por la nobleza local, quiere que te cases con la hija del conde de Werdheim para asegurar futuras tierras cuando el conde muera.",
+  "relevancia_jugador": "Tu decision definira no solo tu felicidad, sino el destino economico de tu casa. Si no logras convencer a tu madre, acabaras atrapado en un matrimonio sin amor y perderas a Elise para siempre.",
+  "player_mission": "Convencer a tu madre de rechazar el matrimonio de conveniencia y demostrar que un acuerdo alternativo puede proteger a la familia sin sacrificar tu vida sentimental.",
+  "narrativa_inicial": "La ciudad de Altdorn amanece entre campanadas y niebla. Las vidrieras de la catedral reflejan una luz dorada sobre los puestos del mercado, donde Elise ordena ramos de lirios blancos y rosas de invierno con manos manchadas de polen.\n\nCada tarde te escapas a la libreria de su padre para hablar de poesia y mapas antiguos. Alli todo parece posible, hasta que recuerdas la carta sellada que tu madre dejo en la mesa: el conde de Werdheim acepta la union de familias y quiere anunciar el compromiso en tres dias.\n\nLa hija del conde, Gertrud, es educada pero distante; toda la ciudad la describe como un emblema politico, no como una persona. Tu madre insiste en que el enlace resolvera deudas, garantizara tierras y salvara el apellido. Tu solo ves una vida larga y vacia.\n\nNo basta con negar la boda. Tendras que presentar una salida realista, desafiar presiones nobles y convencer a quienes creen que el amor es un lujo de pobres. El baile de invierno se acerca, y con el, el anuncio oficial.",
+  "actors": [
+    {
+      "name": "Elise",
+      "personality": "Dulce, decidida y creativa. Habla con calma, pero no acepta vivir como un secreto.",
+      "mission": "Mantener su dignidad y su amor sin convertirse en el motivo de la ruina de tu familia.",
+      "background": "Hija de un librero respetado. De dia trabaja como florista; de noche estudia botanica y simbolismo herbal en manuscritos raros.",
+      "presencia_escena": "Mercado floral, libreria familiar y jardines del claustro."
+    },
+    {
+      "name": "Madre del protagonista",
+      "personality": "Estricta, estratega y protectora. Confunde sacrificio con amor porque teme perderlo todo.",
+      "mission": "Asegurar la continuidad economica del linaje mediante el matrimonio con la casa Werdheim.",
+      "background": "Viuda que sostuvo la familia tras una mala cosecha y una guerra local. Cree que solo la nobleza puede ofrecer estabilidad.",
+      "presencia_escena": "Casa familiar, reuniones privadas con notarios y audiencias con emisarios del conde."
+    },
+    {
+      "name": "Gertrud de Werdheim",
+      "personality": "Reservada, educada y mas perspicaz de lo que aparenta.",
+      "mission": "Cumplir con el deber dinastico sin perder su propia autonomia dentro del acuerdo matrimonial.",
+      "background": "Hija unica del conde. Ha sido criada como pieza diplomatica y vive observada por toda la corte.",
+      "presencia_escena": "Salones del castillo y actos sociales donde se negocian alianzas."
+    },
+    {
+      "name": "Conde Otto de Werdheim",
+      "personality": "Formal, calculador y obsesionado con el legado.",
+      "mission": "Cerrar un matrimonio que estabilice sus dominios y garantice sucesion politica.",
+      "background": "Noble veterano con salud fragil y tierras disputadas por ramas secundarias de su familia.",
+      "presencia_escena": "Castillo de Werdheim, rodeado de asesores y escribanos."
+    }
+  ]
+}

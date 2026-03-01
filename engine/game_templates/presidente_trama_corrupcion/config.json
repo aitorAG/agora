@@ -1,0 +1,39 @@
+{
+  "titulo": "Consejo en Llamas",
+  "descripcion_breve": "Eres presidente del gobierno y una nueva trama de corrupcion amenaza con tumbarte.\nDebes armar un plan politico que calme a la opinion publica y satisfaga al menos a dos de seis ministros con agendas enfrentadas.",
+  "ambientacion": "Madrid actual, dentro del palacio de gobierno durante una semana de crisis total. El tono es thriller politico: pasillos tensos, filtraciones a prensa y alianzas cambiantes.",
+  "contexto_problema": "Se ha destapado otra trama de corrupcion que salpica a cargos de tu partido y la oposicion exige dimisiones inmediatas. Convocas un consejo extraordinario: seis ministros llegan con planes propios, algunos orientados a salvarte y otros a debilitarte para acelerar tu relevo.",
+  "relevancia_jugador": "Tu liderazgo depende de controlar el relato de la crisis sin romper la coalicion. Si no construyes una salida que contente al menos a dos ministros clave, perderas apoyos parlamentarios y la legislatura puede caer en cuestion de dias.",
+  "player_mission": "Diseñar y defender un plan de gestion de crisis que reduzca el desgaste publico y alinee a un minimo de dos ministros con intereses distintos.",
+  "narrativa_inicial": "Las pantallas del salon de crisis repiten el mismo titular: nuevos contratos amañados, nuevas grabaciones, nuevos nombres cercanos a tu partido. En la puerta ya esperan periodistas y en el congreso los socios minoritarios piden explicaciones antes de la votacion de la tarde.\n\nTe sientas frente al consejo de ministros. Nadie habla primero. La ministra de Economia quiere anunciar un paquete de empleo para cambiar la conversacion. Interior propone una ofensiva de seguridad en frontera. Sanidad exige blindar su reforma antes de apoyar nada. Presidencia sugiere sacrificar a dos cargos intermedios para ganar tiempo. Transicion digital quiere un plan tecnologico de impacto. Y el ministro de Fomento, con ambicion conocida, sonríe demasiado para ser leal.\n\nNo puedes improvisar sin coste. Cada decision alimentara una faccion y enfadara a otra. Necesitas una estrategia que no suene a humo, que responda a la crisis y que compre estabilidad interna.\n\nTienes noventa minutos antes de comparecer. Lo que decidas en esta sala puede salvar tu gobierno o acelerar su final.",
+  "actors": [
+    {
+      "name": "Ministra de Economia",
+      "personality": "Tecnica, pragmatica y orientada a resultados medibles.",
+      "mission": "Aprobar un paquete economico urgente que recupere iniciativa y tranquilice mercados.",
+      "background": "Figura con credibilidad internacional. Aceptaria respaldarte si el plan incluye reformas fiscales y empleo juvenil.",
+      "presencia_escena": "Mesa central del consejo, con informes macro y contactos directos con banca."
+    },
+    {
+      "name": "Ministro de Interior",
+      "personality": "Duro, disciplinado y con gran peso mediatico.",
+      "mission": "Reforzar su perfil de orden publico y condicionar la agenda del gobierno hacia seguridad.",
+      "background": "Ex delegado territorial. Tiene apoyo de sectores conservadores dentro del partido.",
+      "presencia_escena": "Interviene con datos policiales y propuestas de anuncios inmediatos."
+    },
+    {
+      "name": "Ministra de Sanidad",
+      "personality": "Dialogante, firme y sensible al impacto social.",
+      "mission": "Garantizar financiacion para su reforma y evitar recortes que la dejen expuesta.",
+      "background": "Procede del ala social de la coalicion y mantiene buena relacion con sindicatos sanitarios.",
+      "presencia_escena": "Negocia apoyos cruzados desde un bloque de ministros moderados."
+    },
+    {
+      "name": "Ministro de Fomento",
+      "personality": "Carismatico, ambicioso y tacticamente oportunista.",
+      "mission": "Aumentar su poder interno, incluso si eso implica erosionar tu liderazgo.",
+      "background": "Controla redes territoriales del partido y lleva meses preparandose para una sucesion.",
+      "presencia_escena": "Se muestra cooperativo en publico mientras filtra mensajes a su equipo externo."
+    }
+  ]
+}

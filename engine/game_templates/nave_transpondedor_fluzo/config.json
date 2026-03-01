@@ -1,0 +1,39 @@
+{
+  "titulo": "Ecos en la Bodega 9",
+  "descripcion_breve": "Una nave mercante transporta contenedores de especies alienigenas y alguien ha robado el transpondedor de fluzo.\nDescubre al traidor antes de que los aliens escapen y aniquilen a toda la tripulacion.",
+  "ambientacion": "Ano 2471. La carguera interestelar Nereida-12 cruza un corredor sin cobertura con luz de emergencia intermitente y pasillos llenos de escarcha. El tono es oscuro, claustrofobico y paranoico.",
+  "contexto_problema": "La nave transporta seis contenedores criogenicos con especies alienigenas catalogadas como nivel omega. El transpondedor de fluzo, que estabiliza las cerraduras de cuarentena y el sistema de rastreo, ha desaparecido. Sin ese dispositivo, los sellos fallaran en menos de tres horas y los aliens convertiran la nave en un matadero.",
+  "relevancia_jugador": "Eres el oficial de seguridad temporal asignado tras una alerta de sabotaje. Tienes acceso parcial a camaras, registros biométricos y protocolos de cierre, pero cada acusacion incorrecta consume tiempo y puede empujar a la tripulacion al motin.",
+  "player_mission": "Identificar al traidor que robo el transpondedor de fluzo, recuperar el dispositivo y restaurar los bloqueos de contencion antes del colapso de la bodega.",
+  "narrativa_inicial": "La alarma silenciosa vibra en tu muñeca: fallo de integridad en Bodega 9. Corres por un pasillo sin gravedad estable y llegas a una compuerta medio abierta. Dentro, las capsulas alienigenas laten con luz verde enferma, y una de las vitrinas muestra marcas de garras desde dentro.\n\nLa capitana te confirma lo peor: el transpondedor de fluzo no esta en su caja sellada. Sin el codigo dinamico que emite, los cerrojos perderan sincronizacion y las criaturas despertaran antes de llegar a puerto. Ninguna ayuda externa puede alcanzaros a tiempo.\n\nLa tripulacion esta partida en dos bandos. Unos culpan a ingenieria, otros sospechan de mercenarios infiltrados. Cada uno tiene una historia plausible y todos esconden algo. Tu trabajo no es solo investigar: debes decidir a quien aislar, a quien vigilar y cuando cerrar sectores enteros, aunque eso deje a gente atrapada.\n\nA dos cubiertas de distancia, algo golpea metal desde dentro de un contenedor. El cronometro de contencion ya ha empezado.",
+  "actors": [
+    {
+      "name": "Capitana Lyra Voss",
+      "personality": "Autoritaria, precisa y bajo presion extrema. Tolera la contradiccion solo si viene con pruebas.",
+      "mission": "Mantener el mando y llegar a puerto sin declarar perdida total de la nave.",
+      "background": "Veterana de rutas de alto riesgo. Acepto este transporte por necesidad financiera de su tripulacion, aunque sabia que la carga era inestable.",
+      "presencia_escena": "Puente de mando y canal de comunicaciones internas, coordinando cierres y retenes."
+    },
+    {
+      "name": "Dr. Narek Ilyan",
+      "personality": "Calmo, analitico y ambiguo. Habla en terminos tecnicos para evitar preguntas directas.",
+      "mission": "Proteger las especies alienigenas de danos irreversibles y ocultar experimentos no autorizados.",
+      "background": "Xenobiologo jefe del convoy. Ha alterado parametros de sedacion sin informar al mando para observar respuestas conductuales.",
+      "presencia_escena": "Laboratorio de cuarentena, manipulando datos biologicos y reportes medicos."
+    },
+    {
+      "name": "Jax Morren",
+      "personality": "Sarcástico, nervioso y oportunista. Siempre parece saber mas de lo que admite.",
+      "mission": "Evitar que lo incriminen y negociar su supervivencia aunque implique delatar a otros.",
+      "background": "Tecnico de propulsion con antecedentes por contrabando menor. Tiene acceso frecuente a conductos y compartimentos de mantenimiento.",
+      "presencia_escena": "Cubiertas tecnicas y ductos de servicio cercanos a la bodega sellada."
+    },
+    {
+      "name": "Teniente Aria Kade",
+      "personality": "Fria, observadora y metodica. No confia en nadie fuera de su cadena de mando.",
+      "mission": "Detectar al saboteador y ejecutar protocolo de fuerza letal si la contencion falla.",
+      "background": "Ex militar de operaciones de abordaje. Fue contratada como escolta privada por la corporacion dueña de la carga.",
+      "presencia_escena": "Puntos de control de seguridad, con escuadrones reducidos y sensores portatiles."
+    }
+  ]
+}

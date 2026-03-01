@@ -1,39 +1,39 @@
 {
-  "titulo": "Las Idus y la Varita",
-  "descripcion_breve": "Roma contiene el aliento ante las Idus de marzo y un joven forastero mueve hilos desde las sombras.\nImpide el asesinato de Julio César antes de que la historia engendre al mayor mago oscuro de todos los tiempos.",
-  "ambientacion": "Roma, marzo del año 44 a. C., en los días previos a las Idus. La ciudad está saturada de rumores, deuda política y lealtades frágiles. El tono es histórico-realista: calles abarrotadas, miedo al desorden civil y élites que confunden la patria con su patrimonio.",
-  "contexto_problema": "Tras su victoria en la guerra civil, Julio César concentra poder y despierta pánico entre senadores que temen la muerte de la República. En ese clima de conspiración aparece un forastero británico, Harry Potter, que actúa bajo identidad falsa como escriba y mensajero. Cree que matar a César evitará una larga cadena histórica que culminará en el nacimiento de Tom Ryddle, antepasado de Lord Voldemort. Lo que ignora es que su intervención puede acelerar una espiral de violencia peor.",
-  "relevancia_jugador": "Has descubierto fragmentos de la trama y, a diferencia de los conspiradores, conoces el riesgo temporal: si César muere por la mano de Harry en estas circunstancias, la historia mágica y política se desfigura de forma impredecible. Si fallas, no solo caerá un líder romano; quedará fijada una línea de sangre y resentimiento que alimentará el surgimiento de Voldemort siglos después.",
-  "player_mission": "Impedir que Harry Potter asesine a Julio César durante las Idus de marzo, neutralizando el atentado sin desencadenar una guerra civil inmediata.",
-  "narrativa_inicial": "Amanecer de marzo en Roma. El aire trae olor a aceite, hierro y humo de hornos, mientras los primeros litigantes ya se agolpan ante la Curia de Pompeyo. En las tabernas del Foro se repite la misma pregunta: ¿dictador para siempre o último servidor de la República? Nadie alza demasiado la voz, pero todos escuchan.\n\nTú llegas con una ventaja amarga. No solo conoces la conspiración senatorial: sabes que entre los hombres que rodean a César se oculta un forastero que no pertenece a este siglo. Se hace llamar Harrius Pottarus, viste como un joven escriba y evita discutir de filosofía, pero en privado pronuncia nombres que ningún romano podría entender. Tu contacto en Ostia juró haberlo visto usar un palo de madera para abrir una puerta sellada sin tocarla.\n\nSi Harry mata a César hoy, no será solo un episodio más en la decadencia de la República. Será un nudo temporal con consecuencias en la historia de la magia: la línea que culmina en Lord Voldemort quedará reforzada por una paradoja sangrienta. Tu misión no es salvar a un hombre por idealismo, sino impedir una herencia de terror.\n\nA esta hora, cuatro figuras marcan el tablero. César, cansado pero lúcido, sospecha de todos y no confía ni en su sombra. Marco Junio Bruto oscila entre el deber republicano y la culpa filial. Casio Longino ya ha decidido que la violencia es la única salida. Y Harry, convencido de que actúa por un bien mayor, prepara un golpe silencioso que ningún cronista romano sabrá describir.\n\nLas campanas de los talleres empiezan a sonar. En pocas horas, el Senado se reunirá. Todavía puedes alterar el curso de las Idus.",
+  "titulo": "Las Idus del Oraculo Carmesi",
+  "descripcion_breve": "Una sacerdotisa del Templo del Fuego Eterno exige la sangre de Cesar para abrir un ritual prohibido.\nDeten a Harry Potter antes de que Roma se convierta en el altar de una profecia devastadora.",
+  "ambientacion": "Roma, marzo del 44 a. C., convertida en una ciudad de presagios imposibles. Estandartes arden sin consumirse, estatuas lloran ceniza y en los templos circulan rumores sobre un portal celeste que se abrira en las Idus. El tono es epico, aventurero y un poco fantastico.",
+  "contexto_problema": "Harry Potter ha sido captado por Aeliana, sacerdotisa del Templo del Fuego Eterno, quien asegura que Cesar es la pieza final de un sacrificio arcano. Segun la profecia de Aeliana, si la daga correcta se hunde en el pecho del Cesar durante las Idus, Roma se convertira en el corazon de un imperio mistico invencible. Harry, agotado por visiones del futuro y culpable por tragedias que cree poder evitar, duda pero acepta participar en el ritual.",
+  "relevancia_jugador": "Tu posees el unico mapa de sellos rituales capaz de cerrar el portal del templo y sabes que Aeliana manipula a Harry con medias verdades. Si no intervienes, no solo caera Cesar: se liberara una tormenta magica que borrara linajes enteros y reescribira siglos de historia.",
+  "player_mission": "Evitar que Harry asesine a Cesar como sacrificio ritual, desenmascarar a Aeliana y sellar el Oraculo Carmesi antes del inicio de las Idus.",
+  "narrativa_inicial": "Roma despierta con un cielo rojo cobre. Sobre el Foro sobrevuelan cuervos en circulos perfectos y los augures juran haber visto una puerta de fuego reflejada en el Tiber. En cada callejon hay soldados nerviosos, senadores armados y peregrinos que murmuran el nombre del Oraculo Carmesi.\n\nHas seguido una pista hasta las catacumbas bajo el Templo del Fuego Eterno. Alli viste a Harry Potter de rodillas ante una sacerdotisa envuelta en velos dorados. Ella le mostro runas antiguas y le susurro que la muerte de Cesar no seria un crimen, sino la llave para salvar el mundo. Harry no respondio, pero apreto la varita con una conviccion peligrosa.\n\nTu no puedes permitirlo. Si la sangre de Cesar cae sobre el circulo ritual, una grieta temporal tragara Roma y desatara guerras magicas en cada era. Debes moverte entre conspiradores romanos, guardianes del templo y hechiceros ocultos en el Senado. Cada minuto acerca las Idus.\n\nEn la superficie, Bruto y Casio preparan la conspiracion politica. Bajo tierra, Aeliana prepara algo mucho peor. Cuando suenen los cuernos del alba, ambas tramas chocaran. Tu decides cual de las dos sobrevive.",
   "actors": [
     {
       "name": "Harry Potter",
-      "personality": "Reservado, obstinado y cargado de culpa. Habla evitando detalles personales. Su moral es utilitarista en esta misión: acepta el daño inmediato si cree que evitará un mal histórico mayor.",
-      "mission": "Matar a Julio César en un momento de confusión durante la sesión del Senado, dejando la escena como un crimen político romano y sin revelar su naturaleza anacrónica.",
-      "background": "Llegó a Roma por un accidente de magia temporal durante una investigación sobre linajes oscuros. Concluyó que César es un antepasado remoto clave en la cadena genealógica que conduce a Tom Ryddle. Actúa solo y desconfía tanto de senadores como de soldados.",
-      "presencia_escena": "Se mueve entre escribas, correos y asistentes del Senado con tablillas de cera, observando accesos, guardias y rutas de escape."
+      "personality": "Valiente, impulsivo y emocionalmente dividido. Quiere hacer lo correcto, pero su culpa lo vuelve vulnerable a profecias extremas.",
+      "mission": "Cumplir el sacrificio de Cesar durante las Idus creyendo que asi evitara un colapso mayor en el futuro.",
+      "background": "Atrapado por una fractura temporal, encontro en Roma a Aeliana, quien le mostro visiones de guerras futuras. Convencido de que solo un acto radical puede impedirlas, acepto colaborar en secreto.",
+      "presencia_escena": "Aparece entre mensajeros del Senado y en tuneles subterraneos del templo, trazando rutas de entrada y salida para la ceremonia."
     },
     {
       "name": "Julio César",
-      "personality": "Carismático, pragmático y ferozmente consciente de su imagen. Tolera la crítica solo cuando le resulta útil. Mide a las personas por su utilidad política inmediata.",
-      "mission": "Sobrevivir a las tensiones del día y consolidar su autoridad sin provocar una revuelta abierta del Senado.",
-      "background": "Dictador de Roma tras años de guerra civil. Ha reformado instituciones, ganado lealtades populares y sembrado odio en sectores de la aristocracia. Sabe que hay complots, pero subestima la coordinación real de sus enemigos.",
-      "presencia_escena": "En su domus al amanecer y más tarde en la Curia, rodeado de lictores, secretarios y peticionarios."
+      "personality": "Magnetico, ambicioso y estratega. Desprecia el miedo, pero empieza a creer que esta rodeado por fuerzas que no entiende.",
+      "mission": "Sobrevivir al doble complot del Senado y del templo para consolidar su poder sin mostrar debilidad.",
+      "background": "Gobierna Roma tras la guerra civil. Ha vencido ejércitos, pero no conoce el lenguaje de la magia ni el alcance del ritual que lo tiene como objetivo.",
+      "presencia_escena": "En su domus y luego en la Curia de Pompeyo, custodiado por lictores mientras consulta augures inquietos."
     },
     {
-      "name": "Marco Junio Bruto",
-      "personality": "Reflexivo, contenido y moralmente dividido. Busca justificar cada decisión como deber cívico, aunque el miedo y la vanidad interfieren en su juicio.",
-      "mission": "Participar en la caída de César sin destruir su propia legitimidad pública y moral.",
-      "background": "Senador respetado, vinculado al círculo de César pero presionado por una facción republicana que lo ve como símbolo necesario del complot. Su prestigio depende de aparecer como patriota, no como asesino.",
-      "presencia_escena": "Entre senadores indecisos, negociando lealtades y evaluando si el golpe debe ejecutarse hoy o posponerse."
+      "name": "Aeliana, Sacerdotisa del Fuego Eterno",
+      "personality": "Hipnotica, fanatica y calculadora. Habla en tono solemne y convierte cada duda en una prueba de destino.",
+      "mission": "Consumir la sangre de Cesar en el altar para invocar el Oraculo Carmesi y dominar la voluntad de Roma.",
+      "background": "Ultima heredera de un culto antiguo expulsado del poder. Durante anos preparo reliquias, adeptos y una profecia manipulada para recuperar control politico y espiritual.",
+      "presencia_escena": "Permanece en camaras rituales bajo el templo, rodeada de acólitos y guardianes con mascaras de bronce."
     },
     {
       "name": "Cayo Casio Longino",
-      "personality": "Seco, calculador y desconfiado. Ve la política como lucha de fuerza y oportunidad. Tolera mal la indecisión y desprecia los escrúpulos tardíos.",
-      "mission": "Garantizar que el atentado contra César ocurra en las Idus, neutralizando cualquier intento de aplazar o sabotear el plan.",
-      "background": "General y senador experimentado, resentido por la concentración de poder de César. Es el principal arquitecto operativo de la conspiración y controla a los ejecutores más violentos.",
-      "presencia_escena": "En pasillos y pórticos cercanos a la Curia, distribuyendo instrucciones discretas y verificando posiciones."
+      "personality": "Frio, disciplinado y oportunista. Si detecta caos, lo usa para adelantar su propia agenda republicana.",
+      "mission": "Ejecutar el complot senatorial mientras aprovecha el desorden del templo para culpar a facciones rivales.",
+      "background": "Arquitecto militar de la conspiracion contra Cesar. No cree en profecias, pero reconoce que una ciudad aterrorizada es facil de controlar.",
+      "presencia_escena": "Controla corredores de la Curia y envía emisarios a los alrededores del templo para explotar cualquier incidente."
     }
   ]
 }
