@@ -87,6 +87,7 @@ def run_one_step(
 
     if current_next_action == "character":
         state = manager.state
+        current_turn = int(state.get("turn", 0))
         continuation_decision = state.get("metadata", {}).get("continuation_decision", {})
         who = continuation_decision.get("who_should_respond", "")
         if who and who in character_agents:
@@ -97,8 +98,10 @@ def run_one_step(
             "character",
             metadata={
                 "agent_name": agent.name,
+                "agent_type": "actor",
+                "agent_step": "response",
                 "game_id": game_id,
-                "turn": turn,
+                "turn": current_turn,
             },
         ):
             result = run_character_response(
@@ -128,12 +131,15 @@ def run_one_step(
             manager.increment_turn()
 
     state = manager.state
+    current_turn = int(state.get("turn", 0))
     with span_agent(
         "observer",
         metadata={
             "agent_name": "Observer",
+            "agent_type": "observer",
+            "agent_step": "analysis",
             "game_id": game_id,
-            "turn": turn,
+            "turn": current_turn,
         },
     ):
         obs_result = run_observer_tasks(observer_agent, state)
@@ -201,13 +207,23 @@ def run_game_loop(
         if next_action == "character":
             logger.info("Phase: character")
             state = manager.state
+            current_turn = int(state.get("turn", 0))
             continuation_decision = state.get("metadata", {}).get("continuation_decision", {})
             who = continuation_decision.get("who_should_respond", "")
             if who and who in character_agents:
                 agent = character_agents[who]
             else:
                 agent = character_agents[agent_names_ordered[0]]
-            result = run_character_response(agent, state, stream=stream_character)
+            with span_agent(
+                "character",
+                metadata={
+                    "agent_name": agent.name,
+                    "agent_type": "actor",
+                    "agent_step": "response",
+                    "turn": current_turn,
+                },
+            ):
+                result = run_character_response(agent, state, stream=stream_character)
             if "error" in result:
                 output_handler.on_error(f"Error en {agent.name}: {result['error']}")
                 return manager.state
@@ -232,7 +248,17 @@ def run_game_loop(
                 manager.increment_turn()
 
         state = manager.state
-        obs_result = run_observer_tasks(observer_agent, state)
+        current_turn = int(state.get("turn", 0))
+        with span_agent(
+            "observer",
+            metadata={
+                "agent_name": "Observer",
+                "agent_type": "observer",
+                "agent_step": "analysis",
+                "turn": current_turn,
+            },
+        ):
+            obs_result = run_observer_tasks(observer_agent, state)
         logger.info("Observer finished")
         if obs_result.get("update_metadata"):
             if obs_result.get("analysis") is not None:

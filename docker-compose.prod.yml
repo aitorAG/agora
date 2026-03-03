@@ -17,6 +17,7 @@ services:
       retries: 20
     networks:
       - agora_net
+      - agora_edge
 
   engine:
     build:
@@ -28,14 +29,18 @@ services:
         condition: service_healthy
     env_file:
       - .env
+      - .env.runtime
     environment:
+      AGORA_RUNTIME_CONTEXT: docker
       INTERFACE_MODE: api
       UI_TEST: "true"
       AGORA_API_HOST: 0.0.0.0
       AGORA_API_PORT: 8000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-agora_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-agora}
+      TELEMETRY_ENABLED: ${TELEMETRY_ENABLED:-true}
+      TELEMETRY_ENDPOINT: http://telemetry:8081/v1/events
     networks:
       - agora_net
+      - agora_edge
 
   nginx:
     image: nginx:1.27-alpine
@@ -60,4 +65,4 @@ networks:
     driver: bridge
   agora_edge:
     name: agora_edge
-    driver: bridge
+    external: true

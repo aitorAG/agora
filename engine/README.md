@@ -93,7 +93,7 @@ DATABASE_URL=postgresql://agora_user:agora_pass@localhost:5432/agora
 ```
    Las llamadas al modelo se realizan con el **cliente OpenAI** apuntando al endpoint de DeepSeek (`https://api.deepseek.com`); el adaptador central está en `src/agents/deepseek_adapter.py` y usa esta variable de entorno. La persistencia de partidas y usuarios es DB-only y requiere `DATABASE_URL`.
 
-## Docker y Observabilidad (Langfuse)
+## Docker y Observabilidad
 
 El proyecto incluye un `docker-compose.yml` que levanta la infraestructura necesaria:
 
@@ -104,43 +104,33 @@ docker compose up -d
 Se inician:
 
 - **Postgres** (Agora): `localhost:5432` — base de datos para partidas y usuarios
-- **Langfuse** (observabilidad): UI en http://localhost:3000 — trazas, tokens y tiempos de ejecución
-- **Postgres Langfuse**, ClickHouse, Redis, MinIO — servicios internos de Langfuse
+- **Telemetry Service** (observabilidad): UI en http://localhost:8081 — costes, tiempos y tokens agregados
 
-Esperar 2-3 minutos hasta que `langfuse-web` muestre "Ready" en los logs.
+Esperar hasta que `telemetry` muestre `healthy`.
 
-### Configurar Langfuse (opcional)
+### Configurar observabilidad (opcional)
 
 Para habilitar la observabilidad en Agora:
 
-1. Crear cuenta en la UI de Langfuse (http://localhost:3000)
-2. Crear un proyecto
-3. Copiar las credenciales (Public Key, Secret Key) del proyecto
-4. Añadir a `.env`:
+1. Define una clave de ingesta compartida en `.env`:
 
 ```
-LANGFUSE_PUBLIC_KEY=pk-lf-...
-LANGFUSE_SECRET_KEY=sk-lf-...
-LANGFUSE_HOST=http://localhost:3000
-# Opcional: si no usas LANGFUSE_HOST
-# LANGFUSE_BASE_URL=http://localhost:3000
-# Opcional: pricing DeepSeek para calcular gasto en Langfuse
+TELEMETRY_ENABLED=true
+TELEMETRY_INGEST_KEY=change_me_ingest_key
+# Opcional: pricing DeepSeek para calcular gasto
 DEEPSEEK_INPUT_COST_PER_1M_TOKENS=0.27
 DEEPSEEK_OUTPUT_COST_PER_1M_TOKENS=1.10
 ```
 
-O usar `LANGFUSE_BASE_URL` en lugar de `LANGFUSE_HOST`. Si no se configuran, Agora funciona sin observabilidad.
-Para visualizar gasto aunque Langfuse no tenga pricing nativo del modelo, Agora envía `cost_details` por llamada usando las tarifas anteriores.
+Si no se configura, Agora sigue funcionando y solo desactiva envío de métricas.
 
 ### Producción
 
 Para producción, actualizar los secrets en `.env` o variables de entorno:
 
-- `ENCRYPTION_KEY`: generar con `openssl rand -hex 32`
-- `NEXTAUTH_SECRET`: valor aleatorio seguro
-- `POSTGRES_PASSWORD`, `CLICKHOUSE_PASSWORD`, `REDIS_AUTH`, `MINIO_ROOT_PASSWORD`: contraseñas fuertes
+- `POSTGRES_PASSWORD`, `AUTH_SEED_PASSWORD`, `TELEMETRY_INGEST_KEY`: contraseñas fuertes
 
-Referencias: [Langfuse Self-Hosting](https://langfuse.com/self-hosting/deployment/docker-compose), [PRD Observabilidad](.cursor/PRD-observabilidad-langfuse-despliegue.md).
+Referencias: [PRD de observabilidad](../.cursor/PRD_OBSERVABILITY_ROBUST_DECISION.md).
 
 ## Uso
 

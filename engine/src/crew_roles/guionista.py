@@ -22,7 +22,11 @@ def run_setup_task(
     """Ejecuta la tarea de generar setup. Entrada: theme, num_actors. Salida: game_setup dict."""
     with span_agent(
         "guionista_setup",
-        metadata={"agent_name": "Guionista", "agent_step": "setup"},
+        metadata={
+            "agent_name": "Guionista",
+            "agent_type": "guionista",
+            "agent_step": "setup",
+        },
     ):
         return agent.generate_setup(
             theme=theme, num_actors=num_actors, stream=stream, stream_sink=stream_sink

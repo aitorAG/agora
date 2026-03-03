@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, Response
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, RedirectResponse
 
 from .auth import (
     authenticate_user,
@@ -47,6 +47,7 @@ from ..core.standard_games import (
     list_standard_templates,
     load_standard_template,
 )
+from ..observability import record_user_login
 
 
 def _serialize_message(m: dict) -> dict:
@@ -95,6 +96,10 @@ def login(body: LoginRequest, response: Response):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    record_user_login(
+        user_id=str(user.get("id", "")),
+        username=str(user.get("username", "")),
+    )
     token = create_access_token(str(user.get("username", "")))
     response.set_cookie(
         key=auth_cookie_name(),
@@ -160,6 +165,12 @@ def admin_feedback_page(_current_user: AuthUserResponse = Depends(require_admin)
     if not _admin_feedback_page.is_file():
         raise HTTPException(status_code=404, detail="Admin feedback page not found")
     return FileResponse(_admin_feedback_page)
+
+
+@admin_router.get("/observability/")
+def admin_observability_redirect(_current_user: AuthUserResponse = Depends(require_admin)):
+    target = (os.getenv("AGORA_OBSERVABILITY_URL") or "http://localhost:8081").strip()
+    return RedirectResponse(url=target, status_code=307)
 
 
 @admin_router.get("/feedback/list", response_model=AdminFeedbackListResponse)

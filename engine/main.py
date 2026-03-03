@@ -9,16 +9,12 @@ Valores inválidos provocan error claro y salida con código 1.
 
 import os
 import sys
-from pathlib import Path
 
-from dotenv import load_dotenv
 from src.api.auth import ensure_seed_user
+from src.config import bootstrap_runtime_config
 from src.persistence import create_persistence_provider
 
-_engine_root = Path(__file__).resolve().parent
-_repo_root = _engine_root.parent
-load_dotenv(_engine_root / ".env")
-load_dotenv(_repo_root / ".env")
+bootstrap_runtime_config()
 
 VALID_MODES = ("terminal", "api")
 

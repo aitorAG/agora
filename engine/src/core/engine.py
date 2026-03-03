@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from queue import Empty, Queue
 from threading import Thread
 from typing import Any, Iterator, Literal
+from uuid import uuid4
 
 from ..state import ConversationState
 from ..manager import ConversationManager
@@ -17,7 +18,7 @@ from ..crew_roles.character import create_character_agent
 from ..crew_roles.observer import create_observer_agent
 from ..crew_roles.director import run_one_step
 from ..persistence import PersistenceProvider, create_persistence_provider
-from ..observability import trace_interaction, trace_setup
+from ..observability import emit_event, trace_interaction, trace_setup
 
 
 @dataclass
@@ -53,7 +54,8 @@ class GameEngine:
         Si stream_sink es un Callable[[str], None], se invoca con cada chunk de la narrativa (JSON) durante la generación."""
         guionista = create_guionista_agent()
         stream = stream_sink is not None
-        with trace_setup(user_id=username or "", name="setup"):
+        setup_interaction_id = f"setup:{uuid4()}"
+        with trace_setup(user_id=username or "", interaction_id=setup_interaction_id, name="setup"):
             game_setup = run_setup_task(
                 guionista,
                 theme=theme,
@@ -68,6 +70,15 @@ class GameEngine:
             config_json=dict(game_setup),
             username=username,
             game_mode="custom",
+        )
+        emit_event(
+            "link_interaction",
+            {
+                "interaction_id": setup_interaction_id,
+                "game_id": game_id,
+                "user_id": username or "",
+                "status": "ok",
+            },
         )
         session = self._build_session_from_setup(
             setup=game_setup,
@@ -154,7 +165,7 @@ class GameEngine:
     def _warmup_session(self, game_id: str, session: GameSession) -> None:
         """Avanza al primer punto de input del usuario y persiste snapshot inicial."""
         game = self._persistence.get_game(game_id)
-        user_id = str(game.get("user", "")) if game else ""
+        user_id = str(game.get("user_id") or game.get("user") or "") if game else ""
         interaction_id = f"{game_id}:warmup"
         with trace_interaction(game_id, user_id, interaction_id, name="warmup"):
             result = run_one_step(
@@ -425,7 +436,7 @@ class GameEngine:
         """
         session = self._get_session(game_id)
         game = self._persistence.get_game(game_id)
-        user_id = str(game.get("user", "")) if game else ""
+        user_id = str(game.get("user_id") or game.get("user") or "") if game else ""
         state = session.manager.state
         interaction_id = f"{game_id}:turn:{state.get('turn', 0)}"
         all_events: list = []
@@ -488,7 +499,7 @@ class GameEngine:
             return [], session.manager.state, False, True
 
         game = self._persistence.get_game(game_id)
-        user_id = str(game.get("user", "")) if game else ""
+        user_id = str(game.get("user_id") or game.get("user") or "") if game else ""
         interaction_id = f"{game_id}:tick:{session.manager.state.get('turn', 0)}"
         t0 = time.perf_counter()
         with trace_interaction(game_id, user_id, interaction_id, name="tick"):
@@ -530,7 +541,7 @@ class GameEngine:
         """
         session = self._get_session(game_id)
         game = self._persistence.get_game(game_id)
-        user_id = str(game.get("user", "")) if game else ""
+        user_id = str(game.get("user_id") or game.get("user") or "") if game else ""
         interaction_id = f"{game_id}:turn:{session.manager.state.get('turn', 0)}"
         queue: Queue = Queue()
 

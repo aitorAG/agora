@@ -1,21 +1,25 @@
-"""Módulo de observabilidad con Langfuse."""
+"""Módulo de observabilidad del engine."""
 
-from .langfuse_client import (
-    get_langfuse,
+from .runtime import (
+    GenerationHandle,
+    end_generation,
+    emit_event,
+    flush_observability,
+    record_user_login,
+    span_agent,
+    start_generation,
     trace_interaction,
     trace_setup,
-    span_agent,
-    flush_langfuse,
-    start_generation,
-    end_generation,
 )
 
 __all__ = [
-    "get_langfuse",
+    "GenerationHandle",
     "trace_interaction",
     "trace_setup",
     "span_agent",
-    "flush_langfuse",
+    "flush_observability",
+    "emit_event",
+    "record_user_login",
     "start_generation",
     "end_generation",
 ]

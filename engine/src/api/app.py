@@ -5,12 +5,14 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..observability import flush_langfuse
+from ..config import bootstrap_runtime_config
+bootstrap_runtime_config()
+
+from ..observability import flush_observability
 from .dependencies import get_persistence_provider
 from .auth import ensure_seed_user
 from .routes import router, auth_router, authz_router, admin_router
@@ -19,8 +21,6 @@ from .schemas import HealthResponse
 _engine_root = Path(__file__).resolve().parents[2]
 _repo_root = _engine_root.parent
 _logger = logging.getLogger(__name__)
-load_dotenv(_engine_root / ".env")
-load_dotenv(_repo_root / ".env")
 
 
 @asynccontextmanager
@@ -34,7 +34,7 @@ async def _lifespan(_app: FastAPI):
             _logger.warning("Startup auth bootstrap skipped: %s", exc)
         yield
     finally:
-        flush_langfuse()
+        flush_observability()
 
 
 app = FastAPI(

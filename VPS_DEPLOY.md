@@ -31,18 +31,123 @@ cd agora
 ## 3. Preparar variables de entorno
 
 ```bash
-cp ".env.prod copy.example" .env
+cp .env.example .env
 nano .env
+```
+
+`.env.example` es ahora la plantilla canónica del repo.  
+`".env.prod copy.example"` queda como referencia heredada, pero ya no debería ser tu punto de partida.
+
+### `.env` mínimo recomendado y de dónde sale cada valor
+
+Variables obligatorias:
+
+- `AGORA_DEPLOY_TARGET=vps`
+  - Lo defines tú.
+  - En tu PC usa `local`; en el VPS usa `vps`.
+- `AGORA_PUBLIC_URL=https://<tu-dominio>`
+  - Sale de tu dominio público.
+  - Si todavía no tienes dominio, usa temporalmente `http://85.17.246.141`.
+- `POSTGRES_PASSWORD=<password fuerte>`
+  - Lo defines tú.
+  - Recomendado: `openssl rand -hex 24`.
+- `DEEPSEEK_API_KEY=<tu clave>`
+  - Sale del panel de DeepSeek.
+- `AUTH_SEED_USERNAME=admin`
+  - Lo defines tú.
+- `AUTH_SEED_PASSWORD=<password admin fuerte>`
+  - Lo defines tú.
+  - Recomendado: no dejar `4dmin` en producción.
+- `AUTH_SEED_ROLE=admin`
+  - Lo defines tú.
+- `TELEMETRY_ENABLED=true`
+  - Lo defines tú.
+- `TELEMETRY_INGEST_KEY=<clave fuerte>`
+  - Lo defines tú.
+  - Recomendado: `openssl rand -hex 24`.
+
+Variables opcionales pero recomendadas:
+
+- `DATABASE_URL`
+  - Solo si quieres sobrescribir la BBDD interna y apuntar a una externa.
+  - Si no, se calcula automáticamente.
+- `TELEMETRY_ENDPOINT`
+  - Solo si quieres sobrescribir el endpoint de ingesta.
+  - Si no, se calcula automáticamente.
+- `DEEPSEEK_INPUT_COST_PER_1M_TOKENS`
+- `DEEPSEEK_OUTPUT_COST_PER_1M_TOKENS`
+  - Salen de la tabla de pricing del proveedor LLM.
+  - Se usan para calcular coste en el dashboard.
+
+Si quieres usar Infisical para no depender del `.env` como fuente final:
+
+- `INFISICAL_ENABLED=true`
+  - Lo defines tú.
+- `INFISICAL_HOST=https://eu.infisical.com`
+  - Sale de tu región (en tu caso UE).
+- `INFISICAL_CLIENT_ID`
+  - Sale de `Universal Auth > Identity > Client ID`.
+- `INFISICAL_CLIENT_SECRET`
+  - Sale de `Universal Auth > Identity > Client Secret`.
+- `INFISICAL_PROJECT_ID`
+  - Sale de `Project Settings > General`.
+- `INFISICAL_ENV=prod`
+  - Sale del nombre del environment en Infisical.
+- `INFISICAL_SECRET_PATH=/`
+  - La carpeta donde guardas los secrets; normalmente `/`.
+
+Con `INFISICAL_ENABLED=true`, el deploy genera `.env.runtime` y añade ahí los secrets traídos desde Infisical antes de levantar contenedores.
+
+Secrets recomendados dentro de Infisical:
+
+- `POSTGRES_PASSWORD`
+- `DEEPSEEK_API_KEY`
+- `AUTH_SEED_PASSWORD`
+- `TELEMETRY_INGEST_KEY`
+- `DEEPSEEK_INPUT_COST_PER_1M_TOKENS`
+- `DEEPSEEK_OUTPUT_COST_PER_1M_TOKENS`
+
+### Copiar tu `.env` local al VPS
+
+Ejecuta este comando en tu **ordenador local** (no dentro de la sesión SSH):
+
+```bash
+scp "C:\Users\PC\Proyectos\Agora\.env" st4bros@85.17.246.141:/srv/agora/.env
+```
+
+En la VPS, verifica:
+
+```bash
+cd /srv/agora
+ls -l .env
+```
+
+Para escribir/actualizar variables directamente en `.env`:
+
+```bash
+cd /srv/agora
+grep -q '^AGORA_DEPLOY_TARGET=' .env \
+  && sed -i 's/^AGORA_DEPLOY_TARGET=.*/AGORA_DEPLOY_TARGET=vps/' .env \
+  || echo 'AGORA_DEPLOY_TARGET=vps' >> .env
+
+grep -q '^TELEMETRY_INGEST_KEY=' .env \
+  && sed -i 's/^TELEMETRY_INGEST_KEY=.*/TELEMETRY_INGEST_KEY=change_me_ingest_key/' .env \
+  || echo 'TELEMETRY_INGEST_KEY=change_me_ingest_key' >> .env
+
+grep -q '^AGORA_PUBLIC_URL=' .env \
+  && sed -i 's#^AGORA_PUBLIC_URL=.*#AGORA_PUBLIC_URL=http://85.17.246.141#' .env \
+  || echo 'AGORA_PUBLIC_URL=http://85.17.246.141' >> .env
 ```
 
 Variables mínimas que debes rellenar:
 
 - `POSTGRES_PASSWORD`
-- `DATABASE_URL` (coherente con el password)
 - `DEEPSEEK_API_KEY`
 - `AUTH_SEED_PASSWORD`
 - `AGORA_DEPLOY_TARGET=vps`
-- `AGORA_BASE_URL_VPS=https://<tu-dominio>` (o `http://85.17.246.141` temporal)
+- `AGORA_PUBLIC_URL=https://<tu-dominio>` (o `http://85.17.246.141` temporal)
+- `TELEMETRY_ENABLED=true`
+- `TELEMETRY_INGEST_KEY=<clave fuerte>`
 
 Para admin bootstrap (creado automáticamente incluso si recreas DB):
 
@@ -50,17 +155,30 @@ Para admin bootstrap (creado automáticamente incluso si recreas DB):
 - `AUTH_SEED_PASSWORD=4dmin` (cámbiala en producción)
 - `AUTH_SEED_ROLE=admin`
 
-Opcional observabilidad:
+Opcional Infisical:
 
-- `LANGFUSE_PUBLIC_KEY`
-- `LANGFUSE_SECRET_KEY`
-- `LANGFUSE_HOST` (si lo dejas vacío se autocalcula)
+- `INFISICAL_ENABLED=true`
+- `INFISICAL_HOST=https://eu.infisical.com`
+- `INFISICAL_CLIENT_ID`
+- `INFISICAL_CLIENT_SECRET`
+- `INFISICAL_PROJECT_ID`
+- `INFISICAL_ENV=prod`
+- `INFISICAL_SECRET_PATH=/`
 
 ## 4. Levantar stack de producción
 
 ```bash
-./deploy/up.sh
+bash ./deploy/up.sh
 ```
+
+Qué hace:
+
+- Si ya existe un `postgres` en ejecución, crea un backup previo en `backups/predeploy/`
+- Genera `.env.runtime` a partir de `.env`
+- Resuelve URLs según `AGORA_DEPLOY_TARGET`
+- Si `INFISICAL_ENABLED=true`, trae secrets y los añade a `.env.runtime`
+- Levanta observabilidad
+- Levanta backend + nginx
 
 En Windows (PowerShell, para pruebas locales):
 
@@ -71,36 +189,39 @@ En Windows (PowerShell, para pruebas locales):
 Comprobar salud:
 
 ```bash
-./deploy/healthcheck.sh
+bash ./deploy/healthcheck.sh
 ```
 
 Logs:
 
 ```bash
-./deploy/logs.sh
+bash ./deploy/logs.sh
 ```
 
 Parar stack:
 
 ```bash
-./deploy/down.sh
+bash ./deploy/down.sh
 ```
 
-## 5. Observabilidad en servidor (Langfuse)
-Con `./deploy/up.sh` se levanta también observabilidad y se autocalculan:
-
-- `NEXTAUTH_URL`
-- `LANGFUSE_HOST`
+## 5. Observabilidad en servidor
+Con `bash ./deploy/up.sh` se levanta también el servicio de telemetría.
 
 en función de:
 
 - `AGORA_DEPLOY_TARGET=local|vps`
-- `AGORA_BASE_URL_LOCAL`
-- `AGORA_BASE_URL_VPS`
+- `AGORA_PUBLIC_URL` (solo en VPS)
 
 Acceso:
 - Usuario admin autenticado en Agora: `https://<tu-dominio>/admin/observability/`
 - Usuario no admin: `403`
+
+La telemetría muestra:
+
+- tiempos por llamada
+- tokens por llamada
+- costes por llamada
+- agregados por usuario, partida, turno y agente
 
 ## 6. TLS/HTTPS
 
@@ -112,13 +233,19 @@ En producción real debes activar HTTPS (Let's Encrypt con certbot o usar Caddy)
 Crear backup:
 
 ```bash
-./deploy/backup_db.sh
+bash ./deploy/backup_db.sh
+```
+
+En Windows (PowerShell):
+
+```powershell
+.\deploy\backup_db.ps1
 ```
 
 Restaurar backup:
 
 ```bash
-./deploy/restore_db.sh /ruta/al/backup.sql.gz
+bash ./deploy/restore_db.sh /ruta/al/backup.sql.gz
 ```
 
 ## 8. Actualización del servicio
@@ -127,8 +254,32 @@ Linux:
 
 ```bash
 git pull
-./deploy/up.sh
+bash ./deploy/up.sh
 ```
+
+### Forzar modo VPS y recrear servicios sin perder BBDD
+
+En la VPS (`/srv/agora`):
+
+```bash
+# 1) Forzar target vps en .env
+grep -q '^AGORA_DEPLOY_TARGET=' .env \
+  && sed -i 's/^AGORA_DEPLOY_TARGET=.*/AGORA_DEPLOY_TARGET=vps/' .env \
+  || echo 'AGORA_DEPLOY_TARGET=vps' >> .env
+
+# 2) (Opcional) base URL pública
+grep -q '^AGORA_PUBLIC_URL=' .env \
+  && sed -i 's#^AGORA_PUBLIC_URL=.*#AGORA_PUBLIC_URL=https://<tu-dominio>#' .env \
+  || echo 'AGORA_PUBLIC_URL=https://<tu-dominio>' >> .env
+
+# 3) Regenerar servicios sin destruir datos (no usa down -v)
+bash ./deploy/up.sh
+```
+
+Notas:
+- `bash ./deploy/up.sh` recrea contenedores según cambios de imagen/env, manteniendo volúmenes.
+- **No ejecutes** `docker compose down -v` en producción si quieres conservar PostgreSQL.
+- Si cambias secrets en Infisical, basta con volver a ejecutar `bash ./deploy/up.sh`; regenerará `.env.runtime` y recreará contenedores sin borrar volúmenes.
 
 Windows (PowerShell):
 

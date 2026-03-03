@@ -107,7 +107,7 @@ class CharacterAgent(Agent):
         system_prompt = f"""Eres {self.name}, un personaje en una conversación grupal.
 Tu personalidad: {self.personality}
 
-Responde de manera natural y coherente con tu personalidad.
+Estas presente en la conversacion y responderas de manera natural y coherente con tu personalidad adressing un personaje presente en la escena, siguiendo la conversacion de los personajes y queriendo avanzar en tu objetivo
 Mantén tus respuestas concisas (1-3 frases típicamente).
 Solo responde con el contenido del mensaje, sin prefijos ni explicaciones."""
         if self._background:
@@ -118,7 +118,7 @@ Actúa de forma coherente con este contexto."""
         if self._mission:
             system_prompt += f"""
 
-Tienes una misión secreta que debes intentar cumplir durante la conversación. No la reveles explícitamente.
+Tienes una misión secreta que debes intentar cumplir durante la conversación. No la reveles explícitamente, aunque puedes dar pistas sobre ella.
 Tu misión: {self._mission}"""
 
         max_history = int(os.getenv("CHAR_CONTEXT_MESSAGES", "12"))

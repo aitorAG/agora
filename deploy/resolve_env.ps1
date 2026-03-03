@@ -36,28 +36,38 @@ if ($target -ne "local" -and $target -ne "vps") {
   throw "Invalid AGORA_DEPLOY_TARGET='$targetRaw'. Expected: local or vps."
 }
 
+$publicUrl = if ($envMap.ContainsKey("AGORA_PUBLIC_URL")) { $envMap["AGORA_PUBLIC_URL"] } else { "" }
 $localBase = if ($envMap.ContainsKey("AGORA_BASE_URL_LOCAL")) { $envMap["AGORA_BASE_URL_LOCAL"] } else { "http://localhost" }
 $vpsBase = if ($envMap.ContainsKey("AGORA_BASE_URL_VPS")) { $envMap["AGORA_BASE_URL_VPS"] } else { "http://85.17.246.141" }
-$resolvedBase = if ($target -eq "vps") { $vpsBase } else { $localBase }
+if ($target -eq "vps" -and $publicUrl) {
+  $resolvedBase = $publicUrl
+} elseif ($target -eq "vps") {
+  $resolvedBase = $vpsBase
+} else {
+  $resolvedBase = $localBase
+}
 $resolvedBase = $resolvedBase.TrimEnd("/")
-$resolvedLangfuse = "$resolvedBase/admin/observability"
-
-$effectiveNextAuth = if ($envMap.ContainsKey("NEXTAUTH_URL") -and $envMap["NEXTAUTH_URL"]) { $envMap["NEXTAUTH_URL"] } else { $resolvedLangfuse }
-$effectiveLangfuseHost = if ($envMap.ContainsKey("LANGFUSE_HOST") -and $envMap["LANGFUSE_HOST"]) { $envMap["LANGFUSE_HOST"] } else { $resolvedLangfuse }
+$resolvedObservability = "$resolvedBase/admin/observability"
 
 $outLines = New-Object System.Collections.Generic.List[string]
 Get-Content $envFile | ForEach-Object {
   $line = $_
   if ($line -match '^\s*AGORA_RESOLVED_BASE_URL=') { return }
+  if ($line -match '^\s*AGORA_OBSERVABILITY_URL=') { return }
+  if ($line -match '^\s*AGORA_RUNTIME_CONTEXT=') { return }
   if ($line -match '^\s*NEXTAUTH_URL=') { return }
   if ($line -match '^\s*LANGFUSE_HOST=') { return }
   $outLines.Add($line)
 }
+$outLines.Add("AGORA_RUNTIME_CONTEXT=docker")
 $outLines.Add("AGORA_RESOLVED_BASE_URL=$resolvedBase")
-$outLines.Add("NEXTAUTH_URL=$effectiveNextAuth")
-$outLines.Add("LANGFUSE_HOST=$effectiveLangfuseHost")
+$outLines.Add("AGORA_OBSERVABILITY_URL=$resolvedObservability")
 
 Set-Content -Path $runtimeEnvFile -Value $outLines -Encoding UTF8
 
 Write-Output "Resolved env -> target=$target base_url=$resolvedBase"
 Write-Output "Resolved env file: $runtimeEnvFile"
+
+if (Get-Command python -ErrorAction SilentlyContinue) {
+  python (Join-Path $PSScriptRoot "fetch_infisical.py") | Out-Host
+}

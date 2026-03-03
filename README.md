@@ -15,9 +15,9 @@ agora/
 
 - `engine/`: backend (API, motor conversacional, tests, migraciones, plantillas de juego).
 - `frontend/`: assets estáticos de la UI web (`frontend/static`).
-- `observability-platform/`: documentación y assets de despliegue de observabilidad.
+- `observability-platform/`: servicio de observabilidad (ingesta y agregados de telemetría).
 - `nginx/`: configuración de reverse proxy para exponer servicios.
-- `docker-compose.yml`: infraestructura local (Postgres + Langfuse stack).
+- `docker-compose.yml`: infraestructura local (Postgres + telemetry service).
 
 ## Arranque rápido
 
@@ -25,6 +25,19 @@ agora/
 ```bash
 docker compose up -d
 ```
+
+Config mínima:
+
+- cambia `AGORA_DEPLOY_TARGET` a `local` o `vps`
+- en `vps`, define `AGORA_PUBLIC_URL`
+- define `POSTGRES_PASSWORD`, `DEEPSEEK_API_KEY`, `AUTH_SEED_PASSWORD`, `TELEMETRY_INGEST_KEY`
+
+El resto (URL pública derivada, URL de observabilidad, `DATABASE_URL`, `TELEMETRY_ENDPOINT`) se calcula automáticamente.
+
+Archivo base recomendado:
+
+- usa `.env.example` como plantilla única
+- `deploy/up.*` crea automáticamente un backup previo de la base de datos si detecta un `postgres` ya en ejecución
 
 2. Backend:
 ```bash

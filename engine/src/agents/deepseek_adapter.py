@@ -124,7 +124,7 @@ def send_message(
     generation = start_generation(
         name="llm_call",
         model=model,
-        model_parameters={"temperature": temperature, "provider": "deepseek"},
+        model_parameters={"temperature": temperature, "provider": "deepseek", "stream": stream},
         input_data=messages,
         metadata={"stream": str(bool(stream)).lower(), "model_family": "deepseek"},
     )

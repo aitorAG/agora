@@ -11,6 +11,12 @@ def test_auth_login_me_logout(monkeypatch):
     monkeypatch.setenv("AUTH_REQUIRED", "true")
     monkeypatch.setattr(routes_module, "get_persistence_provider", lambda: None)
     monkeypatch.setattr(routes_module, "ensure_seed_user", lambda: None)
+    login_events = []
+    monkeypatch.setattr(
+        routes_module,
+        "record_user_login",
+        lambda user_id, username: login_events.append((user_id, username)),
+    )
     monkeypatch.setattr(
         routes_module,
         "authenticate_user",
@@ -33,6 +39,7 @@ def test_auth_login_me_logout(monkeypatch):
     ok = client.post("/auth/login", json={"username": "alice", "password": "secret123"})
     assert ok.status_code == 200
     assert ok.json()["user"]["username"] == "alice"
+    assert login_events == [("u1", "alice")]
 
     me = client.get("/auth/me")
     assert me.status_code == 200
@@ -50,6 +57,7 @@ def test_auth_login_me_logout(monkeypatch):
 def test_auth_register_success_and_login(monkeypatch):
     monkeypatch.setenv("AUTH_REQUIRED", "true")
     monkeypatch.setattr(routes_module, "get_persistence_provider", lambda: None)
+    monkeypatch.setattr(routes_module, "ensure_seed_user", lambda: None)
     monkeypatch.setattr(
         routes_module,
         "create_user",

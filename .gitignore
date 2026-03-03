@@ -5,8 +5,11 @@ __pycache__/
 .vscode/
 .cursor/
 logs/
+backups/
 games/custom/
 .pytest_cache/
 migrations/*
 nginx/.htpasswd
 .env1
+AGENTS.md
+.tmp_cookies.txt
