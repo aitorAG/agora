@@ -1,0 +1,34 @@
+name: Deploy Prod
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, x64, vps, agora, prod]
+
+    steps:
+      - name: Go to repo
+        run: cd /srv/agora && pwd
+
+      - name: Sync repository
+        run: |
+          cd /srv/agora
+          git fetch origin
+          git reset --hard origin/main
+
+      - name: Deploy
+        run: |
+          cd /srv/agora
+          bash ./deploy/up.sh
+
+      - name: Verify app
+        run: |
+          curl -f http://127.0.0.1/health
