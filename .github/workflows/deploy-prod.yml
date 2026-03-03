@@ -1,0 +1,46 @@
+name: Deploy Prod
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - vps
+      - agora
+      - prod
+    timeout-minutes: 20
+
+    steps:
+      - name: Sync repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /srv/agora
+          git fetch origin
+          git checkout main
+          git pull --ff-only origin main
+
+      - name: Deploy stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /srv/agora
+          bash ./deploy/up.sh
+
+      - name: Verify application
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS http://127.0.0.1/health
