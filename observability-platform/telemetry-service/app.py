@@ -471,6 +471,20 @@ def _general_metrics() -> dict[str, Any]:
         ORDER BY day ASC
         """
     )
+    daily_cost_rows = _sqlite_fetchall(
+        """
+        SELECT
+            substr(timestamp, 1, 10) AS day,
+            COALESCE(SUM(cost_input), 0.0) AS input_value,
+            COALESCE(SUM(cost_output), 0.0) AS output_value,
+            COALESCE(SUM(cost_total), 0.0) AS total_value
+        FROM llm_calls
+        WHERE TRIM(game_id) <> ''
+          AND NOT (TRIM(agent_name) = '' AND TRIM(agent_type) = '')
+        GROUP BY substr(timestamp, 1, 10)
+        ORDER BY day ASC
+        """
+    )
     wait_row = _sqlite_fetchone(
         """
         SELECT COALESCE(AVG(interaction_duration), 0) AS avg_wait_ms
@@ -515,6 +529,18 @@ def _general_metrics() -> dict[str, Any]:
             "tokens_per_day": [
                 {"day": str(row[0] or ""), "value": _safe_int(row[1])}
                 for row in daily_tokens_rows
+            ],
+            "cost_input_per_day": [
+                {"day": str(row[0] or ""), "value": _safe_float(row[1])}
+                for row in daily_cost_rows
+            ],
+            "cost_output_per_day": [
+                {"day": str(row[0] or ""), "value": _safe_float(row[2])}
+                for row in daily_cost_rows
+            ],
+            "cost_total_per_day": [
+                {"day": str(row[0] or ""), "value": _safe_float(row[3])}
+                for row in daily_cost_rows
             ],
         },
         "rankings": {

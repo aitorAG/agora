@@ -35,8 +35,7 @@ cp .env.example .env
 nano .env
 ```
 
-`.env.example` es ahora la plantilla canónica del repo.  
-`".env.prod copy.example"` queda como referencia heredada, pero ya no debería ser tu punto de partida.
+`.env.example` es la plantilla canónica del repo.
 
 ### `.env` mínimo recomendado y de dónde sale cada valor
 
@@ -79,33 +78,8 @@ Variables opcionales pero recomendadas:
   - Salen de la tabla de pricing del proveedor LLM.
   - Se usan para calcular coste en el dashboard.
 
-Si quieres usar Infisical para no depender del `.env` como fuente final:
-
-- `INFISICAL_ENABLED=true`
-  - Lo defines tú.
-- `INFISICAL_HOST=https://eu.infisical.com`
-  - Sale de tu región (en tu caso UE).
-- `INFISICAL_CLIENT_ID`
-  - Sale de `Universal Auth > Identity > Client ID`.
-- `INFISICAL_CLIENT_SECRET`
-  - Sale de `Universal Auth > Identity > Client Secret`.
-- `INFISICAL_PROJECT_ID`
-  - Sale de `Project Settings > General`.
-- `INFISICAL_ENV=prod`
-  - Sale del nombre del environment en Infisical.
-- `INFISICAL_SECRET_PATH=/`
-  - La carpeta donde guardas los secrets; normalmente `/`.
-
-Con `INFISICAL_ENABLED=true`, el deploy genera `.env.runtime` y añade ahí los secrets traídos desde Infisical antes de levantar contenedores.
-
-Secrets recomendados dentro de Infisical:
-
-- `POSTGRES_PASSWORD`
-- `DEEPSEEK_API_KEY`
-- `AUTH_SEED_PASSWORD`
-- `TELEMETRY_INGEST_KEY`
-- `DEEPSEEK_INPUT_COST_PER_1M_TOKENS`
-- `DEEPSEEK_OUTPUT_COST_PER_1M_TOKENS`
+Este repo usa solo `.env` como fuente de configuración.  
+`deploy/up.sh` genera un `.env.runtime` derivado y saneado antes de levantar contenedores, pero no consulta ningún gestor externo de secretos.
 
 ### Copiar tu `.env` local al VPS
 
@@ -155,16 +129,6 @@ Para admin bootstrap (creado automáticamente incluso si recreas DB):
 - `AUTH_SEED_PASSWORD=4dmin` (cámbiala en producción)
 - `AUTH_SEED_ROLE=admin`
 
-Opcional Infisical:
-
-- `INFISICAL_ENABLED=true`
-- `INFISICAL_HOST=https://eu.infisical.com`
-- `INFISICAL_CLIENT_ID`
-- `INFISICAL_CLIENT_SECRET`
-- `INFISICAL_PROJECT_ID`
-- `INFISICAL_ENV=prod`
-- `INFISICAL_SECRET_PATH=/`
-
 ## 4. Levantar stack de producción
 
 ```bash
@@ -176,7 +140,7 @@ Qué hace:
 - Si ya existe un `postgres` en ejecución, crea un backup previo en `backups/predeploy/`
 - Genera `.env.runtime` a partir de `.env`
 - Resuelve URLs según `AGORA_DEPLOY_TARGET`
-- Si `INFISICAL_ENABLED=true`, trae secrets y los añade a `.env.runtime`
+- Valida que el entorno tenga las variables críticas necesarias antes de arrancar
 - Levanta observabilidad
 - Levanta backend + nginx
 

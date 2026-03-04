@@ -10,6 +10,30 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+trim() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+normalize_env_value() {
+  local value
+  value="$(trim "$1")"
+  if [[ "$value" == *" #"* ]]; then
+    value="${value%% \#*}"
+    value="$(trim "$value")"
+  fi
+  if [[ ${#value} -ge 2 ]]; then
+    if [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+      value="${value:1:${#value}-2}"
+    elif [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+  fi
+  printf '%s' "$value"
+}
+
 set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
@@ -38,7 +62,19 @@ fi
 RESOLVED_BASE_URL="${RESOLVED_BASE_URL%/}"
 RESOLVED_OBSERVABILITY_URL="${RESOLVED_BASE_URL}/admin/observability"
 
-awk '!(/^AGORA_RESOLVED_BASE_URL=/ || /^AGORA_OBSERVABILITY_URL=/ || /^AGORA_RUNTIME_CONTEXT=/ || /^NEXTAUTH_URL=/ || /^LANGFUSE_HOST=/)' "$ENV_FILE" > "$RUNTIME_ENV_FILE"
+> "$RUNTIME_ENV_FILE"
+while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
+  line="$(trim "$raw_line")"
+  if [[ -z "$line" || "${line:0:1}" == "#" || "$line" != *=* ]]; then
+    continue
+  fi
+  key="$(trim "${line%%=*}")"
+  if [[ "$key" == "AGORA_RESOLVED_BASE_URL" || "$key" == "AGORA_OBSERVABILITY_URL" || "$key" == "AGORA_RUNTIME_CONTEXT" || "$key" == "NEXTAUTH_URL" || "$key" == "LANGFUSE_HOST" ]]; then
+    continue
+  fi
+  value="$(normalize_env_value "${line#*=}")"
+  printf '%s=%s\n' "$key" "$value" >> "$RUNTIME_ENV_FILE"
+done < "$ENV_FILE"
 {
   echo "AGORA_RUNTIME_CONTEXT=docker"
   echo "AGORA_RESOLVED_BASE_URL=$RESOLVED_BASE_URL"
@@ -48,10 +84,7 @@ awk '!(/^AGORA_RESOLVED_BASE_URL=/ || /^AGORA_OBSERVABILITY_URL=/ || /^AGORA_RUN
 echo "Resolved env -> target=$TARGET base_url=$RESOLVED_BASE_URL"
 echo "Resolved env file: $RUNTIME_ENV_FILE"
 
-PYTHON_BIN="${PYTHON_BIN:-python3}"
-if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-  PYTHON_BIN="python"
-fi
-if command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-  "$PYTHON_BIN" "$ROOT_DIR/deploy/fetch_infisical.py" || true
+if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
+  echo "Resolved runtime environment is missing required values: POSTGRES_PASSWORD" >&2
+  exit 1
 fi

@@ -26,6 +26,13 @@ function money(value) {
   return `$${Number(value || 0).toFixed(6)}`;
 }
 
+function moneyCompact(value) {
+  const amount = Number(value || 0);
+  if (amount >= 1) return `$${amount.toFixed(2)}`;
+  if (amount >= 0.01) return `$${amount.toFixed(4)}`;
+  return `$${amount.toFixed(6)}`;
+}
+
 function integer(value) {
   return Intl.NumberFormat('es-ES').format(Math.round(Number(value || 0)));
 }
@@ -74,55 +81,162 @@ function renderTable(tableId, rows, columns, emptyMessage = 'Sin datos') {
   tbody.innerHTML = rows.map((row) => `<tr>${columns.map((col) => `<td>${col(row)}</td>`).join('')}</tr>`).join('');
 }
 
-function renderSingleChart(targetId, series) {
-  const node = document.getElementById(targetId);
-  if (!node) return;
-  if (!series.length) {
-    setEmpty(node);
-    return;
-  }
-  const max = Math.max(...series.map((item) => Number(item.value || 0)), 1);
-  node.innerHTML = series.map((item) => {
-    const width = Math.max(4, Math.round((Number(item.value || 0) / max) * 100));
-    return `
-      <div class="chart-row">
-        <div class="day">${item.day}</div>
-        <div class="bar-single"><div class="bar-fill" style="width:${width}%"></div></div>
-        <div class="value-pill">${integer(item.value)}</div>
-      </div>
-    `;
-  }).join('');
+function parseIsoDay(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+  if (!match) return null;
+  const parsed = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function renderDualChart(targetId, seriesA, seriesB, labelA, labelB) {
+function buildDayRange(days) {
+  const uniqueDays = [...new Set(
+    (days || [])
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+  )].sort((left, right) => left.localeCompare(right));
+  if (!uniqueDays.length) return [];
+  const start = parseIsoDay(uniqueDays[0]);
+  const end = parseIsoDay(uniqueDays[uniqueDays.length - 1]);
+  if (!start || !end) return uniqueDays;
+  const output = [];
+  const cursor = new Date(start.getTime());
+  while (cursor.getTime() <= end.getTime()) {
+    output.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return output;
+}
+
+function shortDayLabel(day) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''));
+  if (!match) return String(day || '');
+  return `${match[3]}/${match[2]}`;
+}
+
+function pickTickIndices(length, maxTicks = 4) {
+  if (length <= 0) return [];
+  if (length <= maxTicks) return Array.from({ length }, (_, index) => index);
+  const indices = new Set([0, length - 1]);
+  const step = (length - 1) / (maxTicks - 1);
+  for (let index = 1; index < maxTicks - 1; index += 1) {
+    indices.add(Math.round(step * index));
+  }
+  return [...indices].sort((left, right) => left - right);
+}
+
+function buildLinePath(points) {
+  return points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(' ');
+}
+
+function renderTimeSeriesChart(targetId, seriesItems, options = {}) {
   const node = document.getElementById(targetId);
   if (!node) return;
-  const map = new Map();
-  [...seriesA, ...seriesB].forEach((item) => {
-    if (!map.has(item.day)) map.set(item.day, { day: item.day, a: 0, b: 0 });
-  });
-  seriesA.forEach((item) => map.get(item.day).a = Number(item.value || 0));
-  seriesB.forEach((item) => map.get(item.day).b = Number(item.value || 0));
-  const rows = [...map.values()].sort((left, right) => String(left.day).localeCompare(String(right.day)));
-  if (!rows.length) {
+  const preparedSeries = (seriesItems || [])
+    .filter((item) => item && Array.isArray(item.values));
+  if (!preparedSeries.length) {
     setEmpty(node);
     return;
   }
-  const max = Math.max(...rows.map((row) => Math.max(row.a, row.b)), 1);
-  node.innerHTML = rows.map((row) => {
-    const widthA = Math.max(4, Math.round((row.a / max) * 100));
-    const widthB = Math.max(4, Math.round((row.b / max) * 100));
-    return `
-      <div class="chart-row">
-        <div class="day">${row.day}</div>
-        <div class="bar-stack">
-          <div class="bar-a" style="width:${widthA}%"></div>
-          <div class="bar-b" style="width:${widthB}%"></div>
-        </div>
-        <div class="value-pill">${labelA}: ${integer(row.a)} · ${labelB}: ${integer(row.b)}</div>
+
+  const days = buildDayRange(
+    preparedSeries.flatMap((item) => item.values.map((point) => point.day))
+  );
+  if (!days.length) {
+    setEmpty(node);
+    return;
+  }
+
+  const rows = days.map((day) => ({
+    day,
+    values: preparedSeries.map(() => 0),
+  }));
+  const rowsByDay = new Map(rows.map((row) => [row.day, row]));
+  preparedSeries.forEach((series, seriesIndex) => {
+    series.values.forEach((point) => {
+      const row = rowsByDay.get(String(point.day || ''));
+      if (row) {
+        row.values[seriesIndex] = Number(point.value || 0);
+      }
+    });
+  });
+
+  const width = 640;
+  const height = 260;
+  const padding = { top: 18, right: 18, bottom: 34, left: 64 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const maxValue = Math.max(...rows.flatMap((row) => row.values), 1);
+  const valueFormatter = options.valueFormatter || integer;
+  const axisValueFormatter = options.axisValueFormatter || valueFormatter;
+  const latestValueFormatter = options.latestValueFormatter || valueFormatter;
+  const xStep = rows.length === 1 ? 0 : plotWidth / (rows.length - 1);
+  const pointX = (index) => (rows.length === 1
+    ? padding.left + (plotWidth / 2)
+    : padding.left + (xStep * index));
+
+  const chartSeries = preparedSeries.map((series, seriesIndex) => {
+    const points = rows.map((row, rowIndex) => ({
+      x: pointX(rowIndex),
+      y: padding.top + plotHeight - ((row.values[seriesIndex] / maxValue) * plotHeight),
+      value: row.values[seriesIndex],
+    }));
+    return {
+      ...series,
+      seriesIndex,
+      points,
+      path: buildLinePath(points),
+    };
+  });
+
+  const yTicks = Array.from({ length: 4 }, (_, index) => {
+    const ratio = index / 3;
+    const value = maxValue * (1 - ratio);
+    return {
+      label: axisValueFormatter(value),
+      y: padding.top + (plotHeight * ratio),
+    };
+  });
+  const xTickIndices = pickTickIndices(rows.length, 4);
+  const latestRow = rows[rows.length - 1];
+
+  node.innerHTML = `
+    <div class="time-series">
+      <div class="time-series-legend">
+        ${chartSeries.map((series) => `
+          <div class="legend-item">
+            <span class="legend-swatch" style="--series:${series.color}"></span>
+            <span>${series.label}</span>
+          </div>
+        `).join('')}
       </div>
-    `;
-  }).join('');
+      <svg class="time-series-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+        ${yTicks.map((tick) => `
+          <line x1="${padding.left}" y1="${tick.y}" x2="${width - padding.right}" y2="${tick.y}" class="time-series-grid-line"></line>
+          <text x="${padding.left - 8}" y="${tick.y + 4}" text-anchor="end" class="time-series-grid-label">${tick.label}</text>
+        `).join('')}
+        ${xTickIndices.map((index) => `
+          <text x="${pointX(index)}" y="${height - 8}" text-anchor="middle" class="time-series-grid-label">${shortDayLabel(rows[index].day)}</text>
+        `).join('')}
+        ${chartSeries.map((series) => `
+          <path d="${series.path}" class="time-series-line" style="--series:${series.color}"></path>
+          ${series.points.map((point) => `
+            <circle cx="${point.x}" cy="${point.y}" r="3.5" class="time-series-point" style="--series:${series.color}"></circle>
+          `).join('')}
+        `).join('')}
+      </svg>
+      <div class="time-series-summary">
+        <div class="summary-day">Ultimo punto: ${latestRow.day}</div>
+        ${chartSeries.map((series) => `
+          <div class="summary-item">
+            <span class="legend-swatch" style="--series:${series.color}"></span>
+            <span>${series.label}: ${latestValueFormatter(latestRow.values[series.seriesIndex])}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
 }
 
 function renderSelect(selectId, items, valueKey, labelKey, placeholder) {
@@ -212,15 +326,22 @@ async function loadGeneral() {
     { label: 'Tiempo medio de espera', value: ms(data.kpis.avg_wait_ms), hint: 'Suma de latencias LLM por interaccion' },
   ]);
 
-  renderDualChart(
-    'usersChart',
-    data.series.registered_users_per_day || [],
-    data.series.user_accesses_per_day || [],
-    'Reg',
-    'Acc'
-  );
-  renderSingleChart('gamesChart', data.series.games_played_per_day || []);
-  renderSingleChart('tokensChart', data.series.tokens_per_day || []);
+  renderTimeSeriesChart('usersChart', [
+    { label: 'Registros', color: 'var(--accent)', values: data.series.registered_users_per_day || [] },
+    { label: 'Accesos', color: 'var(--accent-2)', values: data.series.user_accesses_per_day || [] },
+  ]);
+  renderTimeSeriesChart('gamesChart', [
+    { label: 'Partidas activas', color: 'var(--warn)', values: data.series.games_played_per_day || [] },
+  ]);
+  renderTimeSeriesChart('costChart', [
+    { label: 'Entrada', color: 'var(--accent)', values: data.series.cost_input_per_day || [] },
+    { label: 'Salida', color: 'var(--accent-2)', values: data.series.cost_output_per_day || [] },
+    { label: 'Total', color: 'var(--warn)', values: data.series.cost_total_per_day || [] },
+  ], {
+    valueFormatter: moneyCompact,
+    axisValueFormatter: moneyCompact,
+    latestValueFormatter: moneyCompact,
+  });
   renderTable('usersCostTable', data.rankings?.users_by_cost || [], [
     (row) => row.username,
     (row) => money(row.total_cost),

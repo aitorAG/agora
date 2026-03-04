@@ -170,40 +170,65 @@ select {
   color: var(--text);
   padding: 11px 12px;
 }
-.chart { display: grid; gap: 10px; }
-.chart-row {
+.chart {
+  min-height: 320px;
+}
+.time-series {
   display: grid;
-  grid-template-columns: 112px 1fr auto;
-  gap: 10px;
+  gap: 14px;
+}
+.time-series-legend,
+.time-series-summary {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
   align-items: center;
 }
-.chart-row .day {
+.legend-item,
+.summary-item {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
   color: var(--muted);
-  font-size: 12px;
 }
-.bar-stack, .bar-single {
-  position: relative;
-  height: 12px;
+.legend-swatch {
+  --series: var(--accent);
+  width: 10px;
+  height: 10px;
   border-radius: 999px;
-  overflow: hidden;
-  background: rgba(8, 18, 31, 0.7);
-  border: 1px solid rgba(111, 152, 210, 0.14);
+  background: var(--series);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
 }
-.bar-a, .bar-b, .bar-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  height: 100%;
+.time-series-svg {
+  display: block;
+  width: 100%;
+  height: 260px;
+  overflow: visible;
 }
-.bar-a { background: linear-gradient(90deg, var(--accent), rgba(45, 212, 191, 0.4)); }
-.bar-b { background: linear-gradient(90deg, var(--accent-2), rgba(79, 156, 255, 0.42)); opacity: 0.86; }
-.bar-fill { background: linear-gradient(90deg, var(--warn), rgba(255, 180, 84, 0.36)); }
-.value-pill {
+.time-series-grid-line {
+  stroke: rgba(111, 152, 210, 0.14);
+  stroke-width: 1;
+}
+.time-series-grid-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.time-series-line {
+  --series: var(--accent);
+  fill: none;
+  stroke: var(--series);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.time-series-point {
+  --series: var(--accent);
+  fill: var(--series);
+}
+.summary-day {
   font-size: 12px;
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 999px;
-  padding: 4px 8px;
+  color: var(--muted);
 }
 .metric-range {
   min-width: 220px;
@@ -276,6 +301,6 @@ th {
 @media (max-width: 720px) {
   .layout { padding: 16px; }
   .hero { align-items: stretch; flex-direction: column; }
-  .chart-row { grid-template-columns: 88px 1fr; }
-  .chart-row .value-pill { grid-column: 1 / -1; justify-self: start; }
+  .chart { min-height: 280px; }
+  .time-series-svg { height: 220px; }
 }

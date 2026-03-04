@@ -50,14 +50,12 @@ $resolvedBase = $resolvedBase.TrimEnd("/")
 $resolvedObservability = "$resolvedBase/admin/observability"
 
 $outLines = New-Object System.Collections.Generic.List[string]
-Get-Content $envFile | ForEach-Object {
-  $line = $_
-  if ($line -match '^\s*AGORA_RESOLVED_BASE_URL=') { return }
-  if ($line -match '^\s*AGORA_OBSERVABILITY_URL=') { return }
-  if ($line -match '^\s*AGORA_RUNTIME_CONTEXT=') { return }
-  if ($line -match '^\s*NEXTAUTH_URL=') { return }
-  if ($line -match '^\s*LANGFUSE_HOST=') { return }
-  $outLines.Add($line)
+($envMap.GetEnumerator() | Sort-Object Name) | ForEach-Object {
+  $key = [string]$_.Key
+  if ($key -in @("AGORA_RESOLVED_BASE_URL", "AGORA_OBSERVABILITY_URL", "AGORA_RUNTIME_CONTEXT", "NEXTAUTH_URL", "LANGFUSE_HOST")) {
+    return
+  }
+  $outLines.Add("$key=$($_.Value)")
 }
 $outLines.Add("AGORA_RUNTIME_CONTEXT=docker")
 $outLines.Add("AGORA_RESOLVED_BASE_URL=$resolvedBase")
@@ -68,6 +66,6 @@ Set-Content -Path $runtimeEnvFile -Value $outLines -Encoding UTF8
 Write-Output "Resolved env -> target=$target base_url=$resolvedBase"
 Write-Output "Resolved env file: $runtimeEnvFile"
 
-if (Get-Command python -ErrorAction SilentlyContinue) {
-  python (Join-Path $PSScriptRoot "fetch_infisical.py") | Out-Host
+if (-not $envMap.ContainsKey("POSTGRES_PASSWORD") -or [string]::IsNullOrWhiteSpace([string]$envMap["POSTGRES_PASSWORD"])) {
+  throw "Resolved runtime environment is missing required values: POSTGRES_PASSWORD"
 }

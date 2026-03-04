@@ -1,4 +1,4 @@
-"""Centralized runtime bootstrap (dotenv + external secret providers)."""
+"""Centralized runtime bootstrap (.env + derived defaults)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,6 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-
-from .infisical import load_infisical_secrets_into_env
 
 _BOOTSTRAPPED = False
 
@@ -85,7 +83,6 @@ def bootstrap_runtime_config() -> None:
     repo_root = engine_root.parent
     load_dotenv(engine_root / ".env")
     load_dotenv(repo_root / ".env")
-    load_dotenv(repo_root / ".env.runtime")
-    load_infisical_secrets_into_env()
+    load_dotenv(repo_root / ".env.runtime", override=True)
     _apply_derived_defaults()
     _BOOTSTRAPPED = True
