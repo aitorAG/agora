@@ -2,6 +2,7 @@ const PROXIED_BASE = window.location.pathname.startsWith('/admin/observability')
   ? '/admin/observability'
   : '';
 const API_BASE = PROXIED_BASE ? `${PROXIED_BASE}/api` : '';
+let cachedGeneralData = null;
 
 function apiUrl(path) {
   return `${API_BASE}${path}`;
@@ -239,6 +240,104 @@ function renderTimeSeriesChart(targetId, seriesItems, options = {}) {
   `;
 }
 
+function modeLabel(mode) {
+  return String(mode || '').toLowerCase() === 'standard' ? 'Standard' : 'Custom';
+}
+
+function phaseLabel(phaseName) {
+  const value = String(phaseName || '').trim().toLowerCase();
+  if (value === 'template_load_validate') return 'Carga + validacion template';
+  if (value === 'create_game_and_warmup') return 'Creacion + warmup';
+  if (value === 'serialize_response') return 'Serializacion respuesta';
+  return phaseName || 'Fase';
+}
+
+function phaseColor(phaseName) {
+  const value = String(phaseName || '').trim().toLowerCase();
+  if (value === 'template_load_validate') return 'var(--phase-a)';
+  if (value === 'create_game_and_warmup') return 'var(--phase-b)';
+  if (value === 'serialize_response') return 'var(--phase-c)';
+  return 'var(--phase-d)';
+}
+
+function renderInitPhasesChart(targetId, phaseItems) {
+  const node = document.getElementById(targetId);
+  if (!node) return;
+  const rows = Array.isArray(phaseItems) ? phaseItems : [];
+  if (!rows.length) {
+    setEmpty(node, 'Sin fases de inicializacion registradas');
+    return;
+  }
+  const grouped = ['custom', 'standard'].map((mode) => {
+    const phases = rows
+      .filter((item) => String(item.mode || '').toLowerCase() === mode)
+      .map((item) => ({
+        ...item,
+        avg_ms: Number(item.avg_ms || 0),
+      }))
+      .filter((item) => item.avg_ms > 0);
+    const totalMs = phases.reduce((acc, item) => acc + item.avg_ms, 0);
+    return { mode, phases, totalMs };
+  }).filter((item) => item.phases.length > 0);
+
+  if (!grouped.length) {
+    setEmpty(node, 'Sin fases de inicializacion registradas');
+    return;
+  }
+  const maxTotal = Math.max(...grouped.map((item) => item.totalMs), 1);
+  const legendKeys = [...new Set(grouped.flatMap((item) => item.phases.map((phase) => phase.phase_name)))];
+
+  node.innerHTML = `
+    <div class="phase-stack">
+      ${grouped.map((row) => `
+        <div class="phase-row">
+          <div class="phase-row-head">
+            <strong>${modeLabel(row.mode)}</strong>
+            <span>${ms(row.totalMs)} total</span>
+          </div>
+          <div class="phase-track">
+            ${row.phases.map((phase) => `
+              <div
+                class="phase-segment"
+                style="width:${Math.max(2, (phase.avg_ms / maxTotal) * 100)}%; background:${phaseColor(phase.phase_name)}"
+                title="${phaseLabel(phase.phase_name)} · avg ${ms(phase.avg_ms)} · p95 ${ms(phase.p95_ms)}"
+              ></div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('')}
+      <div class="phase-legend">
+        ${legendKeys.map((key) => `
+          <div class="phase-legend-item">
+            <span class="legend-swatch" style="--series:${phaseColor(key)}"></span>
+            <span>${phaseLabel(key)}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderInitSeriesFromData(data) {
+  if (!data) return;
+  const metric = document.getElementById('initSeriesMetric')?.value || 'server';
+  const aggregation = document.getElementById('initSeriesAgg')?.value || 'avg';
+  const isP95 = aggregation === 'p95';
+  const prefix = metric === 'client' ? 'ttfa_client' : 'init_server';
+  const customKey = `${prefix}_custom_${isP95 ? 'p95' : 'avg'}_per_day`;
+  const standardKey = `${prefix}_standard_${isP95 ? 'p95' : 'avg'}_per_day`;
+  const customSeries = data.series?.[customKey] || [];
+  const standardSeries = data.series?.[standardKey] || [];
+  renderTimeSeriesChart('initSeriesChart', [
+    { label: 'Custom', color: 'var(--accent)', values: customSeries },
+    { label: 'Standard', color: 'var(--accent-2)', values: standardSeries },
+  ], {
+    valueFormatter: ms,
+    axisValueFormatter: ms,
+    latestValueFormatter: ms,
+  });
+}
+
 function renderSelect(selectId, items, valueKey, labelKey, placeholder) {
   const select = document.getElementById(selectId);
   if (!select) return;
@@ -310,6 +409,7 @@ async function loadGamesForUser(selectId, userId) {
 
 async function loadGeneral() {
   const data = await getJSON('/v1/analytics/general');
+  cachedGeneralData = data;
   renderCards('generalActivityKpis', [
     { label: 'Usuarios registrados', value: integer(data.kpis.total_users) },
     { label: 'Partidas activas hoy', value: integer(data.kpis.active_games_today), hint: 'Con al menos un mensaje hoy' },
@@ -324,6 +424,12 @@ async function loadGeneral() {
   ]);
   renderCards('generalLatencyKpis', [
     { label: 'Tiempo medio de espera', value: ms(data.kpis.avg_wait_ms), hint: 'Suma de latencias LLM por interaccion' },
+  ]);
+  renderCards('generalInitKpis', [
+    { label: 'Init server p50', value: ms(data.kpis.init_server_p50_ms), hint: `Custom ${ms(data.kpis.init_server_custom_p50_ms)} · Standard ${ms(data.kpis.init_server_standard_p50_ms)}` },
+    { label: 'Init server p95', value: ms(data.kpis.init_server_p95_ms), hint: `Custom ${ms(data.kpis.init_server_custom_p95_ms)} · Standard ${ms(data.kpis.init_server_standard_p95_ms)}` },
+    { label: 'TTFA cliente p50', value: ms(data.kpis.ttfa_client_p50_ms), hint: `Custom ${ms(data.kpis.ttfa_client_custom_p50_ms)} · Standard ${ms(data.kpis.ttfa_client_standard_p50_ms)}` },
+    { label: 'TTFA cliente p95', value: ms(data.kpis.ttfa_client_p95_ms), hint: `Custom ${ms(data.kpis.ttfa_client_custom_p95_ms)} · Standard ${ms(data.kpis.ttfa_client_standard_p95_ms)}` },
   ]);
 
   renderTimeSeriesChart('usersChart', [
@@ -342,6 +448,8 @@ async function loadGeneral() {
     axisValueFormatter: moneyCompact,
     latestValueFormatter: moneyCompact,
   });
+  renderInitSeriesFromData(data);
+  renderInitPhasesChart('initPhasesChart', data.init?.phases || []);
   renderTable('usersCostTable', data.rankings?.users_by_cost || [], [
     (row) => row.username,
     (row) => money(row.total_cost),
@@ -437,6 +545,12 @@ document.getElementById('gameUserSelect')?.addEventListener('change', async (eve
   await loadGameDetail();
 });
 document.getElementById('gameSelect')?.addEventListener('change', loadGameDetail);
+document.getElementById('initSeriesMetric')?.addEventListener('change', () => {
+  renderInitSeriesFromData(cachedGeneralData);
+});
+document.getElementById('initSeriesAgg')?.addEventListener('change', () => {
+  renderInitSeriesFromData(cachedGeneralData);
+});
 
 refreshAll().catch((error) => {
   console.error(error);

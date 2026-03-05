@@ -28,6 +28,12 @@ def run_character_response(
     state: ConversationState,
     stream: bool = False,
     stream_sink: Any = None,
+    extra_system_instruction: str | None = None,
 ) -> Dict[str, Any]:
     """Ejecuta la tarea de generar respuesta. Entrada: state. Salida: dict con message, author o error (y opcionalmente displayed)."""
-    return agent.process(state, stream=stream, stream_sink=stream_sink)
+    return agent.process(
+        state,
+        stream=stream,
+        stream_sink=stream_sink,
+        extra_system_instruction=extra_system_instruction,
+    )

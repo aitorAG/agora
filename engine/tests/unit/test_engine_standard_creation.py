@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import src.core.engine as engine_module
 from src.core.engine import GameEngine
@@ -73,10 +74,19 @@ class _InMemoryProvider(PersistenceProvider):
     def list_games_for_user(self, username):
         return [g for g in self.games.values() if g.get("user") == username]
 
+    def create_feedback(self, game_id, user_id, feedback_text):
+        _ = (game_id, user_id, feedback_text)
+        return str(uuid.uuid4())
+
+    def list_feedback(self, limit=500):
+        _ = limit
+        return []
+
 
 def _standard_setup():
     return {
         "titulo": "Plantilla estándar",
+        "descripcion_breve": "Descripcion de plantilla",
         "ambientacion": "Roma",
         "contexto_problema": "Intriga",
         "relevancia_jugador": "Clave",
@@ -95,13 +105,21 @@ def _standard_setup():
 
 
 def test_create_game_from_setup_persists_standard_metadata(monkeypatch):
-    monkeypatch.setattr(engine_module, "create_character_agent", lambda **_: object())
+    monkeypatch.setattr(
+        engine_module,
+        "create_character_agent",
+        lambda **kwargs: SimpleNamespace(name=kwargs["name"]),
+    )
     monkeypatch.setattr(engine_module, "create_observer_agent", lambda **_: object())
     monkeypatch.setattr(
         engine_module,
-        "run_one_step",
-        lambda *_args, **_kwargs: {"next_action": "user_input", "game_ended": False, "events": []},
+        "run_character_response",
+        lambda agent, *_args, **_kwargs: {
+            "author": agent.name,
+            "message": f"Mensaje de {agent.name}",
+        },
     )
+    monkeypatch.setattr(engine_module.random, "shuffle", lambda seq: None)
 
     provider = _InMemoryProvider()
     engine = GameEngine(persistence_provider=provider)
@@ -119,5 +137,97 @@ def test_create_game_from_setup_persists_standard_metadata(monkeypatch):
     assert game["template_version"] == "1.0.0"
     assert game["config_json"]["titulo"] == "Plantilla estándar"
     assert game["state_json"]["turn"] == 0
+    assert game["state_json"]["next_action"] == "user_input"
+    assert len(provider.get_game_messages(game_id)) == 1
 
-    assert provider.get_game_messages(game_id) == []
+
+def test_create_game_from_setup_custom_persists_template_metadata(monkeypatch):
+    monkeypatch.setattr(engine_module, "create_character_agent", lambda **_: object())
+    monkeypatch.setattr(engine_module, "create_observer_agent", lambda **_: object())
+    monkeypatch.setattr(
+        engine_module,
+        "run_one_step",
+        lambda *_args, **_kwargs: {"next_action": "user_input", "game_ended": False, "events": []},
+    )
+
+    provider = _InMemoryProvider()
+    engine = GameEngine(persistence_provider=provider)
+    game_id, _setup = engine.create_game_from_setup(
+        setup=_standard_setup(),
+        username="usuario",
+        game_mode="custom",
+        standard_template_id="madrid_1920_el_piernas",
+        template_version="2.1.0",
+    )
+
+    game = provider.get_game(game_id)
+    assert game["game_mode"] == "custom"
+    assert game["standard_template_id"] == "madrid_1920_el_piernas"
+    assert game["template_version"] == "2.1.0"
+
+
+def test_standard_warmup_uses_half_of_randomized_actors_without_observer(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        engine_module,
+        "create_character_agent",
+        lambda **kwargs: SimpleNamespace(name=kwargs["name"]),
+    )
+    monkeypatch.setattr(engine_module, "create_observer_agent", lambda **_: object())
+    monkeypatch.setattr(
+        engine_module,
+        "run_character_response",
+        lambda agent, _state, **kwargs: calls.append(
+            {
+                "name": agent.name,
+                "extra_system_instruction": kwargs.get("extra_system_instruction"),
+            }
+        ) or {
+            "author": agent.name,
+            "message": f"Mensaje de {agent.name}",
+        },
+    )
+    monkeypatch.setattr(
+        engine_module.random,
+        "shuffle",
+        lambda seq: seq.__setitem__(slice(None), ["Casca", "Bruto", "Marco", "Livia"]),
+    )
+
+    setup = _standard_setup()
+    setup["actors"] = [
+        dict(setup["actors"][0], name="Bruto"),
+        dict(setup["actors"][0], name="Livia"),
+        dict(setup["actors"][0], name="Marco"),
+        dict(setup["actors"][0], name="Casca"),
+    ]
+    provider = _InMemoryProvider()
+    engine = GameEngine(persistence_provider=provider)
+
+    game_id, _setup = engine.create_game_from_setup(
+        setup=setup,
+        username="usuario",
+        standard_template_id="rome_caesar_harry",
+        template_version="1.0.0",
+    )
+
+    assert [call["name"] for call in calls] == ["Casca", "Bruto"]
+    assert isinstance(calls[0]["extra_system_instruction"], str)
+    assert "dirigiéndote al jugador" in calls[0]["extra_system_instruction"]
+    assert calls[1]["extra_system_instruction"] is None
+    game = provider.get_game(game_id)
+    assert game["state_json"]["next_action"] == "user_input"
+    assert len(provider.get_game_messages(game_id)) == 2
+
+
+def test_create_game_from_setup_rejects_invalid_contract():
+    provider = _InMemoryProvider()
+    engine = GameEngine(persistence_provider=provider)
+    broken = _standard_setup()
+    broken.pop("player_mission")
+
+    try:
+        engine.create_game_from_setup(setup=broken, username="usuario")
+        assert False, "Debe lanzar ValueError cuando falta un campo obligatorio del setup"
+    except ValueError as exc:
+        assert "player_mission" in str(exc)

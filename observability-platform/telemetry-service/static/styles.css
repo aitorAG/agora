@@ -9,6 +9,10 @@
   --accent: #2dd4bf;
   --accent-2: #4f9cff;
   --warn: #ffb454;
+  --phase-a: #50e3c2;
+  --phase-b: #58a6ff;
+  --phase-c: #ffbf69;
+  --phase-d: #c084fc;
 }
 
 * { box-sizing: border-box; }
@@ -227,6 +231,46 @@ select {
   fill: var(--series);
 }
 .summary-day {
+  font-size: 12px;
+  color: var(--muted);
+}
+.phase-stack {
+  display: grid;
+  gap: 14px;
+}
+.phase-row {
+  display: grid;
+  gap: 8px;
+}
+.phase-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+}
+.phase-row-head span {
+  color: var(--muted);
+}
+.phase-track {
+  display: flex;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(111, 152, 210, 0.14);
+  overflow: hidden;
+}
+.phase-segment {
+  height: 100%;
+  min-width: 2px;
+}
+.phase-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+.phase-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
   color: var(--muted);
 }

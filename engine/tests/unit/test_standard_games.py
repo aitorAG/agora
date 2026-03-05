@@ -19,6 +19,8 @@ def _write_json(path, payload):
 
 def _base_setup():
     return {
+        "titulo": "Titulo setup",
+        "descripcion_breve": "Descripcion setup",
         "ambientacion": "Roma",
         "contexto_problema": "Intriga política",
         "relevancia_jugador": "Eres clave",
@@ -76,8 +78,8 @@ def test_load_standard_template_merges_manifest_metadata(tmp_path, monkeypatch):
     loaded = load_standard_template("t2")
     assert loaded["template_id"] == "t2"
     assert loaded["template_version"] == "2.0.0"
-    assert loaded["setup"]["titulo"] == "Titulo manifest"
-    assert loaded["setup"]["descripcion_breve"] == "Descripcion manifest"
+    assert loaded["setup"]["titulo"] == "Titulo setup"
+    assert loaded["setup"]["descripcion_breve"] == "Descripcion setup"
 
 
 def test_load_standard_template_rejects_missing_actor_fields(tmp_path, monkeypatch):
@@ -94,5 +96,5 @@ def test_load_standard_template_rejects_missing_actor_fields(tmp_path, monkeypat
     broken["actors"][0].pop("mission")
     _write_json(tmp_path / "game_templates" / "t3" / "config.json", broken)
 
-    with pytest.raises(StandardTemplateError, match="non-empty mission"):
+    with pytest.raises(StandardTemplateError, match="actor #1 field 'mission'"):
         load_standard_template("t3")

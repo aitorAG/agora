@@ -59,6 +59,12 @@ class TurnRequest(BaseModel):
     user_exit: bool = False
 
 
+# --- POST /game/init-metric ---
+class InitMetricRequest(BaseModel):
+    session_id: str = Field(min_length=1, max_length=120)
+    ttfa_client_ms: int = Field(ge=0, le=600000)
+
+
 # --- POST /game/feedback ---
 class FeedbackRequest(BaseModel):
     session_id: str = Field(min_length=1, max_length=120)

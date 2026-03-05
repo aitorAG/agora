@@ -1,8 +1,7 @@
-"""CharacterAgent - Agente actor que participa en la conversación."""
-
+import os
+import re
 import sys
 from typing import Dict, Any, Iterator
-import os
 
 from ..state import ConversationState
 from .base import Agent
@@ -65,6 +64,7 @@ class CharacterAgent(Agent):
         state: ConversationState,
         stream: bool = False,
         stream_sink: Any = None,
+        extra_system_instruction: str | None = None,
     ) -> Dict[str, Any]:
         """Genera una respuesta basada en el historial visible.
 
@@ -77,7 +77,10 @@ class CharacterAgent(Agent):
             Diccionario con 'message', 'author' y opcionalmente 'displayed' o 'error'.
         """
         try:
-            messages = self._build_messages(state)
+            messages = self._build_messages(
+                state,
+                extra_system_instruction=extra_system_instruction,
+            )
             if not stream:
                 content = send_message(
                     messages,
@@ -87,12 +90,12 @@ class CharacterAgent(Agent):
                 )
                 assert isinstance(content, str)
                 return {
-                    "message": content.strip(),
+                    "message": self._sanitize_response_content(content),
                     "author": self.name,
                 }
             full_content = self._stream_response_to_stdout(messages, stream_sink=stream_sink)
             return {
-                "message": full_content.strip(),
+                "message": self._sanitize_response_content(full_content),
                 "author": self.name,
                 "displayed": True,
             }
@@ -102,7 +105,11 @@ class CharacterAgent(Agent):
                 "author": self.name,
             }
 
-    def _build_messages(self, state: ConversationState) -> list[dict[str, str]]:
+    def _build_messages(
+        self,
+        state: ConversationState,
+        extra_system_instruction: str | None = None,
+    ) -> list[dict[str, str]]:
         """Construye la lista de mensajes para el LLM (lógica de dominio)."""
         system_prompt = f"""Eres {self.name}, un personaje en una conversación grupal.
 Tu personalidad: {self.personality}
@@ -120,6 +127,10 @@ Actúa de forma coherente con este contexto."""
 
 Tienes una misión secreta que debes intentar cumplir durante la conversación. No la reveles explícitamente, aunque puedes dar pistas sobre ella.
 Tu misión: {self._mission}"""
+        if extra_system_instruction:
+            system_prompt += f"""
+
+{extra_system_instruction.strip()}"""
 
         max_history = int(os.getenv("CHAR_CONTEXT_MESSAGES", "12"))
         history = state["messages"][-max_history:]
@@ -142,14 +153,14 @@ Tu misión: {self._mission}"""
             class SinkWriter:
                 def __init__(self, sink):
                     self._sink = sink
+
                 def write(self, s: str):
                     self._sink(s)
+
                 def flush(self):
                     pass
+
             out = SinkWriter(stream_sink)
-        thinking = "[Personaje pensando...]"
-        out.write("\r" + thinking)
-        out.flush()
 
         response = send_message(
             messages,
@@ -158,20 +169,44 @@ Tu misión: {self._mission}"""
             stream=True,
         )
         assert isinstance(response, Iterator)
-        full_content: list[str] = []
-        first = True
+        raw_content: list[str] = []
+        emitted_content = ""
         for chunk in response:
-            if first:
-                out.write("\r" + " " * len(thinking) + "\r")
-                out.write(f"[{self.name}] ")
+            raw_content.append(chunk)
+            cleaned_content = self._sanitize_response_content("".join(raw_content))
+            if len(cleaned_content) > len(emitted_content):
+                delta = cleaned_content[len(emitted_content):]
+                out.write(delta)
                 out.flush()
-                first = False
-            out.write(chunk)
-            out.flush()
-            full_content.append(chunk)
-        if first:
-            out.write("\r" + " " * len(thinking) + "\r")
-            out.write(f"[{self.name}] ")
+                emitted_content = cleaned_content
         out.write("\n")
         out.flush()
-        return "".join(full_content)
+        return "".join(raw_content)
+
+    def _sanitize_response_content(self, content: str) -> str:
+        cleaned = str(content or "").strip()
+        if not cleaned:
+            return ""
+
+        thinking_markers = (
+            "[Personaje pensando...]",
+            "[personaje pensando...]",
+        )
+        changed = True
+        while changed and cleaned:
+            changed = False
+            for marker in thinking_markers:
+                if cleaned.startswith(marker):
+                    cleaned = cleaned[len(marker):].lstrip()
+                    changed = True
+            bracket_prefix = f"[{self.name}]"
+            if cleaned.startswith(bracket_prefix):
+                cleaned = cleaned[len(bracket_prefix):].lstrip(" \t:-—\n\r")
+                changed = True
+            name_prefix = re.compile(rf"^{re.escape(self.name)}\s*[:\-—]\s*")
+            updated = name_prefix.sub("", cleaned, count=1)
+            if updated != cleaned:
+                cleaned = updated.lstrip()
+                changed = True
+
+        return cleaned

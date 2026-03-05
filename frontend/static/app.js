@@ -30,6 +30,7 @@
     error: null,
     streamingMessage: null,
     streamingNode: null,
+    observerThinking: false,
     games_list: [],
     games_loading: false,
     games_error: null,
@@ -70,6 +71,7 @@
 
   const $chat = () => $("chat");
   const $errorBanner = () => $("error-banner");
+  const $victoryOverlay = () => $("victory-overlay");
   const $intro = () => $("intro-text");
   const $mission = () => $("mission-text");
   const $characters = () => $("characters-list");
@@ -379,31 +381,28 @@
     store.newGame.standardSubmitting = false;
   }
 
-  function renderStandardTemplates() {
-    const list = $standardTemplatesList();
-    if (!list) return;
-    if (store.newGame.standardLoading) {
-      list.innerHTML = '<p class="games-list-state">Cargando plantillas estándar…</p>';
-      return;
-    }
-    if (store.newGame.standardError) {
-      list.innerHTML = `<p class="games-list-state games-list-error">${escapeHtml(store.newGame.standardError)}</p>`;
-      return;
-    }
-    const templates = Array.isArray(store.newGame.standardCatalog) ? store.newGame.standardCatalog : [];
+  function renderTemplateCards(listElement, templates, emptyMessage, options) {
+    if (!listElement) return;
+    const {
+      selectedTemplateId = "",
+      buttonLabel = "Seleccionar",
+      buttonClass = "btn-select-custom-template",
+      disableButtons = false,
+    } = options || {};
     if (!templates.length) {
-      list.innerHTML = '<p class="games-list-state">No hay plantillas estándar disponibles todavía.</p>';
+      listElement.innerHTML = `<p class="games-list-state">${escapeHtml(emptyMessage)}</p>`;
       return;
     }
-    list.innerHTML = templates
+    listElement.innerHTML = templates
       .map((t) => {
         const templateId = String(t.id || "");
         const title = String(t.titulo || "Plantilla sin título");
         const description = String(t.descripcion_breve || "");
         const version = String(t.version || "1.0.0");
         const num = Number(t.num_personajes || 0);
+        const selected = selectedTemplateId === templateId;
         return `
-          <div class="standard-template-card">
+          <div class="standard-template-card${selected ? " is-selected" : ""}">
             <h4>${escapeHtml(title)}</h4>
             <p>${escapeHtml(description)}</p>
             <div class="standard-template-meta">
@@ -412,16 +411,40 @@
             </div>
             <button
               type="button"
-              class="btn-start-standard"
+              class="${buttonClass}"
               data-template-id="${escapeHtml(templateId)}"
-              ${store.newGame.standardSubmitting ? "disabled" : ""}
+              ${disableButtons ? "disabled" : ""}
             >
-              ${store.newGame.standardSubmitting ? "Iniciando..." : "Jugar plantilla"}
+              ${escapeHtml(selected ? "Seleccionada" : buttonLabel)}
             </button>
           </div>
         `;
       })
       .join("");
+  }
+
+  function renderStandardTemplates() {
+    const list = $standardTemplatesList();
+    if (!list) return;
+    if (store.newGame.standardLoading) {
+      list.innerHTML = '<p class="games-list-state">Cargando plantillas…</p>';
+      return;
+    }
+    if (store.newGame.standardError) {
+      list.innerHTML = `<p class="games-list-state games-list-error">${escapeHtml(store.newGame.standardError)}</p>`;
+      return;
+    }
+    const templates = Array.isArray(store.newGame.standardCatalog) ? store.newGame.standardCatalog : [];
+    renderTemplateCards(
+      list,
+      templates,
+      "No hay plantillas disponibles todavía.",
+      {
+        buttonLabel: store.newGame.standardSubmitting ? "Iniciando..." : "Jugar plantilla",
+        buttonClass: "btn-start-standard",
+        disableButtons: store.newGame.standardSubmitting,
+      }
+    );
   }
 
   function showNewGameStep(step) {
@@ -436,12 +459,12 @@
     if (stepStandard) stepStandard.classList.toggle("hidden", step !== "standard");
     if (title) {
       if (step === "custom") title.textContent = "Nueva partida personalizada";
-      else if (step === "standard") title.textContent = "Partidas estándar";
+      else if (step === "standard") title.textContent = "Plantillas";
       else title.textContent = "Nueva partida";
     }
     if (help) {
-      if (step === "custom") help.textContent = "Deja todo en blanco para usar la configuración por defecto.";
-      else if (step === "standard") help.textContent = "Elige una partida tipo ya preconstruida para copiarla e iniciar al instante.";
+      if (step === "custom") help.textContent = "Describe la partida y genera una historia nueva.";
+      else if (step === "standard") help.textContent = "Elige una plantilla ya preparada para iniciar la partida al instante.";
       else help.textContent = "Elige cómo quieres iniciar la historia.";
     }
     if (step === "standard") renderStandardTemplates();
@@ -496,11 +519,36 @@
     return { payload };
   }
 
+  function hasFirstActorMessage() {
+    const messages = Array.isArray(store.status.messages) ? store.status.messages : [];
+    const username = currentUsername();
+    return messages.some((message) => {
+      const author = String(message && message.author ? message.author : "").trim();
+      const content = String(message && message.content ? message.content : "").trim();
+      if (!author || !content) return false;
+      if (author === "Sistema" || author === "system") return false;
+      if (author === "Usuario" || author === username) return false;
+      return true;
+    });
+  }
+
+  async function emitClientInitMetric(sessionId, startedAtMs) {
+    if (!sessionId) return;
+    const elapsed = Math.max(0, Math.round(performance.now() - Number(startedAtMs || 0)));
+    try {
+      await apiPost("/game/init-metric", {
+        session_id: String(sessionId),
+        ttfa_client_ms: elapsed,
+      });
+    } catch (_) {}
+  }
+
   async function postNewGame(payload = {}) {
     if (!store.auth.isAuthenticated) {
       await handleAuthExpired();
       return false;
     }
+    const initStartedAtMs = performance.now();
     clearError();
     showLoading("Creando partida…");
     try {
@@ -532,6 +580,9 @@
       store.messages = [];
       await fetchContext();
       await fetchStatus();
+      if (hasFirstActorMessage()) {
+        emitClientInitMetric(store.session_id, initStartedAtMs);
+      }
       await fetchGamesList();
       renderAll();
       return true;
@@ -563,7 +614,7 @@
       store.newGame.standardCatalog = Array.isArray(data.templates) ? data.templates : [];
     } catch (e) {
       store.newGame.standardCatalog = [];
-      store.newGame.standardError = e.message || "No se pudo cargar el catálogo estándar";
+      store.newGame.standardError = e.message || "No se pudo cargar el catálogo de plantillas";
     } finally {
       store.newGame.standardLoading = false;
       renderStandardTemplates();
@@ -576,10 +627,11 @@
       await handleAuthExpired();
       return;
     }
+    const initStartedAtMs = performance.now();
     store.newGame.standardSubmitting = true;
     renderStandardTemplates();
     clearError();
-    showLoading("Cargando plantilla estándar e iniciando partida…");
+    showLoading("Cargando plantilla e iniciando partida…");
     try {
       const data = await apiPost("/game/standard/start", { template_id: templateId });
       store.session_id = data.session_id;
@@ -594,11 +646,14 @@
       store.messages = [];
       await fetchContext();
       await fetchStatus();
+      if (hasFirstActorMessage()) {
+        emitClientInitMetric(store.session_id, initStartedAtMs);
+      }
       await fetchGamesList();
       closeNewGameModal();
       renderAll();
     } catch (e) {
-      showError(e.message || "No se pudo iniciar la partida estándar");
+      showError(e.message || "No se pudo iniciar la plantilla");
     } finally {
       store.newGame.standardSubmitting = false;
       hideLoading();
@@ -1014,29 +1069,50 @@
     return "msg msg-agent";
   }
 
+  function clearStreamingState() {
+    store.streamingMessage = null;
+    store.streamingNode = null;
+    store.observerThinking = false;
+  }
+
+  function appendChatMessage(chat, msg, isStreaming) {
+    const div = document.createElement("div");
+    div.className = msgClass(msg) + (isStreaming ? " msg-streaming" : "");
+    div.innerHTML = `
+      <div class="msg-author">${escapeHtml(msg.author)}</div>
+      <div class="msg-content">${escapeHtml(msg.content)}</div>
+    `;
+    chat.appendChild(div);
+    if (isStreaming) store.streamingNode = div.querySelector(".msg-content");
+  }
+
+  function appendObserverThinking(chat) {
+    const div = document.createElement("div");
+    div.className = "chat-thinking";
+    div.innerHTML = `
+      <div class="chat-thinking-spinner" role="status" aria-label="Pensando"></div>
+    `;
+    chat.appendChild(div);
+  }
+
   function renderChat() {
     const chat = $chat();
     if (!chat) return;
     chat.innerHTML = "";
+    store.streamingNode = null;
 
-    const list = store.streamingMessage
-      ? [...store.messages, { ...store.streamingMessage, streaming: true }]
-      : store.messages;
+    store.messages.forEach((msg) => appendChatMessage(chat, msg, false));
 
-    list.forEach((msg, i) => {
-      const div = document.createElement("div");
-      div.className = msgClass(msg) + (msg.streaming ? " msg-streaming" : "");
-      div.dataset.index = String(i);
-      div.innerHTML = `
-        <div class="msg-author">${escapeHtml(msg.author)}</div>
-        <div class="msg-content">${escapeHtml(msg.content)}</div>
-      `;
-      chat.appendChild(div);
-      if (msg.streaming) store.streamingNode = div.querySelector(".msg-content");
-    });
+    if (store.observerThinking && !store.streamingMessage) {
+      appendObserverThinking(chat);
+    }
 
-    if (!store.streamingMessage) store.streamingNode = null;
-    if (store.streamingNode) store.streamingNode.scrollIntoView({ behavior: "smooth" });
+    if (store.streamingMessage) {
+      appendChatMessage(chat, store.streamingMessage, true);
+    }
+
+    const lastNode = store.streamingNode || chat.lastElementChild;
+    if (lastNode) lastNode.scrollIntoView({ behavior: "smooth" });
   }
 
   function updateStreamingContent(text) {
@@ -1046,11 +1122,50 @@
     }
   }
 
+  function isPlayerVictory() {
+    if (!store.session_id || !store.status.game_finished) return false;
+    const result = store.status.result;
+    if (!result || typeof result !== "object") return false;
+    const missionEvaluation = result.mission_evaluation;
+    if (!missionEvaluation || typeof missionEvaluation !== "object") return false;
+    return missionEvaluation.player_mission_achieved === true;
+  }
+
+  function renderVictoryOverlay() {
+    const overlay = $victoryOverlay();
+    if (!overlay) return;
+    const hasVictory = isPlayerVictory();
+    overlay.classList.toggle("hidden", !hasVictory);
+    overlay.setAttribute("aria-hidden", hasVictory ? "false" : "true");
+    if (!hasVictory) {
+      overlay.innerHTML = "";
+      return;
+    }
+    const reason = String((store.status.result && store.status.result.reason) || "").trim();
+    const detail = reason || "Has cumplido la misión principal.";
+    overlay.innerHTML = `
+      <section class="victory-overlay-panel">
+        <div class="victory-kicker">Partida finalizada</div>
+        <h2 class="victory-title">Victoria del jugador</h2>
+        <p class="victory-subtitle">${escapeHtml(detail)}</p>
+        <p class="victory-note">El chat queda bloqueado. Puedes usar el menu superior para feedback, usuario o nueva partida.</p>
+      </section>
+    `;
+  }
+
   function updateInputState() {
     const s = store.status;
-    const canWrite = store.session_id && s.player_can_write && !s.game_finished;
-    $playerInput().disabled = !canWrite;
-    $btnSend().disabled = !canWrite;
+    const blockedByVictory = isPlayerVictory();
+    const canWrite = store.session_id && s.player_can_write && !s.game_finished && !blockedByVictory;
+    const playerInput = $playerInput();
+    const sendBtn = $btnSend();
+    if (playerInput) {
+      playerInput.disabled = !canWrite;
+      playerInput.placeholder = blockedByVictory
+        ? "Partida ganada. Ya no puedes escribir en este chat."
+        : "Escribe tu mensaje...";
+    }
+    if (sendBtn) sendBtn.disabled = !canWrite;
   }
 
   function renderAll() {
@@ -1079,6 +1194,7 @@
     renderSidebar();
     renderGamesDrawer();
     renderOverlayPanels();
+    renderVictoryOverlay();
     renderChat();
     updateInputState();
   }
@@ -1097,8 +1213,7 @@
     };
     store.context = { player_mission: "", characters: [], narrativa_inicial: "" };
     store.messages = [];
-    store.streamingMessage = null;
-    store.streamingNode = null;
+    clearStreamingState();
     renderAll();
   }
 
@@ -1123,11 +1238,10 @@
     };
     store.messages.push(userMsg);
     if (inputEl) inputEl.value = "";
+    clearStreamingState();
+    store.observerThinking = true;
     renderChat();
     updateInputState();
-
-    store.streamingMessage = { author: "", content: "", isSystem: false, isPlayer: false };
-    renderChat();
 
     const url = API_BASE + "/game/turn";
     try {
@@ -1163,7 +1277,30 @@
         if (!dataLine || !eventType) return;
         try {
           const data = JSON.parse(dataLine);
-          if (eventType === "message_delta" && data.delta != null) {
+          if (eventType === "observer_thinking") {
+            store.observerThinking = true;
+            renderChat();
+          } else if (eventType === "message_start") {
+            currentContent = "";
+            store.observerThinking = false;
+            store.streamingMessage = {
+              author: data.author || "",
+              content: "",
+              isSystem: false,
+              isPlayer: false,
+            };
+            renderChat();
+          } else if (eventType === "message_delta" && data.delta != null) {
+            if (!store.streamingMessage) {
+              store.observerThinking = false;
+              store.streamingMessage = {
+                author: store.status.current_speaker || "",
+                content: "",
+                isSystem: false,
+                isPlayer: false,
+              };
+              renderChat();
+            }
             currentContent += data.delta;
             if (store.streamingMessage) store.streamingMessage.content = currentContent;
             updateStreamingContent(currentContent);
@@ -1176,17 +1313,19 @@
               isPlayer: m.author === "Usuario" || m.author === currentUsername(),
             });
             store.streamingMessage = null;
+            store.streamingNode = null;
             currentContent = "";
+            renderChat();
           } else if (eventType === "game_ended") {
             store.status.game_finished = true;
             store.status.result = {
               reason: data.reason,
               mission_evaluation: data.mission_evaluation,
             };
-            store.streamingMessage = null;
+            clearStreamingState();
           } else if (eventType === "error") {
             showError(data.message || "Error en el turno");
-            store.streamingMessage = null;
+            clearStreamingState();
           }
         } catch (_) {}
       }
@@ -1201,12 +1340,12 @@
       }
       if (buffer.trim()) processEventBlock(buffer);
 
-      store.streamingMessage = null;
+      clearStreamingState();
       await fetchStatus();
       await fetchGamesList();
     } catch (e) {
       showError(e.message || "Error al enviar");
-      store.streamingMessage = null;
+      clearStreamingState();
       await fetchStatus();
       await fetchGamesList();
     }

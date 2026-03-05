@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agora - UI de prueba</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=2" />
+  <link rel="stylesheet" href="/ui/styles.css?v=4" />
 </head>
 <body class="theme-light">
   <div class="bg-atmosphere">
@@ -70,6 +70,7 @@
       </div>
     </header>
     <div class="workspace">
+      <div id="victory-overlay" class="victory-overlay hidden" role="status" aria-live="polite" aria-hidden="true"></div>
       <main class="main">
         <div id="error-banner" class="error-banner hidden"></div>
         <div id="chat" class="chat"></div>
@@ -172,7 +173,7 @@
       <div id="new-game-step-mode" class="new-game-step">
         <div class="new-game-mode-actions">
           <button type="button" id="btn-mode-custom">Modo custom</button>
-          <button type="button" id="btn-mode-standard" class="btn-secondary">Modo standard (plantilla)</button>
+          <button type="button" id="btn-mode-standard" class="btn-secondary">Modo plantillas</button>
         </div>
       </div>
 
@@ -229,6 +230,6 @@
       </div>
     </div>
   </div>
-  <script src="/ui/app.js?v=2"></script>
+  <script src="/ui/app.js?v=4"></script>
 </body>
 </html>

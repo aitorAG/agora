@@ -69,8 +69,11 @@ def _base_event(event_type: str, metadata: dict[str, Any] | None = None) -> dict
         "agent_type": _string_field(merged_meta.get("agent_type"), limit=80),
         "agent_step": _string_field(merged_meta.get("agent_step"), limit=120),
         "username": _string_field(merged_meta.get("username"), limit=120),
+        "game_mode": _string_field(merged_meta.get("game_mode"), limit=40),
+        "phase_name": _string_field(merged_meta.get("phase_name"), limit=80),
         "status": _string_field(merged_meta.get("status"), default="ok", limit=40),
         "status_message": _string_field(merged_meta.get("status_message"), limit=500),
+        "duration_ms": _safe_int(merged_meta.get("duration_ms")),
     }
 
 

@@ -31,6 +31,8 @@ class TelemetryEventIn(BaseModel):
     agent_type: str = ""
     agent_step: str = ""
     username: str = ""
+    game_mode: str = ""
+    phase_name: str = ""
     provider: str = ""
     model: str = ""
     generation_name: str = ""
@@ -276,6 +278,52 @@ def _init_db() -> None:
             )
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS game_init_summary (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                game_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                username TEXT NOT NULL,
+                game_mode TEXT NOT NULL,
+                duration_ms INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                status_message TEXT NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS game_init_phases (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                game_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                username TEXT NOT NULL,
+                game_mode TEXT NOT NULL,
+                phase_name TEXT NOT NULL,
+                duration_ms INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                status_message TEXT NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS game_init_client (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                game_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                username TEXT NOT NULL,
+                game_mode TEXT NOT NULL,
+                duration_ms INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                status_message TEXT NOT NULL
+            )
+            """
+        )
         cur.execute("CREATE INDEX IF NOT EXISTS idx_llm_calls_timestamp ON llm_calls(timestamp)")
         cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_llm_calls_user_game ON llm_calls(user_id, game_id)"
@@ -291,6 +339,21 @@ def _init_db() -> None:
         )
         cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_user_access_user_id ON user_access_events(user_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_game_init_summary_timestamp ON game_init_summary(timestamp)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_game_init_summary_mode ON game_init_summary(game_mode)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_game_init_summary_game ON game_init_summary(game_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_game_init_phases_mode ON game_init_phases(game_mode, phase_name)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_game_init_client_mode ON game_init_client(game_mode)"
         )
 
 
@@ -415,6 +478,141 @@ def _users_ranked_by_cost() -> list[dict[str, Any]]:
     return items
 
 
+def _percentile(values: list[int], pct: float) -> int:
+    if not values:
+        return 0
+    sorted_values = sorted(max(0, int(v)) for v in values)
+    if pct <= 0:
+        return sorted_values[0]
+    if pct >= 100:
+        return sorted_values[-1]
+    position = (len(sorted_values) - 1) * (pct / 100.0)
+    low = int(position)
+    high = min(low + 1, len(sorted_values) - 1)
+    if low == high:
+        return sorted_values[low]
+    weight = position - low
+    return int(round((sorted_values[low] * (1.0 - weight)) + (sorted_values[high] * weight)))
+
+
+def _normalize_game_mode(value: Any) -> str:
+    return "standard" if str(value or "").strip().lower() == "standard" else "custom"
+
+
+def _init_latency_snapshot() -> dict[str, Any]:
+    summary_rows = _sqlite_fetchall(
+        """
+        SELECT game_mode, substr(timestamp, 1, 10) AS day, duration_ms
+        FROM game_init_summary
+        WHERE status = 'ok'
+          AND duration_ms > 0
+        """
+    )
+    client_rows = _sqlite_fetchall(
+        """
+        SELECT game_mode, substr(timestamp, 1, 10) AS day, duration_ms
+        FROM game_init_client
+        WHERE status = 'ok'
+          AND duration_ms > 0
+        """
+    )
+    phase_rows = _sqlite_fetchall(
+        """
+        SELECT game_mode, phase_name, duration_ms
+        FROM game_init_phases
+        WHERE status = 'ok'
+          AND duration_ms >= 0
+        """
+    )
+
+    def _build_mode_stats(rows: list[Any]) -> dict[str, dict[str, Any]]:
+        mode_values: dict[str, list[int]] = {"custom": [], "standard": []}
+        series_day_values: dict[str, dict[str, list[int]]] = {"custom": {}, "standard": {}}
+        for row in rows:
+            mode = _normalize_game_mode(row[0])
+            day = str(row[1] or "")
+            value = _safe_int(row[2])
+            if value <= 0:
+                continue
+            mode_values[mode].append(value)
+            if day:
+                series_day_values[mode].setdefault(day, []).append(value)
+
+        def _daily(points: dict[str, list[int]], pct: float | None = None) -> list[dict[str, int | str]]:
+            items: list[dict[str, int | str]] = []
+            for day in sorted(points.keys()):
+                values = points.get(day, [])
+                if not values:
+                    continue
+                if pct is None:
+                    value = int(round(sum(values) / len(values)))
+                else:
+                    value = _percentile(values, pct)
+                items.append({"day": day, "value": value})
+            return items
+
+        output: dict[str, dict[str, Any]] = {}
+        for mode in ("custom", "standard"):
+            values = mode_values[mode]
+            output[mode] = {
+                "count": len(values),
+                "avg": int(round(sum(values) / len(values))) if values else 0,
+                "max": max(values) if values else 0,
+                "p50": _percentile(values, 50),
+                "p95": _percentile(values, 95),
+                "series_avg_per_day": _daily(series_day_values[mode], None),
+                "series_p95_per_day": _daily(series_day_values[mode], 95),
+            }
+        return output
+
+    server_mode_stats = _build_mode_stats(summary_rows)
+    client_mode_stats = _build_mode_stats(client_rows)
+
+    phase_values: dict[str, dict[str, list[int]]] = {"custom": {}, "standard": {}}
+    for row in phase_rows:
+        mode = _normalize_game_mode(row[0])
+        phase = str(row[1] or "").strip() or "unknown_phase"
+        value = _safe_int(row[2])
+        phase_values[mode].setdefault(phase, []).append(value)
+
+    phase_rows_out: list[dict[str, Any]] = []
+    ordered_phases = (
+        "template_load_validate",
+        "create_game_and_warmup",
+        "serialize_response",
+    )
+    for mode in ("custom", "standard"):
+        phases = phase_values.get(mode, {})
+        for phase in ordered_phases:
+            values = phases.get(phase, [])
+            phase_rows_out.append(
+                {
+                    "mode": mode,
+                    "phase_name": phase,
+                    "avg_ms": int(round(sum(values) / len(values))) if values else 0,
+                    "p95_ms": _percentile(values, 95),
+                    "count": len(values),
+                }
+            )
+        for phase, values in phases.items():
+            if phase in ordered_phases:
+                continue
+            phase_rows_out.append(
+                {
+                    "mode": mode,
+                    "phase_name": phase,
+                    "avg_ms": int(round(sum(values) / len(values))) if values else 0,
+                    "p95_ms": _percentile(values, 95),
+                    "count": len(values),
+                }
+            )
+    return {
+        "server": server_mode_stats,
+        "client": client_mode_stats,
+        "phases": phase_rows_out,
+    }
+
+
 def _general_metrics() -> dict[str, Any]:
     total_users_row = _app_fetchone("SELECT COUNT(*) FROM users")
     user_series_rows = _app_fetchall(
@@ -498,6 +696,16 @@ def _general_metrics() -> dict[str, Any]:
         ) interactions
         """
     )
+    init_snapshot = _init_latency_snapshot()
+    server_custom = init_snapshot["server"]["custom"]
+    server_standard = init_snapshot["server"]["standard"]
+    client_custom = init_snapshot["client"]["custom"]
+    client_standard = init_snapshot["client"]["standard"]
+    combined_server_values = [value for value in (server_custom["p50"], server_standard["p50"]) if value > 0]
+    combined_server_p95 = [value for value in (server_custom["p95"], server_standard["p95"]) if value > 0]
+    combined_client_values = [value for value in (client_custom["p50"], client_standard["p50"]) if value > 0]
+    combined_client_p95 = [value for value in (client_custom["p95"], client_standard["p95"]) if value > 0]
+
     users_ranked = _users_ranked_by_cost()
     active_games_today = _safe_int(games_played_rows[-1][1]) if games_played_rows else 0
     total_tracked_tokens = sum(_safe_int(item["total_tokens"]) for item in users_ranked)
@@ -512,6 +720,18 @@ def _general_metrics() -> dict[str, Any]:
             "max_cost_per_game": _safe_float(token_cost_row[3] if token_cost_row else 0.0),
             "historical_total_cost": _safe_float(token_cost_row[4] if token_cost_row else 0.0),
             "avg_wait_ms": _safe_int(wait_row[0] if wait_row else 0),
+            "init_server_p50_ms": int(round(sum(combined_server_values) / len(combined_server_values))) if combined_server_values else 0,
+            "init_server_p95_ms": int(round(sum(combined_server_p95) / len(combined_server_p95))) if combined_server_p95 else 0,
+            "ttfa_client_p50_ms": int(round(sum(combined_client_values) / len(combined_client_values))) if combined_client_values else 0,
+            "ttfa_client_p95_ms": int(round(sum(combined_client_p95) / len(combined_client_p95))) if combined_client_p95 else 0,
+            "init_server_custom_p50_ms": server_custom["p50"],
+            "init_server_custom_p95_ms": server_custom["p95"],
+            "init_server_standard_p50_ms": server_standard["p50"],
+            "init_server_standard_p95_ms": server_standard["p95"],
+            "ttfa_client_custom_p50_ms": client_custom["p50"],
+            "ttfa_client_custom_p95_ms": client_custom["p95"],
+            "ttfa_client_standard_p50_ms": client_standard["p50"],
+            "ttfa_client_standard_p95_ms": client_standard["p95"],
         },
         "series": {
             "registered_users_per_day": [
@@ -542,6 +762,17 @@ def _general_metrics() -> dict[str, Any]:
                 {"day": str(row[0] or ""), "value": _safe_float(row[3])}
                 for row in daily_cost_rows
             ],
+            "init_server_custom_avg_per_day": server_custom["series_avg_per_day"],
+            "init_server_standard_avg_per_day": server_standard["series_avg_per_day"],
+            "init_server_custom_p95_per_day": server_custom["series_p95_per_day"],
+            "init_server_standard_p95_per_day": server_standard["series_p95_per_day"],
+            "ttfa_client_custom_avg_per_day": client_custom["series_avg_per_day"],
+            "ttfa_client_standard_avg_per_day": client_standard["series_avg_per_day"],
+            "ttfa_client_custom_p95_per_day": client_custom["series_p95_per_day"],
+            "ttfa_client_standard_p95_per_day": client_standard["series_p95_per_day"],
+        },
+        "init": {
+            "phases": init_snapshot["phases"],
         },
         "rankings": {
             "users_by_cost": users_ranked,
@@ -980,6 +1211,64 @@ def ingest_events(
                         event_type,
                         ev.user_id[:150],
                         ev.username[:120],
+                        (ev.status or "ok")[:40],
+                        ev.status_message[:500],
+                    ),
+                )
+                continue
+            if event_type == "game_init_summary":
+                cur.execute(
+                    """
+                    INSERT INTO game_init_summary (
+                        timestamp, game_id, user_id, username, game_mode, duration_ms, status, status_message
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        normalized_ts,
+                        ev.game_id[:150],
+                        ev.user_id[:150],
+                        ev.username[:120],
+                        _normalize_game_mode(ev.game_mode),
+                        max(0, int(ev.duration_ms)),
+                        (ev.status or "ok")[:40],
+                        ev.status_message[:500],
+                    ),
+                )
+                continue
+            if event_type == "game_init_phase":
+                cur.execute(
+                    """
+                    INSERT INTO game_init_phases (
+                        timestamp, game_id, user_id, username, game_mode, phase_name, duration_ms, status, status_message
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        normalized_ts,
+                        ev.game_id[:150],
+                        ev.user_id[:150],
+                        ev.username[:120],
+                        _normalize_game_mode(ev.game_mode),
+                        (ev.phase_name or "")[:80],
+                        max(0, int(ev.duration_ms)),
+                        (ev.status or "ok")[:40],
+                        ev.status_message[:500],
+                    ),
+                )
+                continue
+            if event_type == "game_init_client":
+                cur.execute(
+                    """
+                    INSERT INTO game_init_client (
+                        timestamp, game_id, user_id, username, game_mode, duration_ms, status, status_message
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        normalized_ts,
+                        ev.game_id[:150],
+                        ev.user_id[:150],
+                        ev.username[:120],
+                        _normalize_game_mode(ev.game_mode),
+                        max(0, int(ev.duration_ms)),
                         (ev.status or "ok")[:40],
                         ev.status_message[:500],
                     ),

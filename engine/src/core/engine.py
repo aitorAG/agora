@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 from datetime import datetime
 from dataclasses import dataclass
@@ -14,11 +15,12 @@ from uuid import uuid4
 from ..state import ConversationState
 from ..manager import ConversationManager
 from ..crew_roles.guionista import create_guionista_agent, run_setup_task
-from ..crew_roles.character import create_character_agent
+from ..crew_roles.character import create_character_agent, run_character_response
 from ..crew_roles.observer import create_observer_agent
 from ..crew_roles.director import run_one_step
 from ..persistence import PersistenceProvider, create_persistence_provider
 from ..observability import emit_event, trace_interaction, trace_setup
+from .game_setup_contract import validate_game_setup
 
 
 @dataclass
@@ -85,7 +87,7 @@ class GameEngine:
             max_turns=max_turns,
         )
         self._registry[game_id] = session
-        self._warmup_session(game_id, session)
+        self._warmup_session(game_id, session, game_mode="custom")
         return game_id, session.setup
 
     def create_game_from_setup(
@@ -93,31 +95,31 @@ class GameEngine:
         setup: dict[str, Any],
         max_turns: int = 10,
         username: str | None = None,
+        game_mode: Literal["custom", "standard"] = "standard",
         standard_template_id: str | None = None,
         template_version: str | None = None,
     ) -> tuple[str, dict[str, Any]]:
-        """Crea una partida desde un setup predefinido (modo standard)."""
-        if not isinstance(setup, dict):
-            raise ValueError("Invalid setup")
-        actors = setup.get("actors")
-        if not isinstance(actors, list) or not actors:
-            raise ValueError("Invalid setup actors")
+        """Crea una partida desde un setup predefinido."""
+        if game_mode not in ("custom", "standard"):
+            raise ValueError("Invalid game mode")
 
-        title = str(setup.get("titulo") or "Partida estándar").strip() or "Partida estándar"
+        validated_setup = validate_game_setup(setup)
+        default_title = "Plantilla" if game_mode == "standard" else "Partida"
+        title = str(validated_setup.get("titulo") or default_title).strip() or default_title
         game_id = self._persistence.create_game(
             title=title,
-            config_json=dict(setup),
+            config_json=dict(validated_setup),
             username=username,
-            game_mode="standard",
+            game_mode=game_mode,
             standard_template_id=standard_template_id,
             template_version=template_version,
         )
         session = self._build_session_from_setup(
-            setup=setup,
+            setup=validated_setup,
             max_turns=max_turns,
         )
         self._registry[game_id] = session
-        self._warmup_session(game_id, session)
+        self._warmup_session(game_id, session, game_mode=game_mode)
         return game_id, session.setup
 
     def _build_session_from_setup(
@@ -162,8 +164,70 @@ class GameEngine:
             persisted_messages=0,
         )
 
-    def _warmup_session(self, game_id: str, session: GameSession) -> None:
+    def _build_standard_opening_instruction(self, session: GameSession) -> str:
+        setup = session.setup
+        context_parts = [
+            str(setup.get("ambientacion") or "").strip(),
+            str(setup.get("contexto_problema") or "").strip(),
+            str(setup.get("relevancia_jugador") or "").strip(),
+        ]
+        context_block = "\n".join(part for part in context_parts if part)
+        instruction = (
+            "Dado el contexto, tu background y tu misión, da tu posición inicial "
+            "sobre el conflicto en 1 o 2 frases, dirigiéndote al jugador, sin "
+            "revelar tu objetivo explícitamente."
+        )
+        if context_block:
+            return f"Contexto de la escena:\n{context_block}\n\n{instruction}"
+        return instruction
+
+    def _warmup_standard_session(self, game_id: str, session: GameSession) -> None:
+        actor_names = list(session.character_agents.keys())
+        if not actor_names:
+            raise ValueError("Invalid setup actors")
+
+        random.shuffle(actor_names)
+        opening_count = max(1, (len(actor_names) + 1) // 2)
+        opening_instruction = self._build_standard_opening_instruction(session)
+
+        for idx, actor_name in enumerate(actor_names[:opening_count]):
+            agent = session.character_agents.get(actor_name)
+            if agent is None:
+                continue
+            result = run_character_response(
+                agent,
+                session.manager.state,
+                extra_system_instruction=opening_instruction if idx == 0 else None,
+            )
+            if "error" in result:
+                raise RuntimeError(str(result["error"]))
+            session.manager.add_message(
+                result["author"],
+                result["message"],
+                displayed=result.get("displayed", False),
+            )
+
+        session.manager.update_metadata(
+            "continuation_decision",
+            {
+                "needs_response": False,
+                "who_should_respond": "user",
+                "reason": "Warmup de plantilla completado.",
+            },
+        )
+        session.next_action = "user_input"
+        self._persist_session_state(game_id, session)
+
+    def _warmup_session(
+        self,
+        game_id: str,
+        session: GameSession,
+        game_mode: Literal["custom", "standard"] = "custom",
+    ) -> None:
         """Avanza al primer punto de input del usuario y persiste snapshot inicial."""
+        if game_mode == "standard":
+            self._warmup_standard_session(game_id, session)
+            return
         game = self._persistence.get_game(game_id)
         user_id = str(game.get("user_id") or game.get("user") or "") if game else ""
         interaction_id = f"{game_id}:warmup"
@@ -537,7 +601,8 @@ class GameEngine:
         user_exit: bool = False,
     ) -> Iterator[dict[str, Any]]:
         """Ejecuta el turno (input del jugador + respuestas de personajes hasta user_input o game_ended).
-        Genera eventos en streaming: message_delta (chunks), luego message, turn_end, game_ended si aplica.
+        Genera eventos en streaming: observer_thinking, message_start, message_delta,
+        message y game_ended a medida que cada actor termina.
         """
         session = self._get_session(game_id)
         game = self._persistence.get_game(game_id)
@@ -548,10 +613,12 @@ class GameEngine:
         def chunk_sink(chunk: str) -> None:
             queue.put(("delta", chunk))
 
+        def event_sink(event: dict[str, Any]) -> None:
+            queue.put(("event", dict(event)))
+
         def run() -> None:
             try:
                 with trace_interaction(game_id, user_id, interaction_id, name="turn_stream"):
-                    all_events: list = []
                     result = run_one_step(
                         session.manager,
                         session.character_agents,
@@ -563,11 +630,13 @@ class GameEngine:
                         max_messages_before_user=session.max_messages_before_user,
                         stream_character=True,
                         character_stream_sink=chunk_sink,
+                        event_sink=event_sink,
                         game_id=game_id,
                         turn=session.manager.state.get("turn", 0),
                     )
                     session.next_action = result["next_action"]
-                    all_events.extend(result.get("events", []))
+                    for ev in result.get("events", []):
+                        event_sink(ev)
                     while result["next_action"] == "character" and not result.get("game_ended"):
                         result = run_one_step(
                             session.manager,
@@ -580,13 +649,15 @@ class GameEngine:
                             max_messages_before_user=session.max_messages_before_user,
                             stream_character=True,
                             character_stream_sink=chunk_sink,
+                            event_sink=event_sink,
                             game_id=game_id,
                             turn=session.manager.state.get("turn", 0),
                         )
                         session.next_action = result["next_action"]
-                        all_events.extend(result.get("events", []))
+                        for ev in result.get("events", []):
+                            event_sink(ev)
                     self._persist_session_state(game_id, session)
-                    queue.put(("done", all_events))
+                    queue.put(("done", None))
             except Exception as e:
                 queue.put(("error", str(e)))
 
@@ -599,12 +670,12 @@ class GameEngine:
                 break
             if item[0] == "delta":
                 yield {"type": "message_delta", "delta": item[1]}
+            elif item[0] == "event":
+                yield item[1]
             elif item[0] == "error":
                 yield {"type": "error", "message": item[1]}
                 break
             else:
-                for ev in item[1]:
-                    yield ev
                 break
         thread.join()
 

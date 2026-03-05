@@ -2,6 +2,16 @@
 
 These priorities apply to every change in this repository unless explicitly overridden by the user.
 
+## Approval Gate
+
+Before implementing any change in this repository, you must:
+
+- explain first what changes you expect to make,
+- wait for explicit user confirmation,
+- avoid modifying files, configuration, or executing project-changing actions until the user says literally `luz verde`.
+
+If that exact message has not been provided, remain in analysis, proposal, or review mode without implementing changes.
+
 ## Core Objectives
 
 1. High efficiency and execution speed.

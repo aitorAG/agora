@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Agora Observability</title>
-  <link rel="stylesheet" href="static/styles.css?v=20260304" />
+  <link rel="stylesheet" href="static/styles.css?v=20260305" />
 </head>
 <body>
   <main class="layout">
@@ -48,6 +48,13 @@
           <section class="cards compact" id="generalLatencyKpis"></section>
         </article>
       </section>
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Inicializacion de partida</h2>
+          <span>Tiempo hasta tener el primer mensaje de actor</span>
+        </div>
+        <section class="cards compact" id="generalInitKpis"></section>
+      </article>
       <section class="grid two-col">
         <article class="panel">
           <div class="panel-head">
@@ -88,6 +95,38 @@
             </thead>
             <tbody></tbody>
           </table>
+        </article>
+      </section>
+      <section class="grid two-col">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Tendencia de inicializacion</h2>
+            <span>Comparativa custom vs standard</span>
+          </div>
+          <div class="toolbar">
+            <label>
+              <span>Metrica</span>
+              <select id="initSeriesMetric">
+                <option value="server">Init server</option>
+                <option value="client">TTFA cliente</option>
+              </select>
+            </label>
+            <label>
+              <span>Agregacion</span>
+              <select id="initSeriesAgg">
+                <option value="avg">Media diaria</option>
+                <option value="p95">P95 diario</option>
+              </select>
+            </label>
+          </div>
+          <div class="chart" id="initSeriesChart"></div>
+        </article>
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Fases de inicializacion</h2>
+            <span>Barras apiladas por modo</span>
+          </div>
+          <div class="chart" id="initPhasesChart"></div>
         </article>
       </section>
     </section>
@@ -187,6 +226,6 @@
       </div>
     </section>
   </main>
-  <script src="static/app.js?v=20260304"></script>
+  <script src="static/app.js?v=20260305"></script>
 </body>
 </html>

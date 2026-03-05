@@ -56,6 +56,7 @@ def test_new_game_empty_body_uses_env_theme_and_default_num_actors(monkeypatch):
         assert res.status_code == 200
         assert engine.calls[0]["theme"] == "Tema desde .env"
         assert engine.calls[0]["num_actors"] == 3
+        assert engine.calls[0]["username"] == "usuario"
     finally:
         app.dependency_overrides.clear()
 

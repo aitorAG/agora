@@ -73,6 +73,14 @@ class _InMemoryProvider(PersistenceProvider):
     def list_games_for_user(self, username):
         return [g for g in self.games.values() if g.get("user") == username]
 
+    def create_feedback(self, game_id, user_id, feedback_text):
+        _ = (game_id, user_id, feedback_text)
+        return str(uuid.uuid4())
+
+    def list_feedback(self, limit=500):
+        _ = limit
+        return []
+
 
 def _build_config():
     return {

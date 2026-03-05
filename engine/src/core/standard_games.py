@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .game_setup_contract import validate_game_setup
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 class StandardTemplateError(ValueError):
@@ -24,33 +26,6 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise StandardTemplateError(f"{path.name} must be an object")
     return data
-
-
-def _validate_setup(config: dict[str, Any]) -> dict[str, Any]:
-    required = (
-        "ambientacion",
-        "contexto_problema",
-        "relevancia_jugador",
-        "player_mission",
-        "narrativa_inicial",
-        "actors",
-    )
-    missing = [k for k in required if k not in config]
-    if missing:
-        raise StandardTemplateError(f"Missing keys in config.json: {', '.join(missing)}")
-    actors = config.get("actors")
-    if not isinstance(actors, list) or not actors:
-        raise StandardTemplateError("config.json actors must be a non-empty list")
-    actor_required = ("name", "personality", "mission", "background", "presencia_escena")
-    for actor in actors:
-        if not isinstance(actor, dict):
-            raise StandardTemplateError("config.json actors must be objects")
-        for key in actor_required:
-            if not str(actor.get(key, "")).strip():
-                raise StandardTemplateError(
-                    f"Each actor must have a non-empty {key}"
-                )
-    return config
 
 
 def list_standard_templates() -> list[dict[str, Any]]:
@@ -115,11 +90,15 @@ def load_standard_template(template_id: str) -> dict[str, Any]:
         raise StandardTemplateError(
             "manifest.json must define a non-empty descripcion_breve"
         )
-    config = _validate_setup(_read_json(config_path))
+    config = validate_game_setup(
+        _read_json(config_path),
+        error_factory=StandardTemplateError,
+        source_name="config.json",
+    )
 
     setup = dict(config)
     # Garantiza consistencia de los metadatos narrativos usados por UI/listados.
-    setup["titulo"] = str(setup.get("titulo") or manifest.get("titulo") or "Partida estándar").strip()
+    setup["titulo"] = str(setup.get("titulo") or manifest.get("titulo") or "Plantilla").strip()
     setup["descripcion_breve"] = str(
         setup.get("descripcion_breve") or manifest.get("descripcion_breve") or ""
     ).strip()

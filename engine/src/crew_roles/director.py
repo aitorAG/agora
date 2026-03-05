@@ -61,6 +61,7 @@ def run_one_step(
     max_messages_before_user: int = 3,
     stream_character: bool = False,
     character_stream_sink: Any = None,
+    event_sink: Any = None,
     game_id: str | None = None,
     turn: int | None = None,
 ) -> dict[str, Any]:
@@ -94,6 +95,8 @@ def run_one_step(
             agent = character_agents[who]
         else:
             agent = character_agents[agent_names_ordered[0]]
+        if event_sink is not None:
+            event_sink({"type": "message_start", "author": agent.name})
         with span_agent(
             "character",
             metadata={
@@ -132,6 +135,8 @@ def run_one_step(
 
     state = manager.state
     current_turn = int(state.get("turn", 0))
+    if event_sink is not None:
+        event_sink({"type": "observer_thinking"})
     with span_agent(
         "observer",
         metadata={

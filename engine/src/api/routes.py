@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 from pathlib import Path
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, Response
@@ -23,6 +24,7 @@ from .schemas import (
     MessageOut,
     GameResultOut,
     TurnRequest,
+    InitMetricRequest,
     FeedbackRequest,
     FeedbackResponse,
     AdminFeedbackItem,
@@ -70,6 +72,49 @@ def _format_sse(event: str, data: str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
 
+def _emit_game_init_metrics(
+    *,
+    game_id: str,
+    user_id: str,
+    username: str,
+    mode: str,
+    status: str,
+    total_ms: int,
+    phases: dict[str, int],
+    status_message: str = "",
+) -> None:
+    from ..observability import emit_event
+
+    safe_mode = "standard" if str(mode).strip().lower() == "standard" else "custom"
+    safe_status = "error" if str(status).strip().lower() == "error" else "ok"
+    emit_event(
+        "game_init_summary",
+        {
+            "game_id": game_id,
+            "user_id": user_id,
+            "username": username,
+            "game_mode": safe_mode,
+            "status": safe_status,
+            "status_message": status_message,
+            "duration_ms": max(0, int(total_ms)),
+        },
+    )
+    for phase_name, phase_ms in phases.items():
+        emit_event(
+            "game_init_phase",
+            {
+                "game_id": game_id,
+                "user_id": user_id,
+                "username": username,
+                "game_mode": safe_mode,
+                "phase_name": str(phase_name),
+                "status": safe_status,
+                "status_message": status_message,
+                "duration_ms": max(0, int(phase_ms)),
+            },
+        )
+
+
 router = APIRouter(prefix="/game", tags=["game"])
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
 authz_router = APIRouter(prefix="/authz", tags=["authz"])
@@ -90,7 +135,6 @@ def _ensure_game_ownership(engine, game_id: str, username: str) -> None:
 
 @auth_router.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest, response: Response):
-    get_persistence_provider()
     ensure_seed_user()
     user = authenticate_user(body.username, body.password)
     if not user:
@@ -122,7 +166,6 @@ def login(body: LoginRequest, response: Response):
 
 @auth_router.post("/register", response_model=LoginResponse, status_code=201)
 def register(body: RegisterRequest, response: Response):
-    get_persistence_provider()
     try:
         user = create_user(body.username, body.password)
     except UserAlreadyExistsError:
@@ -176,8 +219,8 @@ def admin_observability_redirect(_current_user: AuthUserResponse = Depends(requi
 @admin_router.get("/feedback/list", response_model=AdminFeedbackListResponse)
 def admin_feedback_list(
     limit: int = 500,
-    engine=Depends(get_engine),
     _current_user: AuthUserResponse = Depends(require_admin),
+    engine=Depends(get_engine),
 ):
     items = engine.list_feedback(limit=limit)
     return AdminFeedbackListResponse(items=[AdminFeedbackItem(**item) for item in items])
@@ -192,16 +235,20 @@ def logout(response: Response):
 @router.post("/new", response_model=NewGameResponse)
 def new_game(
     body: NewGameRequest | None = None,
-    engine=Depends(get_engine),
     current_user: AuthUserResponse = Depends(get_current_user),
+    engine=Depends(get_engine),
 ):
-    """Crea una partida. Devuelve session_id, estado inicial y contexto."""
+    """Crea una partida custom generada desde la explicación del usuario."""
     body = body or NewGameRequest()
     raw_theme = (body.theme or "").strip()
-    # Solo usar GAME_THEME cuando no hay seed y tampoco num_actors personalizado.
     use_env_theme = raw_theme == "" and body.num_actors is None
     theme = os.getenv("GAME_THEME") if use_env_theme else (raw_theme or None)
     num_actors = body.num_actors if body.num_actors is not None else 3
+
+    route_t0 = time.perf_counter()
+    phases: dict[str, int] = {}
+    session_id = ""
+    phase_t0 = time.perf_counter()
     try:
         session_id, setup = engine.create_game(
             theme=theme or None,
@@ -209,20 +256,58 @@ def new_game(
             max_turns=body.max_turns,
             username=current_user.username,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    status = engine.get_status(session_id)
-    actors = setup.get("actors", [])
-    characters = [
-        CharacterInfo(
-            name=a.get("name", ""),
-            personality=a.get("personality"),
-            mission=a.get("mission"),
-            background=a.get("background"),
-            presencia_escena=a.get("presencia_escena"),
+        phases["create_game_and_warmup"] = int((time.perf_counter() - phase_t0) * 1000)
+    except Exception as exc:
+        _emit_game_init_metrics(
+            game_id=session_id,
+            user_id=current_user.id,
+            username=current_user.username,
+            mode="custom",
+            status="error",
+            total_ms=int((time.perf_counter() - route_t0) * 1000),
+            phases=phases,
+            status_message=str(exc),
         )
-        for a in actors
-    ]
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    phase_t0 = time.perf_counter()
+    try:
+        status = engine.get_status(session_id)
+        actors = setup.get("actors", [])
+        characters = [
+            CharacterInfo(
+                name=a.get("name", ""),
+                personality=a.get("personality"),
+                mission=a.get("mission"),
+                background=a.get("background"),
+                presencia_escena=a.get("presencia_escena"),
+            )
+            for a in actors
+        ]
+        phases["serialize_response"] = int((time.perf_counter() - phase_t0) * 1000)
+    except Exception as exc:
+        phases["serialize_response"] = int((time.perf_counter() - phase_t0) * 1000)
+        _emit_game_init_metrics(
+            game_id=session_id,
+            user_id=current_user.id,
+            username=current_user.username,
+            mode="custom",
+            status="error",
+            total_ms=int((time.perf_counter() - route_t0) * 1000),
+            phases=phases,
+            status_message=str(exc),
+        )
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    _emit_game_init_metrics(
+        game_id=session_id,
+        user_id=current_user.id,
+        username=current_user.username,
+        mode="custom",
+        status="ok",
+        total_ms=int((time.perf_counter() - route_t0) * 1000),
+        phases=phases,
+    )
     return NewGameResponse(
         session_id=session_id,
         turn_current=status["turn_current"],
@@ -249,20 +334,46 @@ def list_standard_templates_endpoint(
 @router.post("/standard/start", response_model=StandardStartResponse)
 def start_standard_game(
     body: StandardStartRequest,
-    engine=Depends(get_engine),
     current_user: AuthUserResponse = Depends(get_current_user),
+    engine=Depends(get_engine),
 ):
     """Crea partida copiando un template standard ya preconstruido."""
+    route_t0 = time.perf_counter()
+    phases: dict[str, int] = {}
+    session_id = ""
+    phase_t0 = time.perf_counter()
     try:
         loaded = load_standard_template(body.template_id)
+        phases["template_load_validate"] = int((time.perf_counter() - phase_t0) * 1000)
     except KeyError:
+        _emit_game_init_metrics(
+            game_id="",
+            user_id=current_user.id,
+            username=current_user.username,
+            mode="standard",
+            status="error",
+            total_ms=int((time.perf_counter() - route_t0) * 1000),
+            phases=phases,
+            status_message="Standard template not found",
+        )
         raise HTTPException(status_code=404, detail="Standard template not found")
     except StandardTemplateError as exc:
+        _emit_game_init_metrics(
+            game_id="",
+            user_id=current_user.id,
+            username=current_user.username,
+            mode="standard",
+            status="error",
+            total_ms=int((time.perf_counter() - route_t0) * 1000),
+            phases=phases,
+            status_message=f"Invalid standard template: {exc}",
+        )
         raise HTTPException(status_code=400, detail=f"Invalid standard template: {exc}")
 
     setup = loaded.get("setup", {})
     template_id = str(loaded.get("template_id") or body.template_id)
     template_version = str(loaded.get("template_version") or "1.0.0")
+    phase_t0 = time.perf_counter()
     try:
         session_id, final_setup = engine.create_game_from_setup(
             setup=setup,
@@ -270,23 +381,70 @@ def start_standard_game(
             standard_template_id=template_id,
             template_version=template_version,
         )
+        phases["create_game_and_warmup"] = int((time.perf_counter() - phase_t0) * 1000)
     except ValueError as exc:
+        _emit_game_init_metrics(
+            game_id=session_id,
+            user_id=current_user.id,
+            username=current_user.username,
+            mode="standard",
+            status="error",
+            total_ms=int((time.perf_counter() - route_t0) * 1000),
+            phases=phases,
+            status_message=str(exc),
+        )
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
+        _emit_game_init_metrics(
+            game_id=session_id,
+            user_id=current_user.id,
+            username=current_user.username,
+            mode="standard",
+            status="error",
+            total_ms=int((time.perf_counter() - route_t0) * 1000),
+            phases=phases,
+            status_message=str(exc),
+        )
         raise HTTPException(status_code=500, detail=str(exc))
 
-    status = engine.get_status(session_id)
-    actors = final_setup.get("actors", [])
-    characters = [
-        CharacterInfo(
-            name=a.get("name", ""),
-            personality=a.get("personality"),
-            mission=a.get("mission"),
-            background=a.get("background"),
-            presencia_escena=a.get("presencia_escena"),
+    phase_t0 = time.perf_counter()
+    try:
+        status = engine.get_status(session_id)
+        actors = final_setup.get("actors", [])
+        characters = [
+            CharacterInfo(
+                name=a.get("name", ""),
+                personality=a.get("personality"),
+                mission=a.get("mission"),
+                background=a.get("background"),
+                presencia_escena=a.get("presencia_escena"),
+            )
+            for a in actors
+        ]
+        phases["serialize_response"] = int((time.perf_counter() - phase_t0) * 1000)
+    except Exception as exc:
+        phases["serialize_response"] = int((time.perf_counter() - phase_t0) * 1000)
+        _emit_game_init_metrics(
+            game_id=session_id,
+            user_id=current_user.id,
+            username=current_user.username,
+            mode="standard",
+            status="error",
+            total_ms=int((time.perf_counter() - route_t0) * 1000),
+            phases=phases,
+            status_message=str(exc),
         )
-        for a in actors
-    ]
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    _emit_game_init_metrics(
+        game_id=session_id,
+        user_id=current_user.id,
+        username=current_user.username,
+        mode="standard",
+        status="ok",
+        total_ms=int((time.perf_counter() - route_t0) * 1000),
+        phases=phases,
+    )
     return StandardStartResponse(
         session_id=session_id,
         turn_current=status["turn_current"],
@@ -304,8 +462,8 @@ def start_standard_game(
 @router.get("/status", response_model=StatusResponse)
 def get_status(
     session_id: str,
-    engine=Depends(get_engine),
     current_user: AuthUserResponse = Depends(get_current_user),
+    engine=Depends(get_engine),
 ):
     """Devuelve estado actual: turn_current, turn_max, current_speaker, player_can_write, game_finished, result, messages."""
     try:
@@ -327,11 +485,41 @@ def get_status(
     )
 
 
+@router.post("/init-metric")
+def init_metric(
+    body: InitMetricRequest,
+    current_user: AuthUserResponse = Depends(get_current_user),
+    engine=Depends(get_engine),
+):
+    """Recibe TTFA cliente (click -> primer mensaje actor renderizado)."""
+    _ensure_game_ownership(engine, body.session_id, current_user.username)
+    provider = get_persistence_provider()
+    try:
+        game = provider.get_game(body.session_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    from ..observability import emit_event
+
+    mode = str(game.get("game_mode") or "custom")
+    emit_event(
+        "game_init_client",
+        {
+            "game_id": body.session_id,
+            "user_id": str(game.get("user_id") or current_user.id),
+            "username": current_user.username,
+            "game_mode": mode,
+            "duration_ms": int(body.ttfa_client_ms),
+            "status": "ok",
+        },
+    )
+    return {"ok": True}
+
+
 @router.post("/turn")
 def turn(
     body: TurnRequest,
-    engine=Depends(get_engine),
     current_user: AuthUserResponse = Depends(get_current_user),
+    engine=Depends(get_engine),
 ):
     """Ejecuta el turno con el texto del jugador. Respuesta en streaming (SSE)."""
     try:
@@ -354,6 +542,10 @@ def turn(
             ev_type = ev.get("type", "event")
             if ev_type == "message_delta":
                 data = json.dumps({"type": "message_delta", "delta": ev.get("delta", "")})
+            elif ev_type == "observer_thinking":
+                data = json.dumps({"type": "observer_thinking"})
+            elif ev_type == "message_start":
+                data = json.dumps({"type": "message_start", "author": ev.get("author", "")})
             elif ev_type == "message":
                 msg = ev.get("message", {})
                 data = json.dumps({"type": "message", "message": _serialize_message(msg)})
@@ -379,8 +571,8 @@ def turn(
 @router.post("/feedback", response_model=FeedbackResponse, status_code=201)
 def submit_feedback(
     body: FeedbackRequest,
-    engine=Depends(get_engine),
     current_user: AuthUserResponse = Depends(get_current_user),
+    engine=Depends(get_engine),
 ):
     """Guarda feedback libre de usuario asociado a una partida."""
     _ensure_game_ownership(engine, body.session_id, current_user.username)
@@ -408,8 +600,8 @@ def submit_feedback(
 @router.get("/context", response_model=ContextResponse)
 def get_context(
     session_id: str,
-    engine=Depends(get_engine),
     current_user: AuthUserResponse = Depends(get_current_user),
+    engine=Depends(get_engine),
 ):
     """Devuelve contexto estable: player_mission, personajes, metadata inicial."""
     try:
@@ -439,8 +631,8 @@ def get_context(
 
 @router.get("/list", response_model=GameListResponse)
 def list_games(
-    engine=Depends(get_engine),
     current_user: AuthUserResponse = Depends(get_current_user),
+    engine=Depends(get_engine),
 ):
     """Lista partidas del usuario actual."""
     games = engine.list_games(username=current_user.username)
@@ -450,8 +642,8 @@ def list_games(
 @router.post("/resume", response_model=ResumeGameResponse)
 def resume_game(
     body: ResumeGameRequest,
-    engine=Depends(get_engine),
     current_user: AuthUserResponse = Depends(get_current_user),
+    engine=Depends(get_engine),
 ):
     """Reanuda una partida existente por session_id."""
     try:
