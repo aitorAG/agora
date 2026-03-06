@@ -48,6 +48,10 @@
         <button type="button" id="btn-open-feedback" class="btn-ghost">Feedback</button>
       </div>
       <div class="topbar-right">
+        <div id="topbar-status" class="topbar-status" aria-live="polite">
+          <span id="topbar-turn" class="topbar-turn">—</span>
+          <span id="topbar-game" class="topbar-game hidden">🏆 Victoria</span>
+        </div>
         <button type="button" id="btn-new-game">Nueva partida</button>
         <button
           type="button"
@@ -80,10 +84,6 @@
         </div>
       </main>
       <aside class="right-rail">
-        <section class="rail-card">
-          <h2>Estado de la partida</h2>
-          <div id="game-state" class="sidebar-content"></div>
-        </section>
         <section class="rail-card rail-metrics">
           <div class="metric">
             <span class="metric-label">Turno</span>

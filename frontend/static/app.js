@@ -75,10 +75,12 @@
   const $intro = () => $("intro-text");
   const $mission = () => $("mission-text");
   const $characters = () => $("characters-list");
-  const $gameState = () => $("game-state");
   const $playerInput = () => $("player-input");
   const $btnSend = () => $("btn-send");
   const $btnNew = () => $("btn-new-game");
+  const $topbarStatus = () => $("topbar-status");
+  const $topbarTurn = () => $("topbar-turn");
+  const $topbarGame = () => $("topbar-game");
   const $loadingOverlay = () => $("loading-overlay");
   const $loadingMessage = () => $("loading-message");
   const $newGameModal = () => $("new-game-modal");
@@ -949,36 +951,25 @@
       : "—";
 
     const s = store.status;
-    let stateHtml = "";
-    if (store.session_id) {
-      stateHtml = `
-        <dl>
-          <dt>Turno</dt><dd>${s.turn_current} / ${s.turn_max}</dd>
-          <dt>Habla</dt><dd>${escapeHtml(s.current_speaker) || "—"}</dd>
-          <dt>Puedes escribir</dt><dd>${s.player_can_write ? "Sí" : "No"}</dd>
-          <dt>Partida terminada</dt><dd>${s.game_finished ? "Sí" : "No"}</dd>
-        </dl>
-      `;
-      if (s.result) {
-        stateHtml += `<p><strong>Resultado:</strong> ${escapeHtml(s.result.reason || "")}</p>`;
-        if (s.result.mission_evaluation) {
-          stateHtml += `<pre>${escapeHtml(JSON.stringify(s.result.mission_evaluation, null, 2))}</pre>`;
-        }
-      }
-    } else {
-      stateHtml = "<p>Sin partida activa.</p>";
-    }
-    const gameStateEl = $gameState();
-    if (gameStateEl) gameStateEl.innerHTML = stateHtml;
-
     const sTurn = $statusTurn();
     const sSpeaker = $statusSpeaker();
     const sInput = $statusInput();
     const sEnded = $statusEnded();
+    const topbarStatus = $topbarStatus();
+    const topbarTurn = $topbarTurn();
+    const topbarGame = $topbarGame();
     if (sTurn) sTurn.textContent = store.session_id ? `${s.turn_current} / ${s.turn_max}` : "—";
     if (sSpeaker) sSpeaker.textContent = store.session_id ? (s.current_speaker || "Jugador") : "—";
     if (sInput) sInput.textContent = store.session_id ? (s.player_can_write ? "Abierta" : "Bloqueada") : "—";
     if (sEnded) sEnded.textContent = store.session_id ? (s.game_finished ? "Finalizada" : "En curso") : "—";
+    if (topbarStatus) topbarStatus.classList.toggle("hidden", !store.session_id);
+    if (topbarTurn) topbarTurn.textContent = store.session_id ? `Turno ${s.turn_current}/${s.turn_max}` : "—";
+    if (topbarGame) {
+      const hasVictory = isPlayerVictory();
+      const hasEnded = !!(store.session_id && s.game_finished);
+      topbarGame.classList.toggle("hidden", !hasEnded);
+      topbarGame.textContent = hasVictory ? "🏆 Victoria" : "Partida finalizada";
+    }
   }
 
   function renderUserMenu() {
