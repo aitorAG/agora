@@ -362,7 +362,9 @@ def list_standard_templates_endpoint(
 ):
     """Lista templates estándar disponibles para creación rápida."""
     _ = current_user
-    templates = list_standard_templates()
+    templates = [
+        item for item in list_standard_templates() if bool(item.get("active", True))
+    ]
     return StandardTemplateListResponse(
         templates=[StandardTemplateItem(**item) for item in templates]
     )
@@ -410,6 +412,18 @@ def start_standard_game(
     setup = loaded.get("setup", {})
     template_id = str(loaded.get("template_id") or body.template_id)
     template_version = str(loaded.get("template_version") or "1.0.0")
+    if not bool(loaded.get("active", True)):
+        _emit_game_init_metrics(
+            game_id="",
+            user_id=current_user.id,
+            username=current_user.username,
+            mode="standard",
+            status="error",
+            total_ms=int((time.perf_counter() - route_t0) * 1000),
+            phases=phases,
+            status_message="Standard template inactive",
+        )
+        raise HTTPException(status_code=404, detail="Standard template not available")
     phase_t0 = time.perf_counter()
     try:
         session_id, final_setup = engine.create_game_from_setup(

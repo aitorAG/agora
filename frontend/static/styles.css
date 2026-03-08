@@ -34,6 +34,13 @@ body {
     var(--bg);
 }
 
+.icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 .hidden {
   display: none !important;
 }
@@ -264,6 +271,10 @@ body {
   overflow: hidden;
 }
 
+.workspace-landing {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .main {
   position: relative;
   min-height: 0;
@@ -275,6 +286,233 @@ body {
   backdrop-filter: blur(10px);
   overflow: hidden;
   z-index: 10;
+}
+
+.landing-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: clamp(1rem, 2.6vw, 1.7rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  animation: fadeIn 220ms ease;
+}
+
+.landing-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.landing-hero,
+.landing-games,
+.landing-how {
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+}
+
+.landing-hero {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.2rem, 3vw, 2rem);
+  background:
+    radial-gradient(circle at top right, rgba(49, 213, 163, 0.2), transparent 34%),
+    radial-gradient(circle at left center, rgba(82, 162, 255, 0.2), transparent 42%),
+    linear-gradient(150deg, rgba(14, 25, 44, 0.96), rgba(10, 19, 34, 0.96));
+}
+
+.landing-kicker,
+.landing-section-label {
+  margin: 0;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.77rem;
+  font-weight: 700;
+}
+
+.landing-title {
+  margin: 0.6rem 0 0;
+  max-width: 11ch;
+  font-size: clamp(2.4rem, 6vw, 4.9rem);
+  line-height: 0.95;
+}
+
+.landing-subtitle {
+  margin: 1rem 0 0;
+  max-width: 58ch;
+  color: #dce7ff;
+  font-size: 1.02rem;
+  line-height: 1.55;
+}
+
+.landing-actions {
+  margin-top: 1.4rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.landing-action-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border-radius: 18px;
+  border: 1px solid rgba(82, 162, 255, 0.18);
+  background: rgba(8, 18, 34, 0.56);
+  backdrop-filter: blur(8px);
+}
+
+.story-choice-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 48px;
+  padding: 0.72rem 0.95rem;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(120deg, var(--accent) 0%, var(--accent-2) 100%);
+  color: #0b1a24;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+
+.story-choice-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 24px rgba(6, 15, 28, 0.28);
+  filter: brightness(1.03);
+}
+
+.story-choice-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.story-choice-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  background: rgba(8, 18, 34, 0.2);
+  border: 1px solid rgba(8, 18, 34, 0.18);
+  color: #0b1a24;
+}
+
+.story-choice-icon svg {
+  width: 1rem;
+  height: 1rem;
+  display: block;
+  fill: currentColor;
+}
+
+.story-choice-label {
+  display: inline-block;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.story-choice-button-compact {
+  min-height: 64px;
+  justify-content: flex-start;
+}
+
+.story-choice-button-compact .story-choice-icon {
+  background: rgba(8, 18, 34, 0.14);
+}
+
+.landing-action-copy {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.48;
+}
+
+.landing-games {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  background: linear-gradient(180deg, rgba(15, 26, 47, 0.96), rgba(10, 19, 34, 0.96));
+}
+
+.landing-games-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.landing-games-header h2,
+.landing-how-header h2 {
+  margin: 0;
+}
+
+.landing-games-subtitle {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.landing-games-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.landing-game-item {
+  background: linear-gradient(180deg, rgba(18, 33, 58, 0.98), rgba(12, 24, 42, 0.98));
+}
+
+.landing-how {
+  padding: 1rem;
+  background: linear-gradient(180deg, rgba(12, 21, 38, 0.95), rgba(10, 18, 31, 0.98));
+}
+
+.landing-how-header {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+}
+
+.landing-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.landing-step {
+  min-height: 172px;
+  padding: 0.95rem;
+  border-radius: 18px;
+  border: 1px solid rgba(82, 162, 255, 0.16);
+  background:
+    linear-gradient(180deg, rgba(18, 31, 53, 0.88), rgba(13, 22, 38, 0.94));
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.landing-step-index {
+  color: var(--accent-2);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.landing-step h3 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.45;
 }
 
 .error-banner {
@@ -810,6 +1048,13 @@ body {
   color: var(--text);
   padding: 0.58rem;
   cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.game-item:hover {
+  border-color: rgba(82, 162, 255, 0.42);
+  background: #152744;
+  transform: translateY(-1px);
 }
 
 .game-item.is-active {
@@ -928,6 +1173,10 @@ body {
   border: 1px solid var(--border);
 }
 
+.new-game-mode-actions .story-choice-button {
+  justify-content: flex-start;
+}
+
 .standard-templates-list {
   max-height: 48vh;
   overflow-y: auto;
@@ -1029,6 +1278,11 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .landing-grid,
+  .landing-steps {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .right-rail {
     order: -1;
   }
@@ -1057,6 +1311,35 @@ body {
     order: -1;
     width: 100%;
     justify-content: space-between;
+  }
+
+  .landing-view {
+    padding: 0.8rem;
+  }
+
+  .landing-grid,
+  .landing-actions,
+  .landing-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-title {
+    max-width: none;
+    font-size: clamp(2.1rem, 12vw, 3.4rem);
+  }
+
+  .landing-games-header {
+    flex-direction: column;
+  }
+
+  #btn-landing-custom,
+  #btn-landing-standard,
+  #btn-landing-all-games {
+    width: 100%;
+  }
+
+  .landing-step {
+    min-height: auto;
   }
 
   .msg {

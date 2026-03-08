@@ -7,6 +7,14 @@
   <link rel="stylesheet" href="/ui/styles.css?v=4" />
 </head>
 <body class="theme-light">
+  <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="icon-story-custom" viewBox="0 0 24 24">
+      <path d="M12 2.5 14.2 7l4.8.7-3.5 3.4.8 4.9-4.3-2.3-4.3 2.3.8-4.9L5 7.7 9.8 7Z"></path>
+    </symbol>
+    <symbol id="icon-story-library" viewBox="0 0 24 24">
+      <path d="M4.5 5.5h3.3v13H4.5Zm5.1-1h4v14h-4Zm5.8 2h4v12h-4Z"></path>
+    </symbol>
+  </svg>
   <div class="bg-atmosphere">
     <div class="orb orb-1"></div>
     <div class="orb orb-2"></div>
@@ -42,7 +50,7 @@
         <p class="brand-title">Agora</p>
         <p class="brand-subtitle">Motor narrativo interactivo</p>
       </div>
-      <div class="topbar-center">
+      <div id="topbar-center" class="topbar-center">
         <button type="button" id="btn-history-toggle" class="btn-ghost">Historia</button>
         <button type="button" id="btn-open-briefing" class="btn-ghost">Misión y personajes</button>
         <button type="button" id="btn-open-feedback" class="btn-ghost">Feedback</button>
@@ -73,17 +81,91 @@
         </div>
       </div>
     </header>
-    <div class="workspace">
+    <div id="workspace" class="workspace">
       <div id="victory-overlay" class="victory-overlay hidden" role="status" aria-live="polite" aria-hidden="true"></div>
       <main class="main">
         <div id="error-banner" class="error-banner hidden"></div>
+        <section id="landing-view" class="landing-view hidden" aria-labelledby="landing-title">
+          <div class="landing-grid">
+            <section class="landing-hero">
+              <p class="landing-kicker">Conversaciones que cambian historias.</p>
+              <h1 id="landing-title" class="landing-title">Investiga. Habla. Decide.</h1>
+              <p class="landing-subtitle">
+                En Agora entras en una historia donde descubrir información es la clave. Habla con los personajes,
+                interpreta lo que ocultan, toma decisiones y avanza hasta cumplir tu objetivo.
+              </p>
+              <div class="landing-actions">
+                <article class="landing-action-card">
+                  <button type="button" id="btn-landing-custom" class="story-choice-button">
+                    <span class="story-choice-content">
+                      <span class="story-choice-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24"><use href="#icon-story-custom"></use></svg>
+                      </span>
+                      <span class="story-choice-label">Nueva historia custom</span>
+                    </span>
+                  </button>
+                  <p class="landing-action-copy">
+                    Crea un camino a tu medida. Define el contexto, el tema y el tono, y empieza una historia nueva.
+                  </p>
+                </article>
+                <article class="landing-action-card">
+                  <button type="button" id="btn-landing-standard" class="story-choice-button">
+                    <span class="story-choice-content">
+                      <span class="story-choice-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24"><use href="#icon-story-library"></use></svg>
+                      </span>
+                      <span class="story-choice-label">Nueva historia desde la librería</span>
+                    </span>
+                  </button>
+                  <p class="landing-action-copy">
+                    Empieza al instante con una partida ya preparada y entra directo en la historia.
+                  </p>
+                </article>
+              </div>
+            </section>
+            <section class="landing-games" aria-labelledby="landing-games-title">
+              <div class="landing-games-header">
+                <div>
+                  <h2 id="landing-games-title">Mis partidas</h2>
+                  <p class="landing-games-subtitle">Retoma tus historias recientes o empieza una nueva.</p>
+                </div>
+                <button type="button" id="btn-landing-all-games" class="btn-secondary">Ver todas</button>
+              </div>
+              <div id="landing-games-list" class="landing-games-list"></div>
+            </section>
+          </div>
+          <section class="landing-how" aria-labelledby="landing-how-title">
+            <div class="landing-how-header">
+              <p class="landing-section-label">Así funciona Agora</p>
+              <h2 id="landing-how-title">Cuatro pasos para entrar en la historia</h2>
+            </div>
+            <div class="landing-steps">
+              <article class="landing-step">
+                <span class="landing-step-index">01</span>
+                <h3>Familiarízate con la historia</h3>
+              </article>
+              <article class="landing-step">
+                <span class="landing-step-index">02</span>
+                <h3>Conoce tu misión y a los personajes</h3>
+              </article>
+              <article class="landing-step">
+                <span class="landing-step-index">03</span>
+                <h3>Habla con ellos, averigua lo que cuentan y lo que callan y decide cómo avanzar</h3>
+              </article>
+              <article class="landing-step">
+                <span class="landing-step-index">04</span>
+                <h3>Tu meta no es solo conversar: es entender la situación y alcanzar tu objetivo</h3>
+              </article>
+            </div>
+          </section>
+        </section>
         <div id="chat" class="chat"></div>
-        <div class="input-area">
+        <div id="input-area" class="input-area">
           <input type="text" id="player-input" maxlength="600" placeholder="Escribe tu mensaje..." disabled />
           <button type="button" id="btn-send" disabled>Enviar</button>
         </div>
       </main>
-      <aside class="right-rail">
+      <aside id="right-rail" class="right-rail">
         <section class="rail-card rail-metrics">
           <div class="metric">
             <span class="metric-label">Turno</span>
@@ -167,13 +249,27 @@
   </div>
   <div id="new-game-modal" class="new-game-modal hidden" role="dialog" aria-modal="true" aria-labelledby="new-game-title">
     <div class="new-game-panel">
-      <h2 id="new-game-title">Nueva partida</h2>
+      <h2 id="new-game-title">Nueva historia</h2>
       <p id="new-game-help" class="new-game-help">Elige cómo quieres iniciar la historia.</p>
 
       <div id="new-game-step-mode" class="new-game-step">
         <div class="new-game-mode-actions">
-          <button type="button" id="btn-mode-custom">Modo custom</button>
-          <button type="button" id="btn-mode-standard" class="btn-secondary">Modo plantillas</button>
+          <button type="button" id="btn-mode-custom" class="story-choice-button story-choice-button-compact">
+            <span class="story-choice-content">
+              <span class="story-choice-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><use href="#icon-story-custom"></use></svg>
+              </span>
+              <span class="story-choice-label">Historia custom</span>
+            </span>
+          </button>
+          <button type="button" id="btn-mode-standard" class="story-choice-button story-choice-button-compact">
+            <span class="story-choice-content">
+              <span class="story-choice-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><use href="#icon-story-library"></use></svg>
+              </span>
+              <span class="story-choice-label">Historia desde la librería</span>
+            </span>
+          </button>
         </div>
       </div>
 

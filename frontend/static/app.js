@@ -62,6 +62,7 @@
       total: { maxSentences: 5, maxWords: 70, maxChars: 400, label: "La descripción custom" },
     },
   };
+  const LANDING_GAMES_LIMIT = 4;
 
   const $ = (id) => document.getElementById(id);
 
@@ -126,9 +127,16 @@
   const $playerInput = () => $("player-input");
   const $btnSend = () => $("btn-send");
   const $btnNew = () => $("btn-new-game");
+  const $topbarCenter = () => $("topbar-center");
   const $topbarStatus = () => $("topbar-status");
   const $topbarTurn = () => $("topbar-turn");
   const $topbarGame = () => $("topbar-game");
+  const $workspace = () => $("workspace");
+  const $landingView = () => $("landing-view");
+  const $landingGamesList = () => $("landing-games-list");
+  const $btnLandingCustom = () => $("btn-landing-custom");
+  const $btnLandingStandard = () => $("btn-landing-standard");
+  const $btnLandingAllGames = () => $("btn-landing-all-games");
   const $loadingOverlay = () => $("loading-overlay");
   const $loadingMessage = () => $("loading-message");
   const $newGameModal = () => $("new-game-modal");
@@ -192,6 +200,8 @@
   const $statusSpeaker = () => $("status-speaker");
   const $statusInput = () => $("status-input");
   const $statusEnded = () => $("status-ended");
+  const $inputArea = () => $("input-area");
+  const $rightRail = () => $("right-rail");
 
   function showLoading(message) {
     const msg = message || "Procesando…";
@@ -524,24 +534,35 @@
     if (stepCustom) stepCustom.classList.toggle("hidden", step !== "custom");
     if (stepStandard) stepStandard.classList.toggle("hidden", step !== "standard");
     if (title) {
-      if (step === "custom") title.textContent = "Nueva partida personalizada";
-      else if (step === "standard") title.textContent = "Plantillas";
-      else title.textContent = "Nueva partida";
+      if (step === "custom") title.textContent = "Historia custom";
+      else if (step === "standard") title.textContent = "Historia desde la librería";
+      else title.textContent = "Nueva historia";
     }
     if (help) {
-      if (step === "custom") help.textContent = "Describe la partida y genera una historia nueva.";
-      else if (step === "standard") help.textContent = "Elige una plantilla ya preparada para iniciar la partida al instante.";
+      if (step === "custom") help.textContent = "Define el contexto, el tema y el tono para construir una historia nueva.";
+      else if (step === "standard") help.textContent = "Elige una historia ya preparada de la librería y entra directo en la investigación.";
       else help.textContent = "Elige cómo quieres iniciar la historia.";
     }
     if (step === "standard") renderStandardTemplates();
   }
 
-  function openNewGameModal() {
+  function openNewGameModal(step) {
     const modal = $newGameModal();
     if (!modal) return;
     resetNewGameWizard();
-    showNewGameStep("mode");
+    showNewGameStep(step || "mode");
     modal.classList.remove("hidden");
+  }
+
+  function openCustomNewGameModal() {
+    openNewGameModal("custom");
+    const era = $seedEra();
+    if (era) era.focus();
+  }
+
+  async function openStandardNewGameModal() {
+    openNewGameModal("standard");
+    await fetchStandardCatalog();
   }
 
   function closeNewGameModal() {
@@ -776,11 +797,13 @@
       store.games_list = [];
       store.games_loading = false;
       renderGamesDrawer();
+      renderLandingGames();
       return;
     }
     store.games_loading = true;
     store.games_error = null;
     renderGamesDrawer();
+    renderLandingGames();
     try {
       const data = await apiGet("/game/list");
       store.games_list = Array.isArray(data.games) ? data.games : [];
@@ -790,6 +813,7 @@
     } finally {
       store.games_loading = false;
       renderGamesDrawer();
+      renderLandingGames();
     }
   }
 
@@ -1003,6 +1027,35 @@
     }
   }
 
+  function buildGamesMarkup(games, options) {
+    const settings = options || {};
+    const itemClass = settings.itemClass || "game-item";
+    const emptyMessage = settings.emptyMessage || "No hay partidas disponibles.";
+    const limit = Number.isInteger(settings.limit) ? settings.limit : games.length;
+    const visibleGames = games.slice(0, Math.max(0, limit));
+    if (!visibleGames.length) {
+      return `<p class="games-list-state">${escapeHtml(emptyMessage)}</p>`;
+    }
+    return visibleGames
+      .map((g) => {
+        const gameId = String(g.id || "");
+        const title = String(g.title || "Partida sin título");
+        const updatedLabel = formatRelativeDate(g.updated_at);
+        const activeClass = gameId === store.session_id ? " is-active" : "";
+        const statusLabel = gameId === store.session_id ? "Activa" : "Continuar";
+        return `
+          <button type="button" class="${itemClass}${activeClass}" data-game-id="${escapeHtml(gameId)}">
+            <span class="game-item-title">${escapeHtml(title)}</span>
+            <span class="game-item-meta">
+              <span class="game-item-status">${escapeHtml(statusLabel)}</span>
+              <span class="game-item-date">${escapeHtml(updatedLabel)}</span>
+            </span>
+          </button>
+        `;
+      })
+      .join("");
+  }
+
   function renderSidebar() {
     const intro = $intro();
     const mission = $mission();
@@ -1041,6 +1094,25 @@
     }
   }
 
+  function renderLandingGames() {
+    const list = $landingGamesList();
+    if (!list) return;
+    if (store.games_loading) {
+      list.innerHTML = '<p class="games-list-state">Cargando partidas…</p>';
+      return;
+    }
+    if (store.games_error) {
+      list.innerHTML = `<p class="games-list-state games-list-error">${escapeHtml(store.games_error)}</p>`;
+      return;
+    }
+    const games = Array.isArray(store.games_list) ? store.games_list : [];
+    list.innerHTML = buildGamesMarkup(games, {
+      limit: LANDING_GAMES_LIMIT,
+      itemClass: "game-item landing-game-item",
+      emptyMessage: "Todavia no tienes partidas. Crea una y entra en tu primera historia.",
+    });
+  }
+
   function renderUserMenu() {
     const chip = $userChip();
     const avatar = $userAvatar();
@@ -1076,27 +1148,26 @@
       return;
     }
     const games = Array.isArray(store.games_list) ? store.games_list : [];
-    if (!games.length) {
-      list.innerHTML = '<p class="games-list-state">Aún no tienes partidas guardadas.</p>';
-      return;
-    }
-    list.innerHTML = games
-      .map((g) => {
-        const gameId = String(g.id || "");
-        const title = String(g.title || "Partida sin título");
-        const updatedLabel = formatRelativeDate(g.updated_at);
-        const activeClass = gameId === store.session_id ? " is-active" : "";
-        return `
-          <button type="button" class="game-item${activeClass}" data-game-id="${escapeHtml(gameId)}">
-            <span class="game-item-title">${escapeHtml(title)}</span>
-            <span class="game-item-meta">
-              <span class="game-item-status">${gameId === store.session_id ? "Activa" : "Continuar"}</span>
-              <span class="game-item-date">${escapeHtml(updatedLabel)}</span>
-            </span>
-          </button>
-        `;
-      })
-      .join("");
+    list.innerHTML = buildGamesMarkup(games, {
+      emptyMessage: "Aún no tienes partidas guardadas.",
+    });
+  }
+
+  function renderLanding() {
+    const hasSession = !!store.session_id;
+    const workspace = $workspace();
+    const landing = $landingView();
+    const chat = $chat();
+    const inputArea = $inputArea();
+    const rightRail = $rightRail();
+    const topbarCenter = $topbarCenter();
+    if (workspace) workspace.classList.toggle("workspace-landing", !hasSession);
+    if (landing) landing.classList.toggle("hidden", hasSession);
+    if (chat) chat.classList.toggle("hidden", !hasSession);
+    if (inputArea) inputArea.classList.toggle("hidden", !hasSession);
+    if (rightRail) rightRail.classList.toggle("hidden", !hasSession);
+    if (topbarCenter) topbarCenter.classList.toggle("hidden", !hasSession);
+    renderLandingGames();
   }
 
   function renderOverlayPanels() {
@@ -1250,8 +1321,16 @@
     }
     if (loginScreen) loginScreen.classList.add("hidden");
     if (app) app.classList.remove("hidden");
+    if (!store.session_id) {
+      store.ui.storyPanelOpen = false;
+      store.ui.briefingOpen = false;
+      store.ui.feedbackOpen = false;
+      store.ui.feedbackSubmitting = false;
+      store.ui.feedbackError = null;
+    }
     renderUserMenu();
     renderSidebar();
+    renderLanding();
     renderGamesDrawer();
     renderOverlayPanels();
     renderVictoryOverlay();
@@ -1449,6 +1528,10 @@
   const btnBackFromCustom = $btnBackFromCustom();
   const btnBackFromStandard = $btnBackFromStandard();
   const standardTemplatesList = $standardTemplatesList();
+  const btnLandingCustom = $btnLandingCustom();
+  const btnLandingStandard = $btnLandingStandard();
+  const btnLandingAllGames = $btnLandingAllGames();
+  const landingGamesList = $landingGamesList();
   const playerInput = $playerInput();
   const themeCheckbox = $("theme-checkbox");
   const loginForm = $loginForm();
@@ -1476,10 +1559,24 @@
   const btnCancelFeedback = $btnCancelFeedback();
   const btnSendFeedback = $btnSendFeedback();
   const feedbackModal = $feedbackModal();
-  if (btnNew) btnNew.addEventListener("click", openNewGameModal);
+  if (btnNew) btnNew.addEventListener("click", () => openNewGameModal("mode"));
   if (btnSend) btnSend.addEventListener("click", sendTurn);
   if (btnCreateGame) btnCreateGame.addEventListener("click", submitNewGameFromForm);
   if (btnCancelNewGame) btnCancelNewGame.addEventListener("click", closeNewGameModal);
+  if (btnLandingCustom) {
+    btnLandingCustom.addEventListener("click", () => openCustomNewGameModal());
+  }
+  if (btnLandingStandard) {
+    btnLandingStandard.addEventListener("click", async () => {
+      await openStandardNewGameModal();
+    });
+  }
+  if (btnLandingAllGames) {
+    btnLandingAllGames.addEventListener("click", async () => {
+      await fetchGamesList();
+      openGamesPanel();
+    });
+  }
   if (btnModeCustom) {
     btnModeCustom.addEventListener("click", () => {
       showNewGameStep("custom");
@@ -1522,6 +1619,15 @@
         closeGamesPanel();
         return;
       }
+      resumeGame(gameId);
+    });
+  }
+  if (landingGamesList) {
+    landingGamesList.addEventListener("click", (e) => {
+      const target = e.target && e.target.closest ? e.target.closest("[data-game-id]") : null;
+      if (!target) return;
+      const gameId = target.getAttribute("data-game-id");
+      if (!gameId || gameId === store.session_id) return;
       resumeGame(gameId);
     });
   }

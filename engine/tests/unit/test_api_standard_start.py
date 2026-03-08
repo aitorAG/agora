@@ -83,6 +83,7 @@ def test_standard_start_uses_prebuilt_setup_without_guionista(monkeypatch):
         lambda _template_id: {
             "template_id": "rome_caesar_harry",
             "template_version": "1.0.0",
+            "active": True,
             "setup": _sample_setup(),
             "manifest": {},
         },
@@ -112,5 +113,28 @@ def test_standard_start_returns_400_for_invalid_template(monkeypatch):
         res = client.post("/game/standard/start", json={"template_id": "broken"})
         assert res.status_code == 400
         assert "Invalid standard template" in res.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_standard_start_rejects_inactive_template(monkeypatch):
+    engine = _DummyEngine()
+    client = _client_with_engine(engine)
+    monkeypatch.setattr(
+        routes_module,
+        "load_standard_template",
+        lambda _template_id: {
+            "template_id": "rome_caesar_harry",
+            "template_version": "1.0.0",
+            "active": False,
+            "setup": _sample_setup(),
+            "manifest": {"active": False},
+        },
+    )
+    try:
+        res = client.post("/game/standard/start", json={"template_id": "rome_caesar_harry"})
+        assert res.status_code == 404
+        assert res.json()["detail"] == "Standard template not available"
+        assert engine.calls == []
     finally:
         app.dependency_overrides.clear()

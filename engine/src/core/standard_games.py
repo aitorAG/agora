@@ -122,6 +122,7 @@ def load_standard_template(template_id: str) -> dict[str, Any]:
     return {
         "template_id": manifest_id,
         "template_version": str(manifest.get("version") or "1.0.0"),
+        "active": _manifest_active(manifest),
         "setup": setup,
         "manifest": manifest,
     }
