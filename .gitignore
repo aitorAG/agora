@@ -12,4 +12,5 @@ migrations/*
 nginx/.htpasswd
 .env1
 AGENTS.md
+.cookies.txt
 .tmp_cookies.txt

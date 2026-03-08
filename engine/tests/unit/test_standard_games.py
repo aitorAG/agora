@@ -57,6 +57,28 @@ def test_list_standard_templates_reads_manifest_catalog(tmp_path, monkeypatch):
     assert templates[0]["id"] == "t1"
     assert templates[0]["titulo"] == "Plantilla 1"
     assert templates[0]["version"] == "1.2.0"
+    assert templates[0]["active"] is True
+
+
+def test_list_standard_templates_reads_explicit_inactive_flag(tmp_path, monkeypatch):
+    monkeypatch.setattr(standard_games_module, "PROJECT_ROOT", tmp_path)
+    _write_json(
+        tmp_path / "game_templates" / "t_inactive" / "manifest.json",
+        {
+            "id": "t_inactive",
+            "titulo": "Plantilla inactiva",
+            "descripcion_breve": "Desc breve",
+            "version": "1.0.0",
+            "active": False,
+        },
+    )
+    _write_json(tmp_path / "game_templates" / "t_inactive" / "config.json", _base_setup())
+
+    templates = list_standard_templates()
+
+    assert len(templates) == 1
+    assert templates[0]["id"] == "t_inactive"
+    assert templates[0]["active"] is False
 
 
 def test_load_standard_template_merges_manifest_metadata(tmp_path, monkeypatch):

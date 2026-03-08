@@ -7,6 +7,7 @@ from typing import Dict, Any, List
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from ..state import ConversationState
+from ..text_limits import truncate_agent_output
 from .base import Agent
 from .deepseek_adapter import send_message
 
@@ -34,7 +35,7 @@ def parse_mission_evaluation_response(content: str) -> Dict[str, Any]:
     player_ok = bool(data.get("player_mission_achieved", False))
     return {
         "player_mission_achieved": player_ok,
-        "reasoning": str(data.get("reasoning", "")).strip() or "Sin razonamiento.",
+        "reasoning": truncate_agent_output(str(data.get("reasoning", "")).strip()) or "Sin razonamiento.",
     }
 
 
@@ -88,11 +89,19 @@ class ObserverAgent(Agent):
         self._temperature = 0.3
         self._actor_names = actor_names or []
         self._player_mission = (player_mission or "").strip()
+        try:
+            self._max_output_tokens = int(os.getenv("OBSERVER_MAX_OUTPUT_TOKENS", "180"))
+        except ValueError:
+            self._max_output_tokens = 180
     
     @property
     def is_actor(self) -> bool:
         """ObserverAgent no es un actor."""
         return False
+
+    def _limit_reason_text(self, value: Any, fallback: str) -> str:
+        limited = truncate_agent_output(str(value or "").strip())
+        return limited or fallback
     
     def evaluate_continuation(self, state: ConversationState) -> Dict[str, Any]:
         """Eval?a si alguien debe continuar la conversaci?n antes de ceder la palabra.
@@ -166,7 +175,7 @@ Responde SOLO con un JSON válido en este formato exacto:
 {{
     "needs_response": true/false,
     "who_should_respond": {who_options},
-    "reason": "breve explicación de tu decisión"
+    "reason": "breve explicación de tu decisión en 1 a 3 frases cortas"
 }}
 
 Reglas:
@@ -183,7 +192,7 @@ Responde SOLO con un JSON válido en este formato exacto:
 {
     "needs_response": true/false,
     "who_should_respond": "character" o "user" o "none",
-    "reason": "breve explicación de tu decisión"
+    "reason": "breve explicación de tu decisión en 1 a 3 frases cortas"
 }
 
 Reglas:
@@ -205,7 +214,11 @@ Reglas:
                 {"role": "user", "content": user_prompt},
             ]
             content = send_message(
-                llm_messages, model=self._model, temperature=self._temperature, stream=False
+                llm_messages,
+                model=self._model,
+                temperature=self._temperature,
+                stream=False,
+                max_tokens=self._max_output_tokens,
             )
             assert isinstance(content, str)
             content = content.strip()
@@ -226,7 +239,10 @@ Reglas:
             return {
                 "needs_response": bool(decision.get("needs_response", False)),
                 "who_should_respond": who,
-                "reason": decision.get("reason", "Sin razón especificada"),
+                "reason": self._limit_reason_text(
+                    decision.get("reason"),
+                    "Sin razón especificada.",
+                ),
             }
             
         except Exception as e:
@@ -235,7 +251,10 @@ Reglas:
             return {
                 "needs_response": False,
                 "who_should_respond": "none",
-                "reason": f"Error en evaluaci?n: {str(e)}"
+                "reason": self._limit_reason_text(
+                    f"Error en evaluaci?n: {str(e)}",
+                    "Error en evaluaci?n.",
+                ),
             }
 
     def evaluate_missions(self, state: ConversationState) -> Dict[str, Any]:
@@ -270,7 +289,7 @@ Tu tarea es determinar, solo con lo que se ha dicho y hecho en la conversación 
 Responde SOLO con un JSON válido en este formato exacto (sin comentarios):
 {
   "player_mission_achieved": true o false,
-  "reasoning": "Breve explicación de por qué consideras que la misión del jugador se ha alcanzado o no (1-3 frases)."
+  "reasoning": "Breve explicación de por qué consideras que la misión del jugador se ha alcanzado o no (1-3 frases cortas como máximo)."
 }
 Reglas: Sé estricto: solo true si la conversación muestra claramente que el objetivo se ha cumplido. Si no hay evidencia suficiente, false.
 Responde SOLO con el JSON. Si usas markdown, envuelve en ```json ... ```."""
@@ -281,7 +300,11 @@ Responde SOLO con el JSON. Si usas markdown, envuelve en ```json ... ```."""
                 {"role": "user", "content": user_prompt},
             ]
             content = send_message(
-                messages, model=self._model, temperature=self._temperature, stream=False
+                messages,
+                model=self._model,
+                temperature=self._temperature,
+                stream=False,
+                max_tokens=self._max_output_tokens,
             )
             assert isinstance(content, str)
             return parse_mission_evaluation_response(content.strip())
@@ -289,7 +312,10 @@ Responde SOLO con el JSON. Si usas markdown, envuelve en ```json ... ```."""
             logger.warning("Error al evaluar misiones: %s. Usando valores por defecto.", e)
             return {
                 "player_mission_achieved": False,
-                "reasoning": f"Error en evaluación: {str(e)}",
+                "reasoning": self._limit_reason_text(
+                    f"Error en evaluación: {str(e)}",
+                    "Error en evaluación.",
+                ),
             }
 
     def _compute_game_ended(self, mission_evaluation: Dict[str, Any]) -> tuple[bool, str]:
@@ -297,10 +323,10 @@ Responde SOLO con el JSON. Si usas markdown, envuelve en ```json ... ```."""
         if not mission_evaluation:
             return False, ""
         player_ok = bool(mission_evaluation.get("player_mission_achieved", False))
-        reasoning = (mission_evaluation.get("reasoning") or "").strip()
+        reasoning = self._limit_reason_text(mission_evaluation.get("reasoning"), "")
         if not player_ok or not reasoning:
             return False, ""
-        reason = "El jugador ha cumplido su misión. " + reasoning
+        reason = truncate_agent_output("El jugador ha cumplido su misión. " + reasoning)
         return True, reason.strip()
 
     def process(self, state: ConversationState) -> Dict[str, Any]:

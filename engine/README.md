@@ -128,7 +128,7 @@ Si no se configura, Agora sigue funcionando y solo desactiva envío de métricas
 
 Para producción, actualizar los secrets en `.env` o variables de entorno:
 
-- `POSTGRES_PASSWORD`, `AUTH_SEED_PASSWORD`, `TELEMETRY_INGEST_KEY`: contraseñas fuertes
+- `POSTGRES_PASSWORD`, `AUTH_SECRET_KEY`, `AUTH_SEED_PASSWORD`, `TELEMETRY_INGEST_KEY`: contraseñas fuertes
 
 Referencias: [PRD de observabilidad](../.cursor/PRD_OBSERVABILITY_ROBUST_DECISION.md).
 

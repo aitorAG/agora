@@ -3,5 +3,6 @@
   "titulo": "Ecos en la Bodega 9",
   "descripcion_breve": "Una nave mercante transporta contenedores de especies alienigenas y alguien ha robado el transpondedor de fluzo.\nDescubre al traidor antes de que los aliens escapen y aniquilen a toda la tripulacion.",
   "version": "1.0.0",
+  "active": true,
   "num_personajes": 4
 }

@@ -31,6 +31,7 @@ services:
       - .env
       - .env.runtime
     environment:
+      AGORA_DEPLOY_TARGET: ${AGORA_DEPLOY_TARGET:-vps}
       AGORA_RUNTIME_CONTEXT: docker
       INTERFACE_MODE: api
       UI_TEST: "true"
@@ -38,6 +39,8 @@ services:
       AGORA_API_PORT: 8000
       TELEMETRY_ENABLED: ${TELEMETRY_ENABLED:-true}
       TELEMETRY_ENDPOINT: http://telemetry:8081/v1/events
+    security_opt:
+      - no-new-privileges:true
     networks:
       - agora_net
       - agora_edge
@@ -52,6 +55,8 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    security_opt:
+      - no-new-privileges:true
     networks:
       - agora_net
       - agora_edge

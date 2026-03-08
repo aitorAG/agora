@@ -84,7 +84,37 @@ done < "$ENV_FILE"
 echo "Resolved env -> target=$TARGET base_url=$RESOLVED_BASE_URL"
 echo "Resolved env file: $RUNTIME_ENV_FILE"
 
-if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
-  echo "Resolved runtime environment is missing required values: POSTGRES_PASSWORD" >&2
+required_values=("POSTGRES_PASSWORD")
+bootstrap_seed_raw="${AUTH_BOOTSTRAP_SEED:-true}"
+bootstrap_seed="$(echo "$bootstrap_seed_raw" | tr '[:upper:]' '[:lower:]')"
+if [[ "$TARGET" == "vps" ]]; then
+  required_values+=("AUTH_SECRET_KEY" "TELEMETRY_INGEST_KEY")
+  if [[ "$bootstrap_seed" != "0" && "$bootstrap_seed" != "false" && "$bootstrap_seed" != "no" && "$bootstrap_seed" != "off" ]]; then
+    required_values+=("AUTH_SEED_USERNAME" "AUTH_SEED_PASSWORD")
+  fi
+fi
+
+missing_values=()
+for key in "${required_values[@]}"; do
+  if [[ -z "${!key:-}" ]]; then
+    missing_values+=("$key")
+  fi
+done
+
+if [[ ${#missing_values[@]} -gt 0 ]]; then
+  echo "Resolved runtime environment is missing required values: ${missing_values[*]}" >&2
   exit 1
+fi
+
+if [[ "$TARGET" == "vps" ]]; then
+  invalid_values=()
+  [[ "${AUTH_SECRET_KEY:-}" == "dev-only-change-me" || "${AUTH_SECRET_KEY:-}" == "change_me_super_secret" ]] && invalid_values+=("AUTH_SECRET_KEY")
+  [[ "${TELEMETRY_INGEST_KEY:-}" == "change_me_ingest_key" || "${TELEMETRY_INGEST_KEY:-}" == "admin" ]] && invalid_values+=("TELEMETRY_INGEST_KEY")
+  if [[ "$bootstrap_seed" != "0" && "$bootstrap_seed" != "false" && "$bootstrap_seed" != "no" && "$bootstrap_seed" != "off" ]]; then
+    [[ "${AUTH_SEED_PASSWORD:-}" == "agora123" || "${AUTH_SEED_PASSWORD:-}" == "admin" || "${AUTH_SEED_PASSWORD:-}" == "change_me_admin_password" ]] && invalid_values+=("AUTH_SEED_PASSWORD")
+  fi
+  if [[ ${#invalid_values[@]} -gt 0 ]]; then
+    echo "Resolved runtime environment has insecure placeholder values: ${invalid_values[*]}" >&2
+    exit 1
+  fi
 fi

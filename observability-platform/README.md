@@ -11,9 +11,9 @@ bash ./deploy/up.sh
 ## Exposición pública recomendada
 
 - `telemetry` se publica solo en `127.0.0.1:8081`.
-- El acceso externo se hace por Nginx del stack principal con autorización admin.
+- La UI de observabilidad se sirve desde Agora y usa la misma sesión admin.
 - Ruta pública recomendada: `https://<tu-dominio>/admin/observability/`.
-- API agregada: `/admin/observability/api/v1/metrics/*`.
+- La API admin integrada cuelga de `/admin/observability/api/*`.
 
 ## Qué mide
 

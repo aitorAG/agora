@@ -30,7 +30,7 @@ Config mínima:
 
 - cambia `AGORA_DEPLOY_TARGET` a `local` o `vps`
 - en `vps`, define `AGORA_PUBLIC_URL`
-- define `POSTGRES_PASSWORD`, `DEEPSEEK_API_KEY`, `AUTH_SEED_PASSWORD`, `TELEMETRY_INGEST_KEY`
+- define `POSTGRES_PASSWORD`, `DEEPSEEK_API_KEY`, `AUTH_SECRET_KEY`, `AUTH_SEED_PASSWORD`, `TELEMETRY_INGEST_KEY`
 
 El resto (URL pública derivada, URL de observabilidad, `DATABASE_URL`, `TELEMETRY_ENDPOINT`) se calcula automáticamente.
 

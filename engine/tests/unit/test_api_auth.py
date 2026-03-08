@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from src.api import auth as auth_module
 from src.api import dependencies as dependencies_module
 from src.api import routes as routes_module
 from src.api.app import app
@@ -9,8 +10,6 @@ from src.api.app import app
 
 def test_auth_login_me_logout(monkeypatch):
     monkeypatch.setenv("AUTH_REQUIRED", "true")
-    monkeypatch.setattr(routes_module, "get_persistence_provider", lambda: None)
-    monkeypatch.setattr(routes_module, "ensure_seed_user", lambda: None)
     login_events = []
     monkeypatch.setattr(
         routes_module,
@@ -56,8 +55,6 @@ def test_auth_login_me_logout(monkeypatch):
 
 def test_auth_register_success_and_login(monkeypatch):
     monkeypatch.setenv("AUTH_REQUIRED", "true")
-    monkeypatch.setattr(routes_module, "get_persistence_provider", lambda: None)
-    monkeypatch.setattr(routes_module, "ensure_seed_user", lambda: None)
     monkeypatch.setattr(
         routes_module,
         "create_user",
@@ -118,8 +115,6 @@ def test_auth_register_duplicate_returns_409(monkeypatch):
 
 def test_authz_admin_requires_admin_role(monkeypatch):
     monkeypatch.setenv("AUTH_REQUIRED", "true")
-    monkeypatch.setattr(routes_module, "get_persistence_provider", lambda: None)
-    monkeypatch.setattr(routes_module, "ensure_seed_user", lambda: None)
 
     monkeypatch.setattr(
         routes_module,
@@ -161,3 +156,49 @@ def test_authz_admin_requires_admin_role(monkeypatch):
     ok = client.get("/authz/admin")
     assert ok.status_code == 200
     assert ok.json()["authorized"] is True
+
+
+def test_auth_login_sets_secure_cookie_for_https(monkeypatch):
+    monkeypatch.setenv("AUTH_REQUIRED", "true")
+    monkeypatch.setenv("AGORA_RESOLVED_BASE_URL", "https://agora.example")
+    monkeypatch.setattr(
+        routes_module,
+        "authenticate_user",
+        lambda username, password: (
+            {"id": "u1", "username": username, "is_active": True, "role": "user"}
+            if password == "secret123"
+            else None
+        ),
+    )
+    monkeypatch.setattr(
+        dependencies_module,
+        "get_user_by_username",
+        lambda username: {"id": "u1", "username": username, "is_active": True, "password_hash": "x", "role": "user"},
+    )
+
+    client = TestClient(app)
+    response = client.post("/auth/login", json={"username": "alice", "password": "secret123"})
+
+    assert response.status_code == 200
+    set_cookie = response.headers.get("set-cookie", "")
+    assert "Secure" in set_cookie
+    assert "HttpOnly" in set_cookie
+
+
+def test_validate_auth_configuration_rejects_unsafe_production_defaults(monkeypatch):
+    monkeypatch.setenv("AGORA_DEPLOY_TARGET", "vps")
+    monkeypatch.delenv("AUTH_SECRET_KEY", raising=False)
+    monkeypatch.setenv("AUTH_REQUIRED", "false")
+    monkeypatch.setenv("AUTH_BOOTSTRAP_SEED", "true")
+    monkeypatch.delenv("AUTH_SEED_USERNAME", raising=False)
+    monkeypatch.setenv("AUTH_SEED_PASSWORD", "admin")
+
+    try:
+        auth_module.validate_auth_configuration()
+    except RuntimeError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("Expected RuntimeError for unsafe production auth config")
+
+    assert "AUTH_SECRET_KEY" in message
+    assert "AUTH_REQUIRED=true" in message

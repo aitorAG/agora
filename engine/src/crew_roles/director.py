@@ -9,6 +9,7 @@ from ..manager import ConversationManager
 from ..io_adapters import InputProvider, OutputHandler
 from ..logging_config import get_logger
 from ..observability import span_agent
+from ..text_limits import validate_user_message
 
 from .guionista import run_setup_task
 from .character import run_character_response
@@ -130,7 +131,7 @@ def run_one_step(
             events.append({"type": "game_ended", "reason": "user_exit", "mission_evaluation": None})
             return {"next_action": "ended", "game_ended": True, "events": events}
         if pending_user_text and pending_user_text.strip():
-            manager.add_message("Usuario", pending_user_text.strip())
+            manager.add_message("Usuario", validate_user_message(pending_user_text))
             manager.increment_turn()
 
     state = manager.state
@@ -249,7 +250,7 @@ def run_game_loop(
                 manager.update_metadata("user_exit", True)
                 return manager.state
             if user_result.text and user_result.text.strip():
-                manager.add_message("Usuario", user_result.text.strip())
+                manager.add_message("Usuario", validate_user_message(user_result.text))
                 manager.increment_turn()
 
         state = manager.state

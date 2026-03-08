@@ -20,6 +20,7 @@ from ..crew_roles.observer import create_observer_agent
 from ..crew_roles.director import run_one_step
 from ..persistence import PersistenceProvider, create_persistence_provider
 from ..observability import emit_event, trace_interaction, trace_setup
+from ..text_limits import validate_custom_seed, validate_user_message
 from .game_setup_contract import validate_game_setup
 
 
@@ -47,6 +48,9 @@ class GameEngine:
     def create_game(
         self,
         theme: str | None = None,
+        era: str | None = None,
+        topic: str | None = None,
+        style: str | None = None,
         num_actors: int = 3,
         max_turns: int = 10,
         stream_sink: Any = None,
@@ -54,19 +58,26 @@ class GameEngine:
     ) -> tuple[str, dict[str, Any]]:
         """Crea una partida: Guionista genera setup, Manager y agentes. Devuelve (game_id, setup).
         Si stream_sink es un Callable[[str], None], se invoca con cada chunk de la narrativa (JSON) durante la generación."""
+        validated_seed = validate_custom_seed(
+            theme=theme,
+            era=era,
+            topic=topic,
+            style=style,
+        )
+        effective_theme = validated_seed["theme"] or None
         guionista = create_guionista_agent()
         stream = stream_sink is not None
         setup_interaction_id = f"setup:{uuid4()}"
         with trace_setup(user_id=username or "", interaction_id=setup_interaction_id, name="setup"):
             game_setup = run_setup_task(
                 guionista,
-                theme=theme,
+                theme=effective_theme,
                 num_actors=num_actors,
                 stream=stream,
                 stream_sink=stream_sink,
             )
 
-        title = str(game_setup.get("titulo") or theme or "Partida").strip() or "Partida"
+        title = str(game_setup.get("titulo") or effective_theme or "Partida").strip() or "Partida"
         game_id = self._persistence.create_game(
             title=title,
             config_json=dict(game_setup),
@@ -499,6 +510,8 @@ class GameEngine:
         Devuelve (events, state, game_ended).
         """
         session = self._get_session(game_id)
+        if text and text.strip():
+            validate_user_message(text)
         game = self._persistence.get_game(game_id)
         user_id = str(game.get("user_id") or game.get("user") or "") if game else ""
         state = session.manager.state
@@ -605,6 +618,8 @@ class GameEngine:
         message y game_ended a medida que cada actor termina.
         """
         session = self._get_session(game_id)
+        if text and text.strip():
+            validate_user_message(text)
         game = self._persistence.get_game(game_id)
         user_id = str(game.get("user_id") or game.get("user") or "") if game else ""
         interaction_id = f"{game_id}:turn:{session.manager.state.get('turn', 0)}"

@@ -26,15 +26,18 @@ services:
     restart: unless-stopped
     environment:
       AGORA_RUNTIME_CONTEXT: docker
+      AGORA_DEPLOY_TARGET: ${AGORA_DEPLOY_TARGET:-local}
       POSTGRES_DB: ${POSTGRES_DB:-agora}
       POSTGRES_USER: ${POSTGRES_USER:-agora_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agora_pass}
       TELEMETRY_DB_PATH: /data/telemetry.db
       TELEMETRY_INGEST_KEY: ${TELEMETRY_INGEST_KEY:-}
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     volumes:
       - agora_telemetry_data:/data
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8081/health || exit 1"]
       interval: 5s

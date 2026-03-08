@@ -66,6 +66,44 @@ Set-Content -Path $runtimeEnvFile -Value $outLines -Encoding UTF8
 Write-Output "Resolved env -> target=$target base_url=$resolvedBase"
 Write-Output "Resolved env file: $runtimeEnvFile"
 
-if (-not $envMap.ContainsKey("POSTGRES_PASSWORD") -or [string]::IsNullOrWhiteSpace([string]$envMap["POSTGRES_PASSWORD"])) {
-  throw "Resolved runtime environment is missing required values: POSTGRES_PASSWORD"
+$required = New-Object System.Collections.Generic.List[string]
+$required.Add("POSTGRES_PASSWORD")
+$bootstrapSeedRaw = if ($envMap.ContainsKey("AUTH_BOOTSTRAP_SEED")) { [string]$envMap["AUTH_BOOTSTRAP_SEED"] } else { "true" }
+$bootstrapSeed = $bootstrapSeedRaw.ToLowerInvariant()
+if ($target -eq "vps") {
+  $required.Add("AUTH_SECRET_KEY")
+  $required.Add("TELEMETRY_INGEST_KEY")
+  if ($bootstrapSeed -notin @("0", "false", "no", "off")) {
+    $required.Add("AUTH_SEED_USERNAME")
+    $required.Add("AUTH_SEED_PASSWORD")
+  }
+}
+
+$missing = New-Object System.Collections.Generic.List[string]
+foreach ($key in $required) {
+  if (-not $envMap.ContainsKey($key) -or [string]::IsNullOrWhiteSpace([string]$envMap[$key])) {
+    $missing.Add($key)
+  }
+}
+
+if ($missing.Count -gt 0) {
+  throw "Resolved runtime environment is missing required values: $($missing -join ', ')"
+}
+
+if ($target -eq "vps") {
+  $invalid = New-Object System.Collections.Generic.List[string]
+  if (($envMap["AUTH_SECRET_KEY"] -as [string]) -in @("dev-only-change-me", "change_me_super_secret")) {
+    $invalid.Add("AUTH_SECRET_KEY")
+  }
+  if (($envMap["TELEMETRY_INGEST_KEY"] -as [string]) -in @("change_me_ingest_key", "admin")) {
+    $invalid.Add("TELEMETRY_INGEST_KEY")
+  }
+  if ($bootstrapSeed -notin @("0", "false", "no", "off")) {
+    if (($envMap["AUTH_SEED_PASSWORD"] -as [string]) -in @("agora123", "admin", "change_me_admin_password")) {
+      $invalid.Add("AUTH_SEED_PASSWORD")
+    }
+  }
+  if ($invalid.Count -gt 0) {
+    throw "Resolved runtime environment has insecure placeholder values: $($invalid -join ', ')"
+  }
 }

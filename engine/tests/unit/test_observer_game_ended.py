@@ -38,3 +38,14 @@ def test_compute_game_ended_false_when_only_actor_achieved_key_is_present():
     ended, reason = agent._compute_game_ended(ev)
     assert ended is False
     assert reason == ""
+
+
+def test_compute_game_ended_truncates_reason_to_three_sentences():
+    agent = ObserverAgent(actor_names=["A"])
+    ev = {
+        "player_mission_achieved": True,
+        "reasoning": "Primera frase. Segunda frase. Tercera frase. Cuarta frase.",
+    }
+    ended, reason = agent._compute_game_ended(ev)
+    assert ended is True
+    assert reason == "El jugador ha cumplido su misión. Primera frase. Segunda frase."

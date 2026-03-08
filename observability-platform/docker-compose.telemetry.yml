@@ -10,12 +10,15 @@ services:
       - ../.env
       - ../.env.runtime
     environment:
+      AGORA_DEPLOY_TARGET: ${AGORA_DEPLOY_TARGET:-vps}
       AGORA_RUNTIME_CONTEXT: docker
       TELEMETRY_DB_PATH: /data/telemetry.db
     volumes:
       - agora_telemetry_data:/data
     ports:
       - "127.0.0.1:8081:8081"
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health', timeout=3)"]
       interval: 5s

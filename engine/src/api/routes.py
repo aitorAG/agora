@@ -6,14 +6,15 @@ import time
 from pathlib import Path
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, Response
-from fastapi.responses import StreamingResponse, FileResponse, RedirectResponse
+from fastapi.responses import StreamingResponse, FileResponse
 
 from .auth import (
     authenticate_user,
     auth_cookie_name,
+    auth_cookie_samesite,
+    auth_cookie_secure,
     create_user,
     create_access_token,
-    ensure_seed_user,
     UserAlreadyExistsError,
 )
 from .schemas import (
@@ -50,6 +51,7 @@ from ..core.standard_games import (
     load_standard_template,
 )
 from ..observability import record_user_login
+from ..text_limits import validate_custom_seed, validate_user_message
 
 
 def _serialize_message(m: dict) -> dict:
@@ -122,6 +124,7 @@ admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
 _repo_root = Path(__file__).resolve().parents[3]
 _admin_feedback_page = _repo_root / "frontend" / "static" / "admin-feedback.html"
+_admin_observability_page = _repo_root / "frontend" / "static" / "admin-observability.html"
 
 
 def _ensure_game_ownership(engine, game_id: str, username: str) -> None:
@@ -133,9 +136,19 @@ def _ensure_game_ownership(engine, game_id: str, username: str) -> None:
         raise HTTPException(status_code=404, detail="Session not found")
 
 
+def _set_auth_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=auth_cookie_name(),
+        value=token,
+        httponly=True,
+        samesite=auth_cookie_samesite(),
+        secure=auth_cookie_secure(),
+        path="/",
+    )
+
+
 @auth_router.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest, response: Response):
-    ensure_seed_user()
     user = authenticate_user(body.username, body.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -145,14 +158,7 @@ def login(body: LoginRequest, response: Response):
         username=str(user.get("username", "")),
     )
     token = create_access_token(str(user.get("username", "")))
-    response.set_cookie(
-        key=auth_cookie_name(),
-        value=token,
-        httponly=True,
-        samesite="lax",
-        secure=False,
-        path="/",
-    )
+    _set_auth_cookie(response, token)
     return LoginResponse(
         user=AuthUserResponse(
             id=str(user.get("id", "")),
@@ -174,14 +180,7 @@ def register(body: RegisterRequest, response: Response):
         raise HTTPException(status_code=422, detail=str(exc))
 
     token = create_access_token(str(user.get("username", "")))
-    response.set_cookie(
-        key=auth_cookie_name(),
-        value=token,
-        httponly=True,
-        samesite="lax",
-        secure=False,
-        path="/",
-    )
+    _set_auth_cookie(response, token)
     return LoginResponse(
         user=AuthUserResponse(
             id=str(user.get("id", "")),
@@ -212,8 +211,9 @@ def admin_feedback_page(_current_user: AuthUserResponse = Depends(require_admin)
 
 @admin_router.get("/observability/")
 def admin_observability_redirect(_current_user: AuthUserResponse = Depends(require_admin)):
-    target = (os.getenv("AGORA_OBSERVABILITY_URL") or "http://localhost:8081").strip()
-    return RedirectResponse(url=target, status_code=307)
+    if not _admin_observability_page.is_file():
+        raise HTTPException(status_code=404, detail="Admin observability page not found")
+    return FileResponse(_admin_observability_page)
 
 
 @admin_router.get("/feedback/list", response_model=AdminFeedbackListResponse)
@@ -228,7 +228,12 @@ def admin_feedback_list(
 
 @auth_router.post("/logout")
 def logout(response: Response):
-    response.delete_cookie(key=auth_cookie_name(), path="/")
+    response.delete_cookie(
+        key=auth_cookie_name(),
+        path="/",
+        secure=auth_cookie_secure(),
+        samesite=auth_cookie_samesite(),
+    )
     return {"ok": True}
 
 
@@ -241,9 +246,25 @@ def new_game(
     """Crea una partida custom generada desde la explicación del usuario."""
     body = body or NewGameRequest()
     raw_theme = (body.theme or "").strip()
-    use_env_theme = raw_theme == "" and body.num_actors is None
+    era = (body.era or "").strip()
+    topic = (body.topic or "").strip()
+    style = (body.style or "").strip()
+    has_structured_seed = bool(era or topic or style)
+    use_env_theme = raw_theme == "" and not has_structured_seed and body.num_actors is None
     theme = os.getenv("GAME_THEME") if use_env_theme else (raw_theme or None)
     num_actors = body.num_actors if body.num_actors is not None else 3
+    try:
+        validated_seed = validate_custom_seed(
+            theme=theme or None,
+            era=era or None,
+            topic=topic or None,
+            style=style or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    structured_theme = bool(
+        validated_seed["era"] or validated_seed["topic"] or validated_seed["style"]
+    )
 
     route_t0 = time.perf_counter()
     phases: dict[str, int] = {}
@@ -251,12 +272,28 @@ def new_game(
     phase_t0 = time.perf_counter()
     try:
         session_id, setup = engine.create_game(
-            theme=theme or None,
+            theme=None if structured_theme else (validated_seed["theme"] or None),
+            era=validated_seed["era"] or None,
+            topic=validated_seed["topic"] or None,
+            style=validated_seed["style"] or None,
             num_actors=num_actors,
             max_turns=body.max_turns,
             username=current_user.username,
         )
         phases["create_game_and_warmup"] = int((time.perf_counter() - phase_t0) * 1000)
+    except ValueError as exc:
+        phases["create_game_and_warmup"] = int((time.perf_counter() - phase_t0) * 1000)
+        _emit_game_init_metrics(
+            game_id=session_id,
+            user_id=current_user.id,
+            username=current_user.username,
+            mode="custom",
+            status="error",
+            total_ms=int((time.perf_counter() - route_t0) * 1000),
+            phases=phases,
+            status_message=str(exc),
+        )
+        raise HTTPException(status_code=422, detail=str(exc))
     except Exception as exc:
         _emit_game_init_metrics(
             game_id=session_id,
@@ -324,7 +361,7 @@ def list_standard_templates_endpoint(
     current_user: AuthUserResponse = Depends(get_current_user),
 ):
     """Lista templates estándar disponibles para creación rápida."""
-    _ = current_user  # asegurar autenticación sin alterar lógica adicional.
+    _ = current_user
     templates = list_standard_templates()
     return StandardTemplateListResponse(
         templates=[StandardTemplateItem(**item) for item in templates]
@@ -532,11 +569,15 @@ def turn(
             status_code=400,
             detail="Player cannot write now; wait for current_speaker or game_finished",
         )
+    try:
+        validated_text = validate_user_message(body.text)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     def event_stream():
         for ev in engine.execute_turn_stream(
             body.session_id,
-            body.text,
+            validated_text,
             user_exit=body.user_exit,
         ):
             ev_type = ev.get("type", "event")

@@ -11,10 +11,22 @@ class _DummyEngine:
     def __init__(self):
         self.calls = []
 
-    def create_game(self, theme=None, num_actors=3, max_turns=10, username=None):
+    def create_game(
+        self,
+        theme=None,
+        era=None,
+        topic=None,
+        style=None,
+        num_actors=3,
+        max_turns=10,
+        username=None,
+    ):
         self.calls.append(
             {
                 "theme": theme,
+                "era": era,
+                "topic": topic,
+                "style": style,
                 "num_actors": num_actors,
                 "max_turns": max_turns,
                 "username": username,
@@ -83,6 +95,51 @@ def test_new_game_num_actors_only_does_not_use_env_theme(monkeypatch):
         assert res.status_code == 200
         assert engine.calls[0]["theme"] is None
         assert engine.calls[0]["num_actors"] == 5
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_new_game_accepts_structured_custom_seed():
+    engine = _DummyEngine()
+    client = _client_with_engine(engine)
+    try:
+        res = client.post(
+            "/game/new",
+            json={
+                "era": "Roma republicana tardía",
+                "topic": "Desactivar una conspiración del Senado",
+                "style": "Thriller político",
+                "num_actors": 4,
+            },
+        )
+        assert res.status_code == 200
+        assert engine.calls[0]["era"] == "Roma republicana tardía"
+        assert engine.calls[0]["topic"] == "Desactivar una conspiración del Senado"
+        assert engine.calls[0]["style"] == "Thriller político"
+        assert engine.calls[0]["theme"] is None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_new_game_rejects_theme_and_structured_seed_together():
+    engine = _DummyEngine()
+    client = _client_with_engine(engine)
+    try:
+        res = client.post("/game/new", json={"theme": "algo", "era": "Roma"})
+        assert res.status_code == 422
+        assert res.json()["detail"] == "Usa theme o los campos custom estructurados, pero no ambos a la vez."
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_new_game_rejects_structured_seed_with_too_many_words():
+    engine = _DummyEngine()
+    client = _client_with_engine(engine)
+    try:
+        era = " ".join(["a"] * 31)
+        res = client.post("/game/new", json={"era": era})
+        assert res.status_code == 422
+        assert res.json()["detail"] == "El campo Época/contexto no puede superar 30 palabras."
     finally:
         app.dependency_overrides.clear()
 

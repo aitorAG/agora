@@ -3,5 +3,6 @@
   "titulo": "Las Idus del Oraculo Carmesi",
   "descripcion_breve": "Una sacerdotisa del Templo del Fuego Eterno exige la sangre de Cesar para abrir un ritual prohibido.\nDeten a Harry Potter antes de que Roma se convierta en el altar de una profecia devastadora.",
   "version": "1.0.0",
+  "active": true,
   "num_personajes": 4
 }

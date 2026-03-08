@@ -70,3 +70,27 @@ def test_character_process_stream_true_returns_concatenated_and_displayed(
     writes = [call.args[0] for call in mock_stdout.write.call_args_list]
     assert "".join(writes) == "Hi there.\n"
     assert mock_stdout.flush.called
+
+
+def test_character_process_truncates_to_three_sentences(
+    agent: CharacterAgent, sample_state: ConversationState
+):
+    text = "Primera frase. Segunda frase. Tercera frase. Cuarta frase."
+    with patch("src.agents.character.send_message", return_value=text):
+        result = agent.process(sample_state, stream=False)
+    assert result["message"] == "Primera frase. Segunda frase. Tercera frase."
+
+
+def test_character_stream_truncates_before_fourth_sentence(
+    agent: CharacterAgent, sample_state: ConversationState
+):
+    chunks = ["Primera frase. ", "Segunda frase. ", "Tercera frase. ", "Cuarta frase."]
+    with patch("src.agents.character.send_message", return_value=iter(chunks)):
+        with patch("src.agents.character.sys.stdout") as mock_stdout:
+            mock_stdout.write = MagicMock()
+            mock_stdout.flush = MagicMock()
+            result = agent.process(sample_state, stream=True)
+
+    assert result["message"] == "Primera frase. Segunda frase. Tercera frase."
+    writes = [call.args[0] for call in mock_stdout.write.call_args_list]
+    assert "".join(writes) == "Primera frase. Segunda frase. Tercera frase.\n"

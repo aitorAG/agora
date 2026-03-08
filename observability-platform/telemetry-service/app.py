@@ -17,6 +17,12 @@ from pydantic import BaseModel, Field
 DB_PATH = Path(os.getenv("TELEMETRY_DB_PATH", "/data/telemetry.db"))
 INGEST_KEY = (os.getenv("TELEMETRY_INGEST_KEY") or "").strip()
 MAX_BATCH_SIZE = max(1, int((os.getenv("TELEMETRY_MAX_BATCH") or "256").strip()))
+_INSECURE_INGEST_KEYS = {"", "change_me_ingest_key", "admin"}
+
+
+def _is_production() -> bool:
+    target = (os.getenv("AGORA_DEPLOY_TARGET") or "").strip().lower()
+    return target == "vps"
 
 
 class TelemetryEventIn(BaseModel):
@@ -362,6 +368,11 @@ def _ingest_auth(x_agora_ingest_key: str | None) -> None:
         return
     if (x_agora_ingest_key or "").strip() != INGEST_KEY:
         raise HTTPException(status_code=401, detail="Invalid ingest key")
+
+
+def _validate_runtime_security() -> None:
+    if _is_production() and INGEST_KEY in _INSECURE_INGEST_KEYS:
+        raise RuntimeError("TELEMETRY_INGEST_KEY must be strong and explicit in production")
 
 
 def _game_display_name(title: Any, created_at: Any) -> str:
@@ -1128,7 +1139,17 @@ app = FastAPI(title="Agora Telemetry", version="2.0.0")
 
 @app.on_event("startup")
 def _startup() -> None:
+    _validate_runtime_security()
     _init_db()
+
+
+@app.middleware("http")
+async def apply_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
 
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"

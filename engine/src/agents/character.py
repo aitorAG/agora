@@ -4,6 +4,7 @@ import sys
 from typing import Dict, Any, Iterator
 
 from ..state import ConversationState
+from ..text_limits import truncate_agent_output
 from .base import Agent
 from .deepseek_adapter import send_message
 
@@ -38,6 +39,10 @@ class CharacterAgent(Agent):
             self._temperature = float(os.getenv("DEEPSEEK_TEMP_CHARACTER", "2.0"))
         except ValueError:
             self._temperature = 2.0
+        try:
+            self._max_output_tokens = int(os.getenv("CHARACTER_MAX_OUTPUT_TOKENS", "120"))
+        except ValueError:
+            self._max_output_tokens = 120
 
     @property
     def is_actor(self) -> bool:
@@ -87,6 +92,7 @@ class CharacterAgent(Agent):
                     model=self._model,
                     temperature=self._temperature,
                     stream=False,
+                    max_tokens=self._max_output_tokens,
                 )
                 assert isinstance(content, str)
                 return {
@@ -115,7 +121,7 @@ class CharacterAgent(Agent):
 Tu personalidad: {self.personality}
 
 Estas presente en la conversacion y responderas de manera natural y coherente con tu personalidad adressing un personaje presente en la escena, siguiendo la conversacion de los personajes y queriendo avanzar en tu objetivo
-Mantén tus respuestas concisas (1-3 frases típicamente).
+Mantén tus respuestas concisas y no superes nunca 3 frases.
 Solo responde con el contenido del mensaje, sin prefijos ni explicaciones."""
         if self._background:
             system_prompt += f"""
@@ -167,6 +173,7 @@ Tu misión: {self._mission}"""
             model=self._model,
             temperature=self._temperature,
             stream=True,
+            max_tokens=self._max_output_tokens,
         )
         assert isinstance(response, Iterator)
         raw_content: list[str] = []
@@ -181,7 +188,7 @@ Tu misión: {self._mission}"""
                 emitted_content = cleaned_content
         out.write("\n")
         out.flush()
-        return "".join(raw_content)
+        return emitted_content
 
     def _sanitize_response_content(self, content: str) -> str:
         cleaned = str(content or "").strip()
@@ -209,4 +216,4 @@ Tu misión: {self._mission}"""
                 cleaned = updated.lstrip()
                 changed = True
 
-        return cleaned
+        return truncate_agent_output(cleaned)

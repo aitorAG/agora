@@ -3,9 +3,83 @@ const PROXIED_BASE = window.location.pathname.startsWith('/admin/observability')
   : '';
 const API_BASE = PROXIED_BASE ? `${PROXIED_BASE}/api` : '';
 let cachedGeneralData = null;
+const topbarState = {
+  user: null,
+  userMenuOpen: false,
+  logoutLoading: false,
+};
 
 function apiUrl(path) {
   return `${API_BASE}${path}`;
+}
+
+function formatUserInitials(username) {
+  const clean = String(username || '').trim();
+  if (!clean) return '?';
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return clean.slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function toggleUserMenu(forceOpen) {
+  const next = typeof forceOpen === 'boolean' ? forceOpen : !topbarState.userMenuOpen;
+  topbarState.userMenuOpen = next;
+  const chip = document.getElementById('user-chip');
+  const menu = document.getElementById('user-menu');
+  if (chip) chip.setAttribute('aria-expanded', next ? 'true' : 'false');
+  if (menu) menu.classList.toggle('hidden', !next);
+}
+
+function renderTopbarUser() {
+  const user = topbarState.user || {};
+  const username = String(user.username || 'Admin').trim() || 'Admin';
+  const avatar = document.getElementById('user-avatar');
+  const name = document.getElementById('user-name');
+  const logout = document.getElementById('menu-logout');
+  if (avatar) avatar.textContent = formatUserInitials(username);
+  if (name) name.textContent = username;
+  if (logout) {
+    logout.disabled = topbarState.logoutLoading;
+    logout.textContent = topbarState.logoutLoading ? 'Cerrando sesión...' : 'Cerrar sesión';
+  }
+  toggleUserMenu(topbarState.userMenuOpen);
+}
+
+async function loadCurrentUser() {
+  const response = await fetch('/auth/me', { credentials: 'include' });
+  if (response.status === 401) {
+    window.location.assign('/ui/');
+    return;
+  }
+  if (!response.ok) {
+    throw new Error(`No se pudo cargar la sesión (${response.status})`);
+  }
+  topbarState.user = await response.json();
+  renderTopbarUser();
+}
+
+async function logout() {
+  topbarState.logoutLoading = true;
+  renderTopbarUser();
+  try {
+    await fetch('/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: '{}',
+    });
+  } finally {
+    window.location.assign('/ui/');
+  }
+}
+
+function closeOnOutsideClick(event) {
+  const menu = document.getElementById('user-menu');
+  const chip = document.getElementById('user-chip');
+  if (!topbarState.userMenuOpen || !menu || !chip) return;
+  const inMenu = menu.contains(event.target);
+  const inChip = chip.contains(event.target);
+  if (!inMenu && !inChip) toggleUserMenu(false);
 }
 
 async function getJSON(path, params = {}) {
@@ -535,6 +609,25 @@ async function refreshAll() {
 }
 
 bindTabs();
+document.getElementById('user-chip')?.addEventListener('click', (event) => {
+  event.stopPropagation();
+  toggleUserMenu();
+});
+document.getElementById('menu-go-app')?.addEventListener('click', () => {
+  toggleUserMenu(false);
+  window.location.assign('/ui/');
+});
+document.getElementById('menu-feedback-admin')?.addEventListener('click', () => {
+  toggleUserMenu(false);
+  window.location.assign('/admin/feedback/');
+});
+document.getElementById('menu-observability')?.addEventListener('click', () => {
+  toggleUserMenu(false);
+});
+document.getElementById('menu-logout')?.addEventListener('click', async () => {
+  toggleUserMenu(false);
+  await logout();
+});
 document.getElementById('refreshAll')?.addEventListener('click', refreshAll);
 document.getElementById('loadUser')?.addEventListener('click', loadUserDetail);
 document.getElementById('loadGame')?.addEventListener('click', loadGameDetail);
@@ -551,12 +644,21 @@ document.getElementById('initSeriesMetric')?.addEventListener('change', () => {
 document.getElementById('initSeriesAgg')?.addEventListener('change', () => {
   renderInitSeriesFromData(cachedGeneralData);
 });
-
-refreshAll().catch((error) => {
-  console.error(error);
-  document.querySelectorAll('.chart, .cards, tbody, #messageLog').forEach((node) => {
-    if (node && !node.innerHTML) {
-      node.innerHTML = '<div class="empty">No se pudieron cargar las metricas</div>';
-    }
-  });
+document.addEventListener('click', closeOnOutsideClick);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') toggleUserMenu(false);
 });
+
+(async function init() {
+  try {
+    await loadCurrentUser();
+    await refreshAll();
+  } catch (error) {
+    console.error(error);
+    document.querySelectorAll('.chart, .cards, tbody, #messageLog').forEach((node) => {
+      if (node && !node.innerHTML) {
+        node.innerHTML = '<div class="empty">No se pudieron cargar las metricas</div>';
+      }
+    });
+  }
+}());

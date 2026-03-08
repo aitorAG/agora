@@ -53,7 +53,55 @@
     },
   };
 
+  const INPUT_LIMITS = {
+    player: { maxSentences: 5, maxWords: 120, maxChars: 600 },
+    custom: {
+      era: { maxSentences: 2, maxWords: 30, maxChars: 160, label: "Época/contexto" },
+      topic: { maxSentences: 2, maxWords: 30, maxChars: 160, label: "Tema" },
+      style: { maxSentences: 1, maxWords: 18, maxChars: 100, label: "Estilo" },
+      total: { maxSentences: 5, maxWords: 70, maxChars: 400, label: "La descripción custom" },
+    },
+  };
+
   const $ = (id) => document.getElementById(id);
+
+  function normalizeText(value) {
+    return String(value || "").trim();
+  }
+
+  function countWords(text) {
+    const matches = normalizeText(text).match(/\S+/g);
+    return matches ? matches.length : 0;
+  }
+
+  function countSentences(text) {
+    const cleaned = normalizeText(text);
+    if (!cleaned) return 0;
+    const parts = cleaned.split(/[.!?…]+/).map((part) => part.trim()).filter(Boolean);
+    return parts.length || 1;
+  }
+
+  function validateTextLimits(text, limits) {
+    const cleaned = normalizeText(text);
+    if (!cleaned) return "";
+    if (cleaned.length > limits.maxChars) {
+      return `${limits.label} no puede superar ${limits.maxChars} caracteres.`;
+    }
+    if (countWords(cleaned) > limits.maxWords) {
+      return `${limits.label} no puede superar ${limits.maxWords} palabras.`;
+    }
+    if (countSentences(cleaned) > limits.maxSentences) {
+      return `${limits.label} no puede superar ${limits.maxSentences} frases.`;
+    }
+    return "";
+  }
+
+  function validatePlayerMessage(text) {
+    return validateTextLimits(text, {
+      ...INPUT_LIMITS.player,
+      label: "El mensaje del usuario",
+    });
+  }
 
   function safeGetItem(key, defaultValue) {
     try {
@@ -425,6 +473,20 @@
       .join("");
   }
 
+  function isStandardTemplateActive(template) {
+    if (!template || typeof template !== "object" || !Object.prototype.hasOwnProperty.call(template, "active")) {
+      return true;
+    }
+    const value = template.active;
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (["false", "0", "no", "off"].includes(normalized)) return false;
+      if (["true", "1", "yes", "on"].includes(normalized)) return true;
+    }
+    return Boolean(value);
+  }
+
   function renderStandardTemplates() {
     const list = $standardTemplatesList();
     if (!list) return;
@@ -436,7 +498,9 @@
       list.innerHTML = `<p class="games-list-state games-list-error">${escapeHtml(store.newGame.standardError)}</p>`;
       return;
     }
-    const templates = Array.isArray(store.newGame.standardCatalog) ? store.newGame.standardCatalog : [];
+    const templates = Array.isArray(store.newGame.standardCatalog)
+      ? store.newGame.standardCatalog.filter((template) => isStandardTemplateActive(template))
+      : [];
     renderTemplateCards(
       list,
       templates,
@@ -493,21 +557,26 @@
     const topic = (($seedTopic() && $seedTopic().value) || "").trim();
     const style = (($seedStyle() && $seedStyle().value) || "").trim();
     const numActorsRaw = (($seedNumActors() && $seedNumActors().value) || "").trim();
-
-    if (era.length > 200 || topic.length > 200 || style.length > 200) {
-      return { error: "Cada campo de texto permite como máximo 200 caracteres." };
-    }
+    const eraError = validateTextLimits(era, INPUT_LIMITS.custom.era);
+    if (eraError) return { error: eraError };
+    const topicError = validateTextLimits(topic, INPUT_LIMITS.custom.topic);
+    if (topicError) return { error: topicError };
+    const styleError = validateTextLimits(style, INPUT_LIMITS.custom.style);
+    if (styleError) return { error: styleError };
 
     const hasTextSeed = !!(era || topic || style);
     const hasNumActors = numActorsRaw !== "";
     const payload = {};
 
     if (hasTextSeed) {
-      const parts = [];
-      if (era) parts.push(`Época/contexto: ${era}`);
-      if (topic) parts.push(`Tema: ${topic}`);
-      if (style) parts.push(`Estilo: ${style}`);
-      payload.theme = parts.join(" | ");
+      const totalError = validateTextLimits(
+        [era, topic, style].filter(Boolean).join(" "),
+        INPUT_LIMITS.custom.total
+      );
+      if (totalError) return { error: totalError };
+      if (era) payload.era = era;
+      if (topic) payload.topic = topic;
+      if (style) payload.style = style;
     }
 
     if (hasNumActors) {
@@ -1220,6 +1289,12 @@
       return;
     }
     if (!text) return;
+    const inputError = validatePlayerMessage(text);
+    if (inputError) {
+      showError(inputError);
+      return;
+    }
+    clearError();
 
     const userMsg = {
       author: currentUsername(),
@@ -1251,7 +1326,10 @@
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || "Sesión no encontrada");
       }
-      if (!res.ok) throw new Error(`Error ${res.status}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${res.status}`);
+      }
 
       const reader = res.body.getReader();
       const dec = new TextDecoder();
@@ -1335,6 +1413,8 @@
       await fetchStatus();
       await fetchGamesList();
     } catch (e) {
+      const lastMessage = store.messages[store.messages.length - 1];
+      if (lastMessage === userMsg) store.messages.pop();
       showError(e.message || "Error al enviar");
       clearStreamingState();
       await fetchStatus();

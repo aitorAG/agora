@@ -28,6 +28,21 @@ def _read_json(path: Path) -> dict[str, Any]:
     return data
 
 
+def _manifest_active(manifest: dict[str, Any]) -> bool:
+    value = manifest.get("active")
+    if value is None:
+        return True
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    return bool(value)
+
+
 def list_standard_templates() -> list[dict[str, Any]]:
     """Lista templates estándar disponibles usando manifest.json."""
     templates: list[dict[str, Any]] = []
@@ -61,6 +76,7 @@ def list_standard_templates() -> list[dict[str, Any]]:
                 "descripcion_breve": descripcion,
                 "version": version,
                 "num_personajes": max(0, num_personajes),
+                "active": _manifest_active(manifest),
             }
         )
     return templates

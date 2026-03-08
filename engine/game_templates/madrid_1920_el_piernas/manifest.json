@@ -3,5 +3,6 @@
   "titulo": "Turbo y el Piernas",
   "descripcion_breve": "En el Madrid de 1920, El Piernas le ha robado la merca a Turbo y la noche se calienta en una cabaña del extrarradio.\nConvence a Turbo de no romperle las piernas antes de que todo acabe en tragedia.",
   "version": "1.0.0",
+  "active": false,
   "num_personajes": 4
 }

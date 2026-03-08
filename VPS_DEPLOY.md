@@ -50,13 +50,16 @@ Variables obligatorias:
 - `POSTGRES_PASSWORD=<password fuerte>`
   - Lo defines tú.
   - Recomendado: `openssl rand -hex 24`.
+- `AUTH_SECRET_KEY=<secret JWT fuerte>`
+  - Lo defines tú.
+  - Recomendado: `openssl rand -hex 32`.
 - `DEEPSEEK_API_KEY=<tu clave>`
   - Sale del panel de DeepSeek.
 - `AUTH_SEED_USERNAME=admin`
   - Lo defines tú.
 - `AUTH_SEED_PASSWORD=<password admin fuerte>`
   - Lo defines tú.
-  - Recomendado: no dejar `4dmin` en producción.
+  - Recomendado: no dejar `admin` en producción.
 - `AUTH_SEED_ROLE=admin`
   - Lo defines tú.
 - `TELEMETRY_ENABLED=true`
@@ -108,6 +111,10 @@ grep -q '^TELEMETRY_INGEST_KEY=' .env \
   && sed -i 's/^TELEMETRY_INGEST_KEY=.*/TELEMETRY_INGEST_KEY=change_me_ingest_key/' .env \
   || echo 'TELEMETRY_INGEST_KEY=change_me_ingest_key' >> .env
 
+grep -q '^AUTH_SECRET_KEY=' .env \
+  && sed -i 's/^AUTH_SECRET_KEY=.*/AUTH_SECRET_KEY=change_me_super_secret/' .env \
+  || echo 'AUTH_SECRET_KEY=change_me_super_secret' >> .env
+
 grep -q '^AGORA_PUBLIC_URL=' .env \
   && sed -i 's#^AGORA_PUBLIC_URL=.*#AGORA_PUBLIC_URL=http://85.17.246.141#' .env \
   || echo 'AGORA_PUBLIC_URL=http://85.17.246.141' >> .env
@@ -117,6 +124,7 @@ Variables mínimas que debes rellenar:
 
 - `POSTGRES_PASSWORD`
 - `DEEPSEEK_API_KEY`
+- `AUTH_SECRET_KEY`
 - `AUTH_SEED_PASSWORD`
 - `AGORA_DEPLOY_TARGET=vps`
 - `AGORA_PUBLIC_URL=https://<tu-dominio>` (o `http://85.17.246.141` temporal)
@@ -126,7 +134,7 @@ Variables mínimas que debes rellenar:
 Para admin bootstrap (creado automáticamente incluso si recreas DB):
 
 - `AUTH_SEED_USERNAME=admin`
-- `AUTH_SEED_PASSWORD=4dmin` (cámbiala en producción)
+- `AUTH_SEED_PASSWORD=<password fuerte>` 
 - `AUTH_SEED_ROLE=admin`
 
 ## 4. Levantar stack de producción
@@ -179,6 +187,7 @@ en función de:
 Acceso:
 - Usuario admin autenticado en Agora: `https://<tu-dominio>/admin/observability/`
 - Usuario no admin: `403`
+- La interfaz se sirve desde Agora; `telemetry` queda como servicio interno de datos/ingesta.
 
 La telemetría muestra:
 
@@ -189,7 +198,7 @@ La telemetría muestra:
 
 ## 6. TLS/HTTPS
 
-El archivo `nginx/nginx.prod.conf` está preparado para proxy vía autorización admin (`/authz/admin`).  
+El archivo `nginx/nginx.prod.conf` publica Agora y deja la autorización admin dentro de la propia app.  
 En producción real debes activar HTTPS (Let's Encrypt con certbot o usar Caddy).
 
 ## 7. Backups de base de datos

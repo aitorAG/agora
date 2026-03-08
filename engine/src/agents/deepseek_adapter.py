@@ -102,6 +102,7 @@ def send_message(
     model: str = "deepseek-chat",
     temperature: float = 0.7,
     stream: bool = False,
+    max_tokens: int | None = None,
 ) -> str | Iterator[str]:
     """Envía mensajes a DeepSeek y devuelve la respuesta (texto o stream de chunks).
 
@@ -124,7 +125,12 @@ def send_message(
     generation = start_generation(
         name="llm_call",
         model=model,
-        model_parameters={"temperature": temperature, "provider": "deepseek", "stream": stream},
+        model_parameters={
+            "temperature": temperature,
+            "provider": "deepseek",
+            "stream": stream,
+            "max_tokens": max_tokens,
+        },
         input_data=messages,
         metadata={"stream": str(bool(stream)).lower(), "model_family": "deepseek"},
     )
@@ -135,6 +141,7 @@ def send_message(
             messages=messages,
             temperature=temperature,
             stream=stream,
+            max_tokens=max_tokens,
         )
     except Exception as exc:
         end_generation(generation, level="ERROR", status_message=str(exc)[:500])

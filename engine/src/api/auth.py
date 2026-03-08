@@ -12,10 +12,16 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 _PWD_CONTEXT = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
+_INSECURE_SECRET_VALUES = {"", "dev-only-change-me", "change_me_super_secret"}
+_INSECURE_SEED_PASSWORDS = {"", "agora123", "admin", "change_me", "change_me_ingest_key"}
 
 
 class UserAlreadyExistsError(Exception):
     """Error de dominio para username duplicado."""
+
+
+class InvalidAuthConfigurationError(RuntimeError):
+    """Configuración de autenticación inválida para el entorno actual."""
 
 
 def normalize_username(username: str) -> str:
@@ -27,13 +33,50 @@ def normalize_role(role: str | None) -> str:
     return "admin" if value == "admin" else "user"
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on")
+
+
+def _is_production() -> bool:
+    target = (os.getenv("AGORA_DEPLOY_TARGET") or "").strip().lower()
+    return target == "vps"
+
+
 def auth_cookie_name() -> str:
     return os.getenv("AUTH_COOKIE_NAME", "agora_auth_token").strip() or "agora_auth_token"
+
+
+def auth_cookie_secure() -> bool:
+    raw = os.getenv("AUTH_COOKIE_SECURE", "").strip().lower()
+    if raw:
+        return raw in ("1", "true", "yes", "on")
+    base_url = (
+        os.getenv("AGORA_RESOLVED_BASE_URL")
+        or os.getenv("AGORA_PUBLIC_URL")
+        or ""
+    ).strip().lower()
+    return base_url.startswith("https://")
+
+
+def auth_cookie_samesite() -> str:
+    raw = os.getenv("AUTH_COOKIE_SAMESITE", "lax").strip().lower()
+    if raw == "none" and not auth_cookie_secure():
+        return "lax"
+    if raw in {"strict", "lax", "none"}:
+        return raw
+    return "lax"
 
 
 def auth_required() -> bool:
     raw = os.getenv("AUTH_REQUIRED", "true").strip().lower()
     return raw in ("1", "true", "yes", "on")
+
+
+def auth_bootstrap_seed_enabled() -> bool:
+    return _env_flag("AUTH_BOOTSTRAP_SEED", True)
 
 
 def _auth_secret() -> str:
@@ -92,10 +135,45 @@ def _db_connect():
     return psycopg.connect(_db_dsn(), autocommit=False)
 
 
+def validate_auth_configuration() -> None:
+    if not _is_production():
+        return
+
+    issues: list[str] = []
+    secret = (os.getenv("AUTH_SECRET_KEY") or "").strip()
+    if secret in _INSECURE_SECRET_VALUES:
+        issues.append("AUTH_SECRET_KEY fuerte y explicita")
+    if not auth_required():
+        issues.append("AUTH_REQUIRED=true")
+
+    if auth_bootstrap_seed_enabled():
+        seed_username = normalize_username(os.getenv("AUTH_SEED_USERNAME", ""))
+        seed_password = (os.getenv("AUTH_SEED_PASSWORD") or "").strip()
+        if not seed_username:
+            issues.append("AUTH_SEED_USERNAME explicito")
+        if seed_password in _INSECURE_SEED_PASSWORDS:
+            issues.append("AUTH_SEED_PASSWORD fuerte y explicita")
+
+    if issues:
+        joined = ", ".join(issues)
+        raise InvalidAuthConfigurationError(
+            f"Invalid production auth configuration: missing/unsafe {joined}"
+        )
+
+
 def ensure_seed_user() -> None:
-    username = normalize_username(os.getenv("AUTH_SEED_USERNAME", "usuario")) or "usuario"
-    password = os.getenv("AUTH_SEED_PASSWORD", "agora123").strip() or "agora123"
+    if not auth_bootstrap_seed_enabled():
+        return
+
+    username_default = "usuario" if not _is_production() else ""
+    password_default = "agora123" if not _is_production() else ""
+    username = normalize_username(os.getenv("AUTH_SEED_USERNAME", username_default)) or username_default
+    password = os.getenv("AUTH_SEED_PASSWORD", password_default).strip() or password_default
     role = normalize_role(os.getenv("AUTH_SEED_ROLE", "admin"))
+    if not username or not password:
+        raise InvalidAuthConfigurationError(
+            "AUTH_SEED_USERNAME and AUTH_SEED_PASSWORD are required for seed bootstrap"
+        )
     pwd_hash = hash_password(password)
     with _db_connect() as conn:
         with conn.cursor() as cur:

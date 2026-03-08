@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 # --- POST /game/new ---
 class NewGameRequest(BaseModel):
     theme: Optional[str] = Field(default=None, max_length=600)
+    era: Optional[str] = Field(default=None, max_length=160)
+    topic: Optional[str] = Field(default=None, max_length=160)
+    style: Optional[str] = Field(default=None, max_length=100)
     num_actors: Optional[int] = Field(default=None, ge=1, le=5)
     max_turns: int = 10
 
@@ -55,7 +58,7 @@ class StatusResponse(BaseModel):
 # --- POST /game/turn ---
 class TurnRequest(BaseModel):
     session_id: str
-    text: str = ""
+    text: str = Field(default="", max_length=600)
     user_exit: bool = False
 
 
@@ -135,6 +138,7 @@ class StandardTemplateItem(BaseModel):
     descripcion_breve: str
     version: str = "1.0.0"
     num_personajes: int = 0
+    active: bool = True
 
 
 class StandardTemplateListResponse(BaseModel):
