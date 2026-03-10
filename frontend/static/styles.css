@@ -249,6 +249,29 @@ body {
   cursor: pointer;
 }
 
+.home-link {
+  width: 2.5rem;
+  height: 2.5rem;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 249, 241, 0.74);
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.home-link svg {
+  width: 1.12rem;
+  height: 1.12rem;
+  display: block;
+  fill: currentColor;
+}
+
+.home-link:hover {
+  transform: translateY(-1px);
+  border-color: rgba(157, 98, 54, 0.36);
+  background: rgba(255, 250, 244, 0.94);
+}
+
 .brand-link:hover .brand-title {
   color: var(--accent);
 }
@@ -358,6 +381,12 @@ body {
   transform: translateY(-1px);
   border-color: rgba(157, 98, 54, 0.36);
   background: rgba(255, 250, 244, 0.94);
+}
+
+.topbar-action {
+  min-height: 2.5rem;
+  padding: 0.5rem 0.82rem;
+  font-size: 0.88rem;
 }
 
 .workspace {
@@ -1185,6 +1214,7 @@ body {
   padding: 0.25rem 0.64rem 0.25rem 0.3rem;
   cursor: pointer;
   max-width: 240px;
+  min-height: 2.5rem;
 }
 
 .user-avatar {
@@ -1637,6 +1667,7 @@ body.theme-dark .topbar {
 
 body.theme-dark .topbar-status,
 body.theme-dark .theme-toggle,
+body.theme-dark .home-link,
 body.theme-dark .user-chip,
 body.theme-dark .story-choice-icon,
 body.theme-dark .sheet-tag,
@@ -1657,6 +1688,7 @@ body.theme-dark .landing-game-item {
 }
 
 body.theme-dark .theme-toggle:hover,
+body.theme-dark .home-link:hover,
 body.theme-dark .game-item:hover {
   background: rgba(127, 108, 96, 0.92);
 }
@@ -1826,70 +1858,166 @@ body.theme-dark .user-menu button:hover:not(:disabled) {
   }
 
   .topbar {
-    grid-template-columns: 1fr;
-    gap: 0.55rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.45rem;
+    padding: 0.4rem 0.5rem;
+    border-radius: 16px;
   }
 
-  .topbar-title-block,
-  .topbar-right {
-    width: 100%;
-    justify-content: space-between;
-    flex-wrap: wrap;
-  }
-
-  .topbar-right {
-    justify-self: stretch;
+  .topbar-left {
+    display: flex;
+    align-items: center;
   }
 
   .topbar-title-block {
-    gap: 0.65rem;
+    display: none;
   }
 
-  .topbar-title-separator {
+  .topbar-right {
+    min-width: 0;
+    justify-self: stretch;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    gap: 0.32rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    padding-bottom: 0.05rem;
+  }
+
+  .topbar-right::-webkit-scrollbar {
     display: none;
   }
 
   .topbar-status {
-    order: -1;
-    width: 100%;
-    justify-content: space-between;
+    display: none;
+  }
+
+  .home-link,
+  .theme-toggle,
+  .user-chip,
+  .topbar-action {
+    min-height: 2.2rem;
+    height: 2.2rem;
+  }
+
+  .home-link,
+  .theme-toggle {
+    width: 2.2rem;
+  }
+
+  .topbar-action {
+    padding: 0.35rem 0.62rem;
+    font-size: 0.76rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  #btn-new-game.topbar-action {
+    padding-inline: 0.58rem;
+  }
+
+  .user-chip {
+    max-width: none;
+    min-width: 2.2rem;
+    justify-content: center;
+    padding: 0.2rem;
+  }
+
+  .user-name {
+    display: none;
+  }
+
+  .user-avatar {
+    width: 1.7rem;
+    height: 1.7rem;
+    font-size: 0.76rem;
   }
 
   .story-shell {
-    padding: 0.8rem;
-    gap: 0.7rem;
-  }
-
-  .story-mobile-hint {
-    display: block;
+    padding: 0.7rem;
+    gap: 0.55rem;
   }
 
   .story-tabs {
-    gap: 0.18rem;
-    padding: 0;
+    gap: 0.14rem;
+    padding: 0 0.08rem;
   }
 
   .story-tab {
-    padding: 0.68rem 0.82rem 0.58rem;
+    padding: 0.56rem 0.72rem 0.48rem;
+    font-size: 0.84rem;
+    transform: translateY(5px);
   }
 
   .dossier-sheet {
-    padding: 0.95rem;
-    border-radius: 22px;
+    padding: 0.8rem;
+    border-radius: 20px;
   }
 
   .sheet-body,
-  .story-characters-grid,
-  .chat-stage-brief {
+  .story-characters-grid {
     grid-template-columns: 1fr;
   }
 
-  .story-stage-actions {
-    flex-direction: column;
+  .context-stream {
+    padding: 0.85rem;
+    font-size: 0.94rem;
+    line-height: 1.62;
   }
 
-  .story-stage-actions button {
-    width: 100%;
+  .mission-card-primary {
+    padding: 0.92rem;
+    border-radius: 20px;
+  }
+
+  .mission-copy {
+    font-size: 0.98rem;
+    line-height: 1.5;
+  }
+
+  .story-characters-grid {
+    gap: 0.58rem;
+  }
+
+  .character-sheet-card {
+    padding: 0.82rem;
+    border-radius: 18px;
+    gap: 0.5rem;
+  }
+
+  .character-sheet-card h3 {
+    font-size: 0.98rem;
+  }
+
+  .character-sheet-card p {
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .chat-stage-brief-item {
+    padding: 0.68rem 0.8rem;
+    border-radius: 16px;
+  }
+
+  .story-mission-inline {
+    font-size: 0.92rem;
+    line-height: 1.38;
+  }
+
+  .chat {
+    padding: 0.8rem 0.08rem 0.32rem;
+    gap: 0.58rem;
+  }
+
+  .msg {
+    max-width: 96%;
+    padding: 0.58rem 0.68rem;
+  }
+
+  .msg-content {
+    font-size: 0.92rem;
+    line-height: 1.38;
   }
 
   .landing-view {
@@ -1905,6 +2033,13 @@ body.theme-dark .user-menu button:hover:not(:disabled) {
   .landing-title {
     max-width: none;
     font-size: clamp(2.1rem, 12vw, 3.4rem);
+  }
+
+  .landing-subtitle,
+  .landing-action-copy,
+  .landing-step h3 {
+    font-size: 0.94rem;
+    line-height: 1.45;
   }
 
   .landing-games-header {

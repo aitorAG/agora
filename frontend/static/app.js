@@ -152,17 +152,10 @@
   const $storyStages = () => document.querySelectorAll("[data-story-stage]");
   const $storyPager = () => $("story-pager");
   const $storyTrack = () => $("story-track");
-  const $storyMobileHint = () => $("story-mobile-hint");
   const $contextStream = () => $("context-stream");
-  const $contextTurnMeta = () => $("context-turn-meta");
   const $storyMissionPrimary = () => $("story-mission-primary");
   const $storyMissionInline = () => $("story-mission-inline");
   const $storyCharactersGrid = () => $("story-characters-grid");
-  const $charactersCount = () => $("characters-count");
-  const $btnContextToCharacters = () => $("btn-context-to-characters");
-  const $btnContextToChat = () => $("btn-context-to-chat");
-  const $btnCharactersToContext = () => $("btn-characters-to-context");
-  const $btnCharactersToChat = () => $("btn-characters-to-chat");
   const $btnLandingCustom = () => $("btn-landing-custom");
   const $btnLandingStandard = () => $("btn-landing-standard");
   const $btnLandingAllGames = () => $("btn-landing-all-games");
@@ -1024,18 +1017,14 @@
 
     const activeTab = store.ui.activeStoryTab;
     const track = $storyTrack();
-    const mobileHint = $storyMobileHint();
     const fullContext = normalizeText(store.context.narrativa_inicial);
     const revealLength = store.ui.contextRevealDone
       ? fullContext.length
       : Math.min(fullContext.length, Math.max(0, store.ui.contextRevealChars));
     const contextPreview = fullContext.slice(0, revealLength);
     const mission = normalizeText(store.context.player_mission) || "Descubre la situación y decide cómo avanzar.";
-    const characters = Array.isArray(store.context.characters) ? store.context.characters : [];
-    const introLabel = store.ui.storyEntryMode === "resume" ? "Historia reanudada" : "Historia nueva";
 
     if (track) track.style.setProperty("--story-tab-index", String(currentStoryTabIndex()));
-    if (mobileHint) mobileHint.classList.toggle("hidden", activeTab === "chat");
 
     $storyTabs().forEach((button) => {
       const tab = button.getAttribute("data-story-tab") || "";
@@ -1051,8 +1040,6 @@
       stage.setAttribute("aria-hidden", selected ? "false" : "true");
     });
 
-    const contextTurnMeta = $contextTurnMeta();
-    if (contextTurnMeta) contextTurnMeta.textContent = introLabel;
     const contextStream = $contextStream();
     if (contextStream) {
       const text = contextPreview || "El guionista está preparando el contexto.";
@@ -1064,8 +1051,6 @@
     if (missionInline) missionInline.textContent = mission;
     const charactersGrid = $storyCharactersGrid();
     if (charactersGrid) charactersGrid.innerHTML = renderStoryCharactersMarkup();
-    const charactersCount = $charactersCount();
-    if (charactersCount) charactersCount.textContent = `${characters.length} ${characters.length === 1 ? "personaje" : "personajes"}`;
 
     if (!store.ui.contextRevealDone && activeTab === "context") {
       ensureContextReveal(false);
@@ -1781,10 +1766,6 @@
   const btnLandingAllGames = $btnLandingAllGames();
   const landingGamesList = $landingGamesList();
   const storyPager = $storyPager();
-  const btnContextToCharacters = $btnContextToCharacters();
-  const btnContextToChat = $btnContextToChat();
-  const btnCharactersToContext = $btnCharactersToContext();
-  const btnCharactersToChat = $btnCharactersToChat();
   const btnHome = $btnHome();
   const btnThemeToggle = $btnThemeToggle();
   const playerInput = $playerInput();
@@ -1849,18 +1830,6 @@
       setActiveStoryTab(tab);
     });
   });
-  if (btnContextToCharacters) {
-    btnContextToCharacters.addEventListener("click", () => setActiveStoryTab("characters"));
-  }
-  if (btnContextToChat) {
-    btnContextToChat.addEventListener("click", () => setActiveStoryTab("chat"));
-  }
-  if (btnCharactersToContext) {
-    btnCharactersToContext.addEventListener("click", () => setActiveStoryTab("context"));
-  }
-  if (btnCharactersToChat) {
-    btnCharactersToChat.addEventListener("click", () => setActiveStoryTab("chat"));
-  }
   if (btnModeCustom) {
     btnModeCustom.addEventListener("click", () => {
       showNewGameStep("custom");

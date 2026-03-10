@@ -8,6 +8,9 @@
 </head>
 <body class="theme-light">
   <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="icon-home" viewBox="0 0 24 24">
+      <path d="M12 4.2 4.6 10v9.2h5.2v-5.3h4.4v5.3h5.2V10Z"></path>
+    </symbol>
     <symbol id="icon-story-custom" viewBox="0 0 24 24">
       <path d="M12 2.5 14.2 7l4.8.7-3.5 3.4.8 4.9-4.3-2.3-4.3 2.3.8-4.9L5 7.7 9.8 7Z"></path>
     </symbol>
@@ -47,8 +50,8 @@
   <div id="app">
     <header class="topbar">
       <div class="topbar-left">
-        <button type="button" id="btn-home" class="brand-link" aria-label="Ir a la landing de Agora">
-          <span class="brand-title">Agora</span>
+        <button type="button" id="btn-home" class="brand-link home-link" aria-label="Ir a la landing de Agora" title="Ir a inicio">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-home"></use></svg>
         </button>
       </div>
       <div id="topbar-title-block" class="topbar-title-block hidden" aria-live="polite">
@@ -66,8 +69,8 @@
         <button type="button" id="btn-theme-toggle" class="theme-toggle" aria-label="Activar modo oscuro" title="Cambiar tema">
           <span id="theme-toggle-icon" aria-hidden="true">☀</span>
         </button>
-        <button type="button" id="btn-open-feedback" class="btn-secondary">Feedback</button>
-        <button type="button" id="btn-new-game">Nueva historia</button>
+        <button type="button" id="btn-open-feedback" class="btn-secondary topbar-action">Feedback</button>
+        <button type="button" id="btn-new-game" class="topbar-action">Nueva historia</button>
         <button
           type="button"
           id="user-chip"
@@ -204,7 +207,6 @@
               </button>
             </div>
           </header>
-          <p id="story-mobile-hint" class="story-mobile-hint">Desliza para recorrer el expediente.</p>
           <div id="story-pager" class="story-pager">
             <div id="story-track" class="story-track">
               <section
@@ -215,9 +217,6 @@
                 aria-labelledby="tab-context"
               >
                 <div class="dossier-sheet dossier-sheet-context">
-                  <div class="sheet-meta">
-                    <span id="context-turn-meta" class="sheet-chip">Historia nueva</span>
-                  </div>
                   <div class="sheet-body">
                     <div class="sheet-reading">
                       <div id="context-stream" class="context-stream"></div>
@@ -226,10 +225,6 @@
                       <p class="mission-label">Tu misión</p>
                       <p id="story-mission-primary" class="mission-copy">—</p>
                     </aside>
-                  </div>
-                  <div class="story-stage-actions">
-                    <button type="button" id="btn-context-to-characters">Ver personajes</button>
-                    <button type="button" id="btn-context-to-chat" class="btn-secondary">Ir al chat</button>
                   </div>
                 </div>
               </section>
@@ -242,14 +237,7 @@
                 aria-hidden="true"
               >
                 <div class="dossier-sheet dossier-sheet-characters">
-                  <div class="sheet-meta">
-                    <span id="characters-count" class="sheet-chip">0 personajes</span>
-                  </div>
                   <div id="story-characters-grid" class="story-characters-grid"></div>
-                  <div class="story-stage-actions">
-                    <button type="button" id="btn-characters-to-context" class="btn-secondary">Volver al contexto</button>
-                    <button type="button" id="btn-characters-to-chat">Ir al chat</button>
-                  </div>
                 </div>
               </section>
               <section
