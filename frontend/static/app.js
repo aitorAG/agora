@@ -48,8 +48,6 @@
       contextRevealChars: 0,
       contextRevealDone: false,
       contextRevealSessionId: null,
-      swipeStartX: 0,
-      swipeStartY: 0,
     },
     newGame: {
       step: "mode",
@@ -72,6 +70,7 @@
   const LANDING_GAMES_LIMIT = 4;
   const STORY_TAB_ORDER = ["context", "characters", "chat"];
   let contextRevealTimer = null;
+  let storyPagerScrollTimer = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -693,6 +692,7 @@
       store.status.game_finished = false;
       store.status.result = null;
       store.messages = [];
+      prepareStoryExperience("new");
       await fetchContext();
       await fetchStatus();
       prepareStoryExperience("new");
@@ -701,6 +701,7 @@
         emitClientInitMetric(store.session_id, initStartedAtMs);
       }
       await fetchGamesList();
+      forceStoryTab("context");
       renderAll();
       return true;
     } catch (e) {
@@ -761,6 +762,7 @@
       store.status.game_finished = false;
       store.status.result = null;
       store.messages = [];
+      prepareStoryExperience("new");
       await fetchContext();
       await fetchStatus();
       prepareStoryExperience("new");
@@ -770,6 +772,7 @@
       }
       await fetchGamesList();
       closeNewGameModal();
+      forceStoryTab("context");
       renderAll();
     } catch (e) {
       showError(e.message || "No se pudo iniciar la historia desde la librería");
@@ -895,6 +898,48 @@
     return idx >= 0 ? idx : 0;
   }
 
+  function storyStageForTab(tab) {
+    const stages = Array.from($storyStages());
+    return stages.find((stage) => (stage.getAttribute("data-story-stage") || "") === tab) || null;
+  }
+
+  function syncStoryPagerPosition(animate) {
+    const pager = $storyPager();
+    const stage = storyStageForTab(store.ui.activeStoryTab);
+    if (!pager || !stage) return;
+    const targetLeft = stage.offsetLeft;
+    const currentLeft = pager.scrollLeft;
+    if (Math.abs(currentLeft - targetLeft) < 2) return;
+    pager.scrollTo({ left: targetLeft, behavior: animate ? "smooth" : "auto" });
+  }
+
+  function syncStoryTabFromPager() {
+    const pager = $storyPager();
+    if (!pager) return;
+    const pagerLeft = pager.scrollLeft;
+    const stages = STORY_TAB_ORDER
+      .map((tab) => ({ tab, stage: storyStageForTab(tab) }))
+      .filter((item) => item.stage);
+    if (!stages.length) return;
+    let closest = stages[0];
+    let closestDistance = Math.abs(pagerLeft - closest.stage.offsetLeft);
+    stages.slice(1).forEach((item) => {
+      const distance = Math.abs(pagerLeft - item.stage.offsetLeft);
+      if (distance < closestDistance) {
+        closest = item;
+        closestDistance = distance;
+      }
+    });
+    const nextTab = closest.tab;
+    if (store.ui.activeStoryTab === nextTab) return;
+    if (store.ui.activeStoryTab === "context" && nextTab !== "context" && !store.ui.contextRevealDone) {
+      completeContextReveal();
+    }
+    store.ui.activeStoryTab = nextTab;
+    renderStoryShell();
+    updateInputState();
+  }
+
   function clearContextRevealTimer() {
     if (contextRevealTimer) {
       window.clearInterval(contextRevealTimer);
@@ -917,8 +962,6 @@
     store.ui.contextRevealChars = 0;
     store.ui.contextRevealDone = false;
     store.ui.contextRevealSessionId = null;
-    store.ui.swipeStartX = 0;
-    store.ui.swipeStartY = 0;
   }
 
   function prepareStoryExperience(mode) {
@@ -974,12 +1017,16 @@
     }
     store.ui.activeStoryTab = nextTab;
     renderStoryShell();
+    syncStoryPagerPosition(true);
     updateInputState();
   }
 
-  function moveStoryTab(delta) {
-    const nextIndex = Math.max(0, Math.min(STORY_TAB_ORDER.length - 1, currentStoryTabIndex() + delta));
-    setActiveStoryTab(STORY_TAB_ORDER[nextIndex]);
+  function forceStoryTab(tab) {
+    const nextTab = STORY_TAB_ORDER.includes(tab) ? tab : "context";
+    store.ui.activeStoryTab = nextTab;
+    renderStoryShell();
+    syncStoryPagerPosition(false);
+    updateInputState();
   }
 
   function renderStoryCharactersMarkup() {
@@ -1016,15 +1063,12 @@
     }
 
     const activeTab = store.ui.activeStoryTab;
-    const track = $storyTrack();
     const fullContext = normalizeText(store.context.narrativa_inicial);
     const revealLength = store.ui.contextRevealDone
       ? fullContext.length
       : Math.min(fullContext.length, Math.max(0, store.ui.contextRevealChars));
     const contextPreview = fullContext.slice(0, revealLength);
     const mission = normalizeText(store.context.player_mission) || "Descubre la situación y decide cómo avanzar.";
-
-    if (track) track.style.setProperty("--story-tab-index", String(currentStoryTabIndex()));
 
     $storyTabs().forEach((button) => {
       const tab = button.getAttribute("data-story-tab") || "";
@@ -1051,6 +1095,8 @@
     if (missionInline) missionInline.textContent = mission;
     const charactersGrid = $storyCharactersGrid();
     if (charactersGrid) charactersGrid.innerHTML = renderStoryCharactersMarkup();
+
+    syncStoryPagerPosition(false);
 
     if (!store.ui.contextRevealDone && activeTab === "context") {
       ensureContextReveal(false);
@@ -1228,11 +1274,13 @@
     try {
       const data = await apiPost("/game/resume", { session_id: sessionId });
       store.session_id = data.session_id || sessionId;
+      prepareStoryExperience("resume");
       await fetchContext();
       await fetchStatus();
       prepareStoryExperience("resume");
       await fetchGamesList();
       closeGamesPanel();
+      forceStoryTab("chat");
       renderAll();
     } catch (e) {
       showError(e.message || "No se pudo reanudar la historia");
@@ -1884,23 +1932,17 @@
     });
   }
   if (storyPager) {
-    storyPager.addEventListener("touchstart", (e) => {
-      const touch = e.changedTouches && e.changedTouches[0];
-      if (!touch) return;
-      store.ui.swipeStartX = touch.clientX;
-      store.ui.swipeStartY = touch.clientY;
-    }, { passive: true });
-    storyPager.addEventListener("touchend", (e) => {
-      const touch = e.changedTouches && e.changedTouches[0];
-      if (!touch) return;
-      const deltaX = touch.clientX - store.ui.swipeStartX;
-      const deltaY = touch.clientY - store.ui.swipeStartY;
-      store.ui.swipeStartX = 0;
-      store.ui.swipeStartY = 0;
-      if (Math.abs(deltaX) < 48 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
-      moveStoryTab(deltaX < 0 ? 1 : -1);
+    storyPager.addEventListener("scroll", () => {
+      if (storyPagerScrollTimer) window.clearTimeout(storyPagerScrollTimer);
+      storyPagerScrollTimer = window.setTimeout(() => {
+        storyPagerScrollTimer = null;
+        syncStoryTabFromPager();
+      }, 90);
     }, { passive: true });
   }
+  window.addEventListener("resize", () => {
+    syncStoryPagerPosition(false);
+  });
 
   if (loginForm) {
     loginForm.addEventListener("submit", async (e) => {
