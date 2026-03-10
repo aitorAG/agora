@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agora - UI de prueba</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=4" />
+  <link rel="stylesheet" href="/ui/styles.css?v=20260310" />
 </head>
 <body class="theme-light">
   <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -23,7 +23,7 @@
   <div id="login-screen" class="login-screen hidden">
     <div class="login-panel">
       <h1>Agora</h1>
-      <p class="login-help">Inicia sesión para acceder a tus partidas.</p>
+      <p class="login-help">Inicia sesión para acceder a tus historias.</p>
       <form id="login-form" novalidate>
         <label for="login-username">Usuario</label>
         <input id="login-username" type="text" maxlength="100" autocomplete="username" required />
@@ -47,20 +47,27 @@
   <div id="app">
     <header class="topbar">
       <div class="topbar-left">
-        <p class="brand-title">Agora</p>
-        <p class="brand-subtitle">Motor narrativo interactivo</p>
+        <button type="button" id="btn-home" class="brand-link" aria-label="Ir a la landing de Agora">
+          <span class="brand-title">Agora</span>
+        </button>
       </div>
-      <div id="topbar-center" class="topbar-center">
-        <button type="button" id="btn-history-toggle" class="btn-ghost">Historia</button>
-        <button type="button" id="btn-open-briefing" class="btn-ghost">Misión y personajes</button>
-        <button type="button" id="btn-open-feedback" class="btn-ghost">Feedback</button>
+      <div id="topbar-title-block" class="topbar-title-block hidden" aria-live="polite">
+        <span class="topbar-title-separator" aria-hidden="true"></span>
+        <div class="topbar-title-copy">
+          <span class="topbar-title-label">Historia activa</span>
+          <strong id="topbar-story-title" class="topbar-story-title">Historia en curso</strong>
+        </div>
       </div>
       <div class="topbar-right">
         <div id="topbar-status" class="topbar-status" aria-live="polite">
           <span id="topbar-turn" class="topbar-turn">—</span>
           <span id="topbar-game" class="topbar-game hidden">🏆 Victoria</span>
         </div>
-        <button type="button" id="btn-new-game">Nueva partida</button>
+        <button type="button" id="btn-theme-toggle" class="theme-toggle" aria-label="Activar modo oscuro" title="Cambiar tema">
+          <span id="theme-toggle-icon" aria-hidden="true">☀</span>
+        </button>
+        <button type="button" id="btn-open-feedback" class="btn-secondary">Feedback</button>
+        <button type="button" id="btn-new-game">Nueva historia</button>
         <button
           type="button"
           id="user-chip"
@@ -73,7 +80,7 @@
           <span id="user-name" class="user-name">Usuario</span>
         </button>
         <div id="user-menu" class="user-menu hidden" role="menu" aria-labelledby="user-chip">
-          <button type="button" id="menu-games" role="menuitem">Mis partidas</button>
+          <button type="button" id="menu-games" role="menuitem">Mis historias</button>
           <button type="button" id="menu-feedback-admin" role="menuitem" class="hidden">Feedback admin</button>
           <button type="button" id="menu-observability" role="menuitem" class="hidden">Observabilidad</button>
           <button type="button" id="menu-profile" role="menuitem" disabled title="Próximamente">Perfil</button>
@@ -91,7 +98,7 @@
               <p class="landing-kicker">Conversaciones que cambian historias.</p>
               <h1 id="landing-title" class="landing-title">Investiga. Habla. Decide.</h1>
               <p class="landing-subtitle">
-                En Agora entras en una historia donde descubrir información es la clave. Habla con los personajes,
+                En Agora vives una historia donde descubrir información es la clave. Habla con los personajes,
                 interpreta lo que ocultan, toma decisiones y avanza hasta cumplir tu objetivo.
               </p>
               <div class="landing-actions">
@@ -105,7 +112,7 @@
                     </span>
                   </button>
                   <p class="landing-action-copy">
-                    Crea un camino a tu medida. Define el contexto, el tema y el tono, y empieza una historia nueva.
+                    Crea una historia a tu medida. Define el contexto, el tema y el tono, y empieza un viaje nuevo.
                   </p>
                 </article>
                 <article class="landing-action-card">
@@ -126,7 +133,7 @@
             <section class="landing-games" aria-labelledby="landing-games-title">
               <div class="landing-games-header">
                 <div>
-                  <h2 id="landing-games-title">Mis partidas</h2>
+                  <h2 id="landing-games-title">Mis historias</h2>
                   <p class="landing-games-subtitle">Retoma tus historias recientes o empieza una nueva.</p>
                 </div>
                 <button type="button" id="btn-landing-all-games" class="btn-secondary">Ver todas</button>
@@ -159,11 +166,117 @@
             </div>
           </section>
         </section>
-        <div id="chat" class="chat"></div>
-        <div id="input-area" class="input-area">
-          <input type="text" id="player-input" maxlength="600" placeholder="Escribe tu mensaje..." disabled />
-          <button type="button" id="btn-send" disabled>Enviar</button>
-        </div>
+        <section id="story-shell" class="story-shell hidden" aria-label="Historia activa">
+          <header class="story-shell-header">
+            <div id="story-tabs" class="story-tabs" role="tablist" aria-label="Navegación de la historia">
+              <button
+                type="button"
+                id="tab-context"
+                class="story-tab is-active"
+                data-story-tab="context"
+                role="tab"
+                aria-selected="true"
+                aria-controls="story-stage-context"
+              >
+                Contexto
+              </button>
+              <button
+                type="button"
+                id="tab-characters"
+                class="story-tab"
+                data-story-tab="characters"
+                role="tab"
+                aria-selected="false"
+                aria-controls="story-stage-characters"
+              >
+                Personajes
+              </button>
+              <button
+                type="button"
+                id="tab-chat"
+                class="story-tab"
+                data-story-tab="chat"
+                role="tab"
+                aria-selected="false"
+                aria-controls="story-stage-chat"
+              >
+                Chat
+              </button>
+            </div>
+          </header>
+          <p id="story-mobile-hint" class="story-mobile-hint">Desliza para recorrer el expediente.</p>
+          <div id="story-pager" class="story-pager">
+            <div id="story-track" class="story-track">
+              <section
+                id="story-stage-context"
+                class="story-stage story-stage-context"
+                data-story-stage="context"
+                role="tabpanel"
+                aria-labelledby="tab-context"
+              >
+                <div class="dossier-sheet dossier-sheet-context">
+                  <div class="sheet-meta">
+                    <span id="context-turn-meta" class="sheet-chip">Historia nueva</span>
+                  </div>
+                  <div class="sheet-body">
+                    <div class="sheet-reading">
+                      <div id="context-stream" class="context-stream"></div>
+                    </div>
+                    <aside class="mission-card mission-card-primary">
+                      <p class="mission-label">Tu misión</p>
+                      <p id="story-mission-primary" class="mission-copy">—</p>
+                    </aside>
+                  </div>
+                  <div class="story-stage-actions">
+                    <button type="button" id="btn-context-to-characters">Ver personajes</button>
+                    <button type="button" id="btn-context-to-chat" class="btn-secondary">Ir al chat</button>
+                  </div>
+                </div>
+              </section>
+              <section
+                id="story-stage-characters"
+                class="story-stage story-stage-characters"
+                data-story-stage="characters"
+                role="tabpanel"
+                aria-labelledby="tab-characters"
+                aria-hidden="true"
+              >
+                <div class="dossier-sheet dossier-sheet-characters">
+                  <div class="sheet-meta">
+                    <span id="characters-count" class="sheet-chip">0 personajes</span>
+                  </div>
+                  <div id="story-characters-grid" class="story-characters-grid"></div>
+                  <div class="story-stage-actions">
+                    <button type="button" id="btn-characters-to-context" class="btn-secondary">Volver al contexto</button>
+                    <button type="button" id="btn-characters-to-chat">Ir al chat</button>
+                  </div>
+                </div>
+              </section>
+              <section
+                id="story-stage-chat"
+                class="story-stage story-stage-chat"
+                data-story-stage="chat"
+                role="tabpanel"
+                aria-labelledby="tab-chat"
+                aria-hidden="true"
+              >
+                <div class="dossier-sheet dossier-sheet-chat">
+                  <div class="chat-stage-brief">
+                    <div class="chat-stage-brief-item chat-stage-brief-mission">
+                      <span class="chat-stage-label">Misión actual</span>
+                      <strong id="story-mission-inline" class="story-mission-inline">—</strong>
+                    </div>
+                  </div>
+                  <div id="chat" class="chat"></div>
+                  <div id="input-area" class="input-area">
+                    <input type="text" id="player-input" maxlength="600" placeholder="Escribe tu mensaje..." disabled />
+                    <button type="button" id="btn-send" disabled>Enviar</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
       </main>
       <aside id="right-rail" class="right-rail">
         <section class="rail-card rail-metrics">
@@ -232,19 +345,19 @@
     <div id="games-drawer-overlay" class="games-drawer-overlay hidden" aria-hidden="true"></div>
     <aside id="games-drawer" class="games-drawer hidden" aria-hidden="true" aria-labelledby="games-drawer-title">
       <div class="games-drawer-header">
-        <h3 id="games-drawer-title">Tus partidas</h3>
+        <h3 id="games-drawer-title">Tus historias</h3>
         <button type="button" id="btn-close-games-drawer" class="btn-secondary">Cerrar</button>
       </div>
       <div id="games-drawer-list" class="games-drawer-list"></div>
       <div class="games-drawer-actions">
-        <button type="button" id="btn-drawer-new-game">Nueva partida</button>
+        <button type="button" id="btn-drawer-new-game">Nueva historia</button>
       </div>
     </aside>
   </div>
   <div id="loading-overlay" class="loading-overlay hidden" aria-busy="true" aria-live="polite">
     <div class="loading-content">
       <div class="loading-spinner"></div>
-      <p id="loading-message" class="loading-message">Creando partida…</p>
+      <p id="loading-message" class="loading-message">Creando historia…</p>
     </div>
   </div>
   <div id="new-game-modal" class="new-game-modal hidden" role="dialog" aria-modal="true" aria-labelledby="new-game-title">
@@ -311,7 +424,7 @@
         </div>
         <div class="new-game-actions">
           <button type="button" id="btn-back-from-custom" class="btn-secondary">Volver</button>
-          <button type="button" id="btn-create-game">Crear partida</button>
+          <button type="button" id="btn-create-game">Crear historia</button>
         </div>
       </div>
 
@@ -326,6 +439,6 @@
       </div>
     </div>
   </div>
-  <script src="/ui/app.js?v=4"></script>
+  <script src="/ui/app.js?v=20260310"></script>
 </body>
 </html>

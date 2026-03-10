@@ -43,6 +43,13 @@
       feedbackOpen: false,
       feedbackSubmitting: false,
       feedbackError: null,
+      activeStoryTab: "context",
+      storyEntryMode: "new",
+      contextRevealChars: 0,
+      contextRevealDone: false,
+      contextRevealSessionId: null,
+      swipeStartX: 0,
+      swipeStartY: 0,
     },
     newGame: {
       step: "mode",
@@ -63,6 +70,8 @@
     },
   };
   const LANDING_GAMES_LIMIT = 4;
+  const STORY_TAB_ORDER = ["context", "characters", "chat"];
+  let contextRevealTimer = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -127,13 +136,33 @@
   const $playerInput = () => $("player-input");
   const $btnSend = () => $("btn-send");
   const $btnNew = () => $("btn-new-game");
-  const $topbarCenter = () => $("topbar-center");
+  const $btnHome = () => $("btn-home");
+  const $btnThemeToggle = () => $("btn-theme-toggle");
+  const $themeToggleIcon = () => $("theme-toggle-icon");
+  const $topbarTitleBlock = () => $("topbar-title-block");
+  const $topbarStoryTitle = () => $("topbar-story-title");
   const $topbarStatus = () => $("topbar-status");
   const $topbarTurn = () => $("topbar-turn");
   const $topbarGame = () => $("topbar-game");
   const $workspace = () => $("workspace");
   const $landingView = () => $("landing-view");
   const $landingGamesList = () => $("landing-games-list");
+  const $storyShell = () => $("story-shell");
+  const $storyTabs = () => document.querySelectorAll("[data-story-tab]");
+  const $storyStages = () => document.querySelectorAll("[data-story-stage]");
+  const $storyPager = () => $("story-pager");
+  const $storyTrack = () => $("story-track");
+  const $storyMobileHint = () => $("story-mobile-hint");
+  const $contextStream = () => $("context-stream");
+  const $contextTurnMeta = () => $("context-turn-meta");
+  const $storyMissionPrimary = () => $("story-mission-primary");
+  const $storyMissionInline = () => $("story-mission-inline");
+  const $storyCharactersGrid = () => $("story-characters-grid");
+  const $charactersCount = () => $("characters-count");
+  const $btnContextToCharacters = () => $("btn-context-to-characters");
+  const $btnContextToChat = () => $("btn-context-to-chat");
+  const $btnCharactersToContext = () => $("btn-characters-to-context");
+  const $btnCharactersToChat = () => $("btn-characters-to-chat");
   const $btnLandingCustom = () => $("btn-landing-custom");
   const $btnLandingStandard = () => $("btn-landing-standard");
   const $btnLandingAllGames = () => $("btn-landing-all-games");
@@ -337,6 +366,7 @@
   }
 
   async function handleAuthExpired() {
+    resetStoryExperience();
     store.auth.user = null;
     store.auth.isAuthenticated = false;
     store.screen = "login";
@@ -642,7 +672,7 @@
     }
     const initStartedAtMs = performance.now();
     clearError();
-    showLoading("Creando partida…");
+    showLoading("Creando historia…");
     try {
       const url = API_BASE + "/game/new";
       const res = await fetch(url, {
@@ -672,6 +702,8 @@
       store.messages = [];
       await fetchContext();
       await fetchStatus();
+      prepareStoryExperience("new");
+      ensureContextReveal(true);
       if (hasFirstActorMessage()) {
         emitClientInitMetric(store.session_id, initStartedAtMs);
       }
@@ -679,7 +711,7 @@
       renderAll();
       return true;
     } catch (e) {
-      showError(e.message || "Error al crear partida");
+      showError(e.message || "Error al crear la historia");
       return false;
     } finally {
       hideLoading();
@@ -723,7 +755,7 @@
     store.newGame.standardSubmitting = true;
     renderStandardTemplates();
     clearError();
-    showLoading("Cargando plantilla e iniciando partida…");
+    showLoading("Abriendo historia desde la librería…");
     try {
       const data = await apiPost("/game/standard/start", { template_id: templateId });
       store.session_id = data.session_id;
@@ -738,6 +770,8 @@
       store.messages = [];
       await fetchContext();
       await fetchStatus();
+      prepareStoryExperience("new");
+      ensureContextReveal(true);
       if (hasFirstActorMessage()) {
         emitClientInitMetric(store.session_id, initStartedAtMs);
       }
@@ -745,7 +779,7 @@
       closeNewGameModal();
       renderAll();
     } catch (e) {
-      showError(e.message || "No se pudo iniciar la plantilla");
+      showError(e.message || "No se pudo iniciar la historia desde la librería");
     } finally {
       store.newGame.standardSubmitting = false;
       hideLoading();
@@ -809,7 +843,7 @@
       store.games_list = Array.isArray(data.games) ? data.games : [];
     } catch (e) {
       store.games_list = [];
-      store.games_error = e.message || "Error al cargar partidas";
+      store.games_error = e.message || "Error al cargar historias";
     } finally {
       store.games_loading = false;
       renderGamesDrawer();
@@ -842,6 +876,200 @@
     const days = Math.floor(hours / 24);
     if (days < 7) return `hace ${days} d`;
     return formatShortDate(value);
+  }
+
+  function truncateText(text, maxChars) {
+    const clean = normalizeText(text);
+    if (!clean) return "";
+    if (clean.length <= maxChars) return clean;
+    return `${clean.slice(0, Math.max(0, maxChars - 1)).trim()}…`;
+  }
+
+  function currentGameTitle() {
+    const activeId = String(store.session_id || "");
+    const games = Array.isArray(store.games_list) ? store.games_list : [];
+    const currentGame = games.find((game) => String(game && game.id ? game.id : "") === activeId);
+    const explicitTitle = normalizeText(currentGame && currentGame.title ? currentGame.title : "");
+    if (explicitTitle && !/^partida sin t[ií]tulo$/i.test(explicitTitle) && !/^historia sin t[ií]tulo$/i.test(explicitTitle)) {
+      return explicitTitle;
+    }
+    const firstSentence = normalizeText(store.context.narrativa_inicial).split(/[.!?]/)[0] || "";
+    return truncateText(firstSentence, 54) || "Historia en curso";
+  }
+
+  function currentStoryTabIndex() {
+    const idx = STORY_TAB_ORDER.indexOf(store.ui.activeStoryTab);
+    return idx >= 0 ? idx : 0;
+  }
+
+  function clearContextRevealTimer() {
+    if (contextRevealTimer) {
+      window.clearInterval(contextRevealTimer);
+      contextRevealTimer = null;
+    }
+  }
+
+  function completeContextReveal() {
+    clearContextRevealTimer();
+    const fullText = normalizeText(store.context.narrativa_inicial);
+    store.ui.contextRevealSessionId = store.session_id;
+    store.ui.contextRevealChars = fullText.length;
+    store.ui.contextRevealDone = true;
+  }
+
+  function resetStoryExperience() {
+    clearContextRevealTimer();
+    store.ui.activeStoryTab = "context";
+    store.ui.storyEntryMode = "new";
+    store.ui.contextRevealChars = 0;
+    store.ui.contextRevealDone = false;
+    store.ui.contextRevealSessionId = null;
+    store.ui.swipeStartX = 0;
+    store.ui.swipeStartY = 0;
+  }
+
+  function prepareStoryExperience(mode) {
+    clearContextRevealTimer();
+    store.ui.storyEntryMode = mode === "resume" ? "resume" : "new";
+    store.ui.activeStoryTab = mode === "resume" ? "chat" : "context";
+    store.ui.contextRevealSessionId = store.session_id;
+    if (mode === "resume") {
+      const text = normalizeText(store.context.narrativa_inicial);
+      store.ui.contextRevealChars = text.length;
+      store.ui.contextRevealDone = true;
+      return;
+    }
+    store.ui.contextRevealChars = 0;
+    store.ui.contextRevealDone = false;
+  }
+
+  function ensureContextReveal(forceRestart) {
+    const fullText = normalizeText(store.context.narrativa_inicial);
+    if (!store.session_id || !fullText) {
+      clearContextRevealTimer();
+      return;
+    }
+    if (store.ui.storyEntryMode === "resume") {
+      completeContextReveal();
+      return;
+    }
+    if (forceRestart) {
+      clearContextRevealTimer();
+      store.ui.contextRevealChars = 0;
+      store.ui.contextRevealDone = false;
+      store.ui.contextRevealSessionId = store.session_id;
+    }
+    if (store.ui.contextRevealDone || contextRevealTimer) return;
+    contextRevealTimer = window.setInterval(() => {
+      const currentText = normalizeText(store.context.narrativa_inicial);
+      const increment = Math.max(1, Math.ceil(currentText.length / 120));
+      if (store.ui.contextRevealChars >= currentText.length) {
+        completeContextReveal();
+        renderStoryShell();
+        return;
+      }
+      store.ui.contextRevealChars = Math.min(currentText.length, store.ui.contextRevealChars + increment);
+      renderStoryShell();
+    }, 28);
+  }
+
+  function setActiveStoryTab(tab) {
+    const nextTab = STORY_TAB_ORDER.includes(tab) ? tab : "context";
+    if (store.ui.activeStoryTab === nextTab) return;
+    if (store.ui.activeStoryTab === "context" && nextTab !== "context" && !store.ui.contextRevealDone) {
+      completeContextReveal();
+    }
+    store.ui.activeStoryTab = nextTab;
+    renderStoryShell();
+    updateInputState();
+  }
+
+  function moveStoryTab(delta) {
+    const nextIndex = Math.max(0, Math.min(STORY_TAB_ORDER.length - 1, currentStoryTabIndex() + delta));
+    setActiveStoryTab(STORY_TAB_ORDER[nextIndex]);
+  }
+
+  function renderStoryCharactersMarkup() {
+    const characters = Array.isArray(store.context.characters) ? store.context.characters : [];
+    if (!characters.length) {
+      return '<p class="story-empty-state">Todavía no hay personajes definidos para esta historia.</p>';
+    }
+    return characters
+      .map((character, index) => {
+        const name = normalizeText(character && character.name ? character.name : "") || `Personaje ${index + 1}`;
+        const note = normalizeText(character && character.personality ? character.personality : "") || "Presencia clave en esta escena.";
+        return `
+          <article class="character-sheet-card">
+            <div class="character-sheet-meta">
+              <span class="character-sheet-index">${String(index + 1).padStart(2, "0")}</span>
+              <span class="character-sheet-role">Personaje</span>
+            </div>
+            <h3>${escapeHtml(name)}</h3>
+            <p>${escapeHtml(note)}</p>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderStoryShell() {
+    const shell = $storyShell();
+    if (!shell) return;
+    const hasSession = !!store.session_id;
+    shell.classList.toggle("hidden", !hasSession);
+    if (!hasSession) {
+      clearContextRevealTimer();
+      return;
+    }
+
+    const activeTab = store.ui.activeStoryTab;
+    const track = $storyTrack();
+    const mobileHint = $storyMobileHint();
+    const fullContext = normalizeText(store.context.narrativa_inicial);
+    const revealLength = store.ui.contextRevealDone
+      ? fullContext.length
+      : Math.min(fullContext.length, Math.max(0, store.ui.contextRevealChars));
+    const contextPreview = fullContext.slice(0, revealLength);
+    const mission = normalizeText(store.context.player_mission) || "Descubre la situación y decide cómo avanzar.";
+    const characters = Array.isArray(store.context.characters) ? store.context.characters : [];
+    const introLabel = store.ui.storyEntryMode === "resume" ? "Historia reanudada" : "Historia nueva";
+
+    if (track) track.style.setProperty("--story-tab-index", String(currentStoryTabIndex()));
+    if (mobileHint) mobileHint.classList.toggle("hidden", activeTab === "chat");
+
+    $storyTabs().forEach((button) => {
+      const tab = button.getAttribute("data-story-tab") || "";
+      const selected = tab === activeTab;
+      button.classList.toggle("is-active", selected);
+      button.setAttribute("aria-selected", selected ? "true" : "false");
+      button.setAttribute("tabindex", selected ? "0" : "-1");
+    });
+
+    $storyStages().forEach((stage) => {
+      const stageName = stage.getAttribute("data-story-stage") || "";
+      const selected = stageName === activeTab;
+      stage.setAttribute("aria-hidden", selected ? "false" : "true");
+    });
+
+    const contextTurnMeta = $contextTurnMeta();
+    if (contextTurnMeta) contextTurnMeta.textContent = introLabel;
+    const contextStream = $contextStream();
+    if (contextStream) {
+      const text = contextPreview || "El guionista está preparando el contexto.";
+      contextStream.innerHTML = `${escapeHtml(text)}${store.ui.contextRevealDone ? "" : '<span class="context-cursor">▍</span>'}`;
+    }
+    const missionPrimary = $storyMissionPrimary();
+    if (missionPrimary) missionPrimary.textContent = mission;
+    const missionInline = $storyMissionInline();
+    if (missionInline) missionInline.textContent = mission;
+    const charactersGrid = $storyCharactersGrid();
+    if (charactersGrid) charactersGrid.innerHTML = renderStoryCharactersMarkup();
+    const charactersCount = $charactersCount();
+    if (charactersCount) charactersCount.textContent = `${characters.length} ${characters.length === 1 ? "personaje" : "personajes"}`;
+
+    if (!store.ui.contextRevealDone && activeTab === "context") {
+      ensureContextReveal(false);
+    }
   }
 
   function toggleUserMenu(forceOpen) {
@@ -929,7 +1157,7 @@
 
   function openFeedbackModal() {
     if (!store.session_id) {
-      showError("No hay partida activa para adjuntar el feedback.");
+      showError("No hay historia activa para adjuntar el feedback.");
       return;
     }
     clearError();
@@ -962,7 +1190,7 @@
       return;
     }
     if (!store.session_id) {
-      showError("No hay partida activa para adjuntar el feedback.");
+      showError("No hay historia activa para adjuntar el feedback.");
       closeFeedbackModal();
       return;
     }
@@ -1011,17 +1239,18 @@
     }
     if (!sessionId) return;
     clearError();
-    showLoading("Reanudando partida…");
+    showLoading("Reanudando historia…");
     try {
       const data = await apiPost("/game/resume", { session_id: sessionId });
       store.session_id = data.session_id || sessionId;
       await fetchContext();
       await fetchStatus();
+      prepareStoryExperience("resume");
       await fetchGamesList();
       closeGamesPanel();
       renderAll();
     } catch (e) {
-      showError(e.message || "No se pudo reanudar la partida");
+      showError(e.message || "No se pudo reanudar la historia");
     } finally {
       hideLoading();
     }
@@ -1030,7 +1259,7 @@
   function buildGamesMarkup(games, options) {
     const settings = options || {};
     const itemClass = settings.itemClass || "game-item";
-    const emptyMessage = settings.emptyMessage || "No hay partidas disponibles.";
+    const emptyMessage = settings.emptyMessage || "No hay historias disponibles.";
     const limit = Number.isInteger(settings.limit) ? settings.limit : games.length;
     const visibleGames = games.slice(0, Math.max(0, limit));
     if (!visibleGames.length) {
@@ -1039,7 +1268,7 @@
     return visibleGames
       .map((g) => {
         const gameId = String(g.id || "");
-        const title = String(g.title || "Partida sin título");
+        const title = String(g.title || "Historia sin título");
         const updatedLabel = formatRelativeDate(g.updated_at);
         const activeClass = gameId === store.session_id ? " is-active" : "";
         const statusLabel = gameId === store.session_id ? "Activa" : "Continuar";
@@ -1077,6 +1306,8 @@
     const sSpeaker = $statusSpeaker();
     const sInput = $statusInput();
     const sEnded = $statusEnded();
+    const topbarTitleBlock = $topbarTitleBlock();
+    const topbarStoryTitle = $topbarStoryTitle();
     const topbarStatus = $topbarStatus();
     const topbarTurn = $topbarTurn();
     const topbarGame = $topbarGame();
@@ -1084,13 +1315,15 @@
     if (sSpeaker) sSpeaker.textContent = store.session_id ? (s.current_speaker || "Jugador") : "—";
     if (sInput) sInput.textContent = store.session_id ? (s.player_can_write ? "Abierta" : "Bloqueada") : "—";
     if (sEnded) sEnded.textContent = store.session_id ? (s.game_finished ? "Finalizada" : "En curso") : "—";
+    if (topbarTitleBlock) topbarTitleBlock.classList.toggle("hidden", !store.session_id);
+    if (topbarStoryTitle) topbarStoryTitle.textContent = store.session_id ? currentGameTitle() : "";
     if (topbarStatus) topbarStatus.classList.toggle("hidden", !store.session_id);
     if (topbarTurn) topbarTurn.textContent = store.session_id ? `Turno ${s.turn_current}/${s.turn_max}` : "—";
     if (topbarGame) {
       const hasVictory = isPlayerVictory();
       const hasEnded = !!(store.session_id && s.game_finished);
       topbarGame.classList.toggle("hidden", !hasEnded);
-      topbarGame.textContent = hasVictory ? "🏆 Victoria" : "Partida finalizada";
+      topbarGame.textContent = hasVictory ? "🏆 Victoria" : "Historia finalizada";
     }
   }
 
@@ -1098,7 +1331,7 @@
     const list = $landingGamesList();
     if (!list) return;
     if (store.games_loading) {
-      list.innerHTML = '<p class="games-list-state">Cargando partidas…</p>';
+      list.innerHTML = '<p class="games-list-state">Cargando historias…</p>';
       return;
     }
     if (store.games_error) {
@@ -1109,7 +1342,7 @@
     list.innerHTML = buildGamesMarkup(games, {
       limit: LANDING_GAMES_LIMIT,
       itemClass: "game-item landing-game-item",
-      emptyMessage: "Todavia no tienes partidas. Crea una y entra en tu primera historia.",
+      emptyMessage: "Todavía no tienes historias. Crea una y entra en tu primera historia.",
     });
   }
 
@@ -1140,7 +1373,7 @@
     if (!list) return;
     if (!store.ui.gamesPanelOpen) return;
     if (store.games_loading) {
-      list.innerHTML = '<p class="games-list-state">Cargando partidas…</p>';
+      list.innerHTML = '<p class="games-list-state">Cargando historias…</p>';
       return;
     }
     if (store.games_error) {
@@ -1149,7 +1382,7 @@
     }
     const games = Array.isArray(store.games_list) ? store.games_list : [];
     list.innerHTML = buildGamesMarkup(games, {
-      emptyMessage: "Aún no tienes partidas guardadas.",
+      emptyMessage: "Aún no tienes historias guardadas.",
     });
   }
 
@@ -1157,17 +1390,17 @@
     const hasSession = !!store.session_id;
     const workspace = $workspace();
     const landing = $landingView();
-    const chat = $chat();
-    const inputArea = $inputArea();
+    const storyShell = $storyShell();
+    const topbarTitleBlock = $topbarTitleBlock();
     const rightRail = $rightRail();
-    const topbarCenter = $topbarCenter();
     if (workspace) workspace.classList.toggle("workspace-landing", !hasSession);
+    if (workspace) workspace.classList.toggle("workspace-story", hasSession);
     if (landing) landing.classList.toggle("hidden", hasSession);
-    if (chat) chat.classList.toggle("hidden", !hasSession);
-    if (inputArea) inputArea.classList.toggle("hidden", !hasSession);
-    if (rightRail) rightRail.classList.toggle("hidden", !hasSession);
-    if (topbarCenter) topbarCenter.classList.toggle("hidden", !hasSession);
+    if (storyShell) storyShell.classList.toggle("hidden", !hasSession);
+    if (topbarTitleBlock) topbarTitleBlock.classList.toggle("hidden", !hasSession);
+    if (rightRail) rightRail.classList.add("hidden");
     renderLandingGames();
+    renderStoryShell();
   }
 
   function renderOverlayPanels() {
@@ -1276,10 +1509,10 @@
     const detail = reason || "Has cumplido la misión principal.";
     overlay.innerHTML = `
       <section class="victory-overlay-panel">
-        <div class="victory-kicker">Partida finalizada</div>
+        <div class="victory-kicker">Historia finalizada</div>
         <h2 class="victory-title">Victoria del jugador</h2>
         <p class="victory-subtitle">${escapeHtml(detail)}</p>
-        <p class="victory-note">El chat queda bloqueado. Puedes usar el menu superior para feedback, usuario o nueva partida.</p>
+        <p class="victory-note">El chat queda bloqueado. Puedes usar el menú superior para feedback, usuario o una nueva historia.</p>
       </section>
     `;
   }
@@ -1287,13 +1520,19 @@
   function updateInputState() {
     const s = store.status;
     const blockedByVictory = isPlayerVictory();
-    const canWrite = store.session_id && s.player_can_write && !s.game_finished && !blockedByVictory;
+    const canWrite = store.session_id
+      && store.ui.activeStoryTab === "chat"
+      && s.player_can_write
+      && !s.game_finished
+      && !blockedByVictory;
     const playerInput = $playerInput();
     const sendBtn = $btnSend();
     if (playerInput) {
       playerInput.disabled = !canWrite;
       playerInput.placeholder = blockedByVictory
-        ? "Partida ganada. Ya no puedes escribir en este chat."
+        ? "Historia ganada. Ya no puedes escribir en este chat."
+        : store.ui.activeStoryTab !== "chat"
+          ? "Entra en la pestaña Chat para escribir."
         : "Escribe tu mensaje...";
     }
     if (sendBtn) sendBtn.disabled = !canWrite;
@@ -1339,6 +1578,7 @@
   }
 
   function resetPartida() {
+    resetStoryExperience();
     clearError();
     store.session_id = null;
     store.status = {
@@ -1364,7 +1604,7 @@
     const inputEl = $playerInput();
     const text = (inputEl && inputEl.value ? inputEl.value : "").trim();
     if (!store.session_id) {
-      showError("No hay partida activa. Crea una nueva partida.");
+      showError("No hay historia activa. Crea una nueva historia.");
       return;
     }
     if (!text) return;
@@ -1503,20 +1743,28 @@
   }
 
   function initTheme() {
-    const theme = safeGetItem("agora-ui-theme", "light");
-    const dark = theme === "dark";
-    const checkbox = $("theme-checkbox");
-    if (checkbox) checkbox.checked = dark;
-    document.body.classList.toggle("theme-dark", dark);
-    document.body.classList.toggle("theme-light", !dark);
+    const storedTheme = safeGetItem("agora-ui-theme", "light");
+    applyTheme(storedTheme === "dark" ? "dark" : "light");
   }
 
   function toggleTheme() {
-    const checkbox = $("theme-checkbox");
-    const dark = checkbox ? checkbox.checked : false;
-    safeSetItem("agora-ui-theme", dark ? "dark" : "light");
+    const dark = document.body.classList.contains("theme-dark");
+    applyTheme(dark ? "light" : "dark");
+  }
+
+  function applyTheme(theme) {
+    const nextTheme = theme === "dark" ? "dark" : "light";
+    const dark = nextTheme === "dark";
+    safeSetItem("agora-ui-theme", nextTheme);
     document.body.classList.toggle("theme-dark", dark);
     document.body.classList.toggle("theme-light", !dark);
+    const toggle = $btnThemeToggle();
+    const icon = $themeToggleIcon();
+    if (toggle) {
+      toggle.setAttribute("aria-label", dark ? "Activar modo claro" : "Activar modo oscuro");
+      toggle.setAttribute("title", dark ? "Cambiar a modo claro" : "Cambiar a modo oscuro");
+    }
+    if (icon) icon.textContent = dark ? "☾" : "☀";
   }
 
   const btnNew = $btnNew();
@@ -1532,8 +1780,14 @@
   const btnLandingStandard = $btnLandingStandard();
   const btnLandingAllGames = $btnLandingAllGames();
   const landingGamesList = $landingGamesList();
+  const storyPager = $storyPager();
+  const btnContextToCharacters = $btnContextToCharacters();
+  const btnContextToChat = $btnContextToChat();
+  const btnCharactersToContext = $btnCharactersToContext();
+  const btnCharactersToChat = $btnCharactersToChat();
+  const btnHome = $btnHome();
+  const btnThemeToggle = $btnThemeToggle();
   const playerInput = $playerInput();
-  const themeCheckbox = $("theme-checkbox");
   const loginForm = $loginForm();
   const btnLogin = $btnLogin();
   const registerForm = $registerForm();
@@ -1559,7 +1813,18 @@
   const btnCancelFeedback = $btnCancelFeedback();
   const btnSendFeedback = $btnSendFeedback();
   const feedbackModal = $feedbackModal();
+  if (btnHome) {
+    btnHome.addEventListener("click", () => {
+      toggleUserMenu(false);
+      closeGamesPanel();
+      closeStoryPanel();
+      closeBriefingModal();
+      closeFeedbackModal();
+      resetPartida();
+    });
+  }
   if (btnNew) btnNew.addEventListener("click", () => openNewGameModal("mode"));
+  if (btnThemeToggle) btnThemeToggle.addEventListener("click", toggleTheme);
   if (btnSend) btnSend.addEventListener("click", sendTurn);
   if (btnCreateGame) btnCreateGame.addEventListener("click", submitNewGameFromForm);
   if (btnCancelNewGame) btnCancelNewGame.addEventListener("click", closeNewGameModal);
@@ -1576,6 +1841,25 @@
       await fetchGamesList();
       openGamesPanel();
     });
+  }
+  $storyTabs().forEach((button) => {
+    button.addEventListener("click", () => {
+      const tab = button.getAttribute("data-story-tab");
+      if (!tab) return;
+      setActiveStoryTab(tab);
+    });
+  });
+  if (btnContextToCharacters) {
+    btnContextToCharacters.addEventListener("click", () => setActiveStoryTab("characters"));
+  }
+  if (btnContextToChat) {
+    btnContextToChat.addEventListener("click", () => setActiveStoryTab("chat"));
+  }
+  if (btnCharactersToContext) {
+    btnCharactersToContext.addEventListener("click", () => setActiveStoryTab("context"));
+  }
+  if (btnCharactersToChat) {
+    btnCharactersToChat.addEventListener("click", () => setActiveStoryTab("chat"));
   }
   if (btnModeCustom) {
     btnModeCustom.addEventListener("click", () => {
@@ -1608,7 +1892,6 @@
   if (playerInput) playerInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") sendTurn();
   });
-  if (themeCheckbox) themeCheckbox.addEventListener("change", toggleTheme);
   if (gamesDrawer) {
     gamesDrawer.addEventListener("click", (e) => {
       const target = e.target && e.target.closest ? e.target.closest("[data-game-id]") : null;
@@ -1630,6 +1913,24 @@
       if (!gameId || gameId === store.session_id) return;
       resumeGame(gameId);
     });
+  }
+  if (storyPager) {
+    storyPager.addEventListener("touchstart", (e) => {
+      const touch = e.changedTouches && e.changedTouches[0];
+      if (!touch) return;
+      store.ui.swipeStartX = touch.clientX;
+      store.ui.swipeStartY = touch.clientY;
+    }, { passive: true });
+    storyPager.addEventListener("touchend", (e) => {
+      const touch = e.changedTouches && e.changedTouches[0];
+      if (!touch) return;
+      const deltaX = touch.clientX - store.ui.swipeStartX;
+      const deltaY = touch.clientY - store.ui.swipeStartY;
+      store.ui.swipeStartX = 0;
+      store.ui.swipeStartY = 0;
+      if (Math.abs(deltaX) < 48 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+      moveStoryTab(deltaX < 0 ? 1 : -1);
+    }, { passive: true });
   }
 
   if (loginForm) {

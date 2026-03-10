@@ -9,6 +9,39 @@ const topbarState = {
   logoutLoading: false,
 };
 
+function safeGetItem(key, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return value !== null ? value : fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (_) {}
+}
+
+function applyTheme(theme) {
+  const dark = theme === 'dark';
+  document.body.classList.toggle('theme-dark', dark);
+  document.body.classList.toggle('theme-light', !dark);
+  const toggle = document.getElementById('btn-theme-toggle');
+  const icon = document.getElementById('theme-toggle-icon');
+  if (toggle) {
+    toggle.setAttribute('aria-label', dark ? 'Activar modo claro' : 'Activar modo oscuro');
+    toggle.setAttribute('title', dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+  }
+  if (icon) icon.textContent = dark ? '☾' : '☀';
+  safeSetItem('agora-ui-theme', dark ? 'dark' : 'light');
+}
+
+function toggleTheme() {
+  applyTheme(document.body.classList.contains('theme-dark') ? 'light' : 'dark');
+}
+
 function apiUrl(path) {
   return `${API_BASE}${path}`;
 }
@@ -609,6 +642,7 @@ async function refreshAll() {
 }
 
 bindTabs();
+document.getElementById('btn-theme-toggle')?.addEventListener('click', toggleTheme);
 document.getElementById('user-chip')?.addEventListener('click', (event) => {
   event.stopPropagation();
   toggleUserMenu();
@@ -651,6 +685,7 @@ document.addEventListener('keydown', (event) => {
 
 (async function init() {
   try {
+    applyTheme(safeGetItem('agora-ui-theme', 'light'));
     await loadCurrentUser();
     await refreshAll();
   } catch (error) {

@@ -6,26 +6,40 @@
   <title>Admin - Feedback</title>
   <style>
     :root {
-      --bg: #0b111d;
-      --surface: #101b2f;
-      --surface-2: #13223a;
-      --border: #2a3d5f;
-      --text: #e8efff;
-      --muted: #99add2;
-      --accent: #39d8a8;
-      --danger: #ff7f90;
-      --shadow: 0 22px 56px rgba(0, 0, 0, 0.34);
+      --bg: #dccdb7;
+      --surface: rgba(249, 242, 230, 0.92);
+      --surface-2: #f3e8d7;
+      --border: #c5ab84;
+      --text: #2e2012;
+      --muted: #715e47;
+      --accent: #b86732;
+      --accent-2: #d69a49;
+      --danger: #af4f43;
+      --shadow: 0 22px 48px rgba(81, 57, 28, 0.16);
+    }
+
+    body.theme-dark {
+      --bg: #403631;
+      --surface: rgba(94, 80, 71, 0.92);
+      --surface-2: #6b5b51;
+      --border: #9b7f68;
+      --text: #f3e7d6;
+      --muted: #d7c0a6;
+      --accent: #d38c4f;
+      --accent-2: #c2a165;
+      --danger: #cf7768;
+      --shadow: 0 24px 54px rgba(14, 10, 8, 0.24);
     }
 
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at 8% 8%, #1d3f74 0%, transparent 30%),
-        radial-gradient(circle at 88% 0%, #1f5b46 0%, transparent 24%),
+        radial-gradient(circle at 8% 8%, rgba(214, 154, 73, 0.22) 0%, transparent 30%),
+        radial-gradient(circle at 88% 0%, rgba(108, 137, 129, 0.18) 0%, transparent 24%),
         var(--bg);
       min-height: 100vh;
     }
@@ -42,7 +56,7 @@
       position: sticky;
       top: 0.75rem;
       z-index: 20;
-      background: rgba(14, 24, 41, 0.9);
+      background: linear-gradient(180deg, rgba(247, 239, 226, 0.9), rgba(241, 231, 214, 0.9));
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 0.75rem 0.9rem;
@@ -66,6 +80,24 @@
       align-items: center;
     }
 
+    .theme-toggle {
+      width: 2.45rem;
+      height: 2.45rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 249, 241, 0.74);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .theme-toggle:hover {
+      background: rgba(255, 250, 244, 0.94);
+    }
+
     button {
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -76,9 +108,9 @@
     }
 
     button.primary {
-      background: linear-gradient(120deg, var(--accent), #55a8ff);
+      background: linear-gradient(120deg, var(--accent), var(--accent-2));
       border: none;
-      color: #082335;
+      color: var(--text);
       font-weight: 700;
     }
 
@@ -111,7 +143,7 @@
       white-space: pre-wrap;
       line-height: 1.5;
       font-size: 1rem;
-      color: #eef4ff;
+      color: var(--text);
     }
 
     .meta {
@@ -126,15 +158,34 @@
       border-radius: 12px;
       padding: 1rem;
       color: var(--muted);
-      background: rgba(16, 27, 47, 0.72);
+      background: rgba(255, 249, 241, 0.72);
+    }
+
+    body.theme-dark .top {
+      background: linear-gradient(180deg, rgba(88, 75, 67, 0.92), rgba(74, 64, 57, 0.94));
+    }
+
+    body.theme-dark .theme-toggle {
+      background: rgba(117, 99, 88, 0.76);
+    }
+
+    body.theme-dark .theme-toggle:hover {
+      background: rgba(129, 110, 98, 0.92);
+    }
+
+    body.theme-dark .empty {
+      background: rgba(112, 95, 85, 0.82);
     }
   </style>
 </head>
-<body>
+<body class="theme-light">
   <main class="page">
     <section class="top">
       <h1>Feedback de usuarios</h1>
       <div class="actions">
+        <button type="button" id="btn-theme-toggle" class="theme-toggle" aria-label="Activar modo oscuro" title="Cambiar tema">
+          <span id="theme-toggle-icon" aria-hidden="true">☀</span>
+        </button>
         <button type="button" id="btn-back">Volver</button>
         <button type="button" id="btn-refresh" class="primary">Actualizar</button>
       </div>
@@ -151,6 +202,35 @@
       const listEl = document.getElementById("list");
       const btnRefresh = document.getElementById("btn-refresh");
       const btnBack = document.getElementById("btn-back");
+      const btnTheme = document.getElementById("btn-theme-toggle");
+      const themeIcon = document.getElementById("theme-toggle-icon");
+
+      function safeGetItem(key, fallback) {
+        try {
+          const value = localStorage.getItem(key);
+          return value !== null ? value : fallback;
+        } catch (_) {
+          return fallback;
+        }
+      }
+
+      function safeSetItem(key, value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch (_) {}
+      }
+
+      function applyTheme(theme) {
+        const dark = theme === "dark";
+        document.body.classList.toggle("theme-dark", dark);
+        document.body.classList.toggle("theme-light", !dark);
+        if (btnTheme) {
+          btnTheme.setAttribute("aria-label", dark ? "Activar modo claro" : "Activar modo oscuro");
+          btnTheme.setAttribute("title", dark ? "Cambiar a modo claro" : "Cambiar a modo oscuro");
+        }
+        if (themeIcon) themeIcon.textContent = dark ? "☾" : "☀";
+        safeSetItem("agora-ui-theme", dark ? "dark" : "light");
+      }
 
       function setStatus(text, isError) {
         statusEl.textContent = text || "";
@@ -217,10 +297,14 @@
       }
 
       btnRefresh.addEventListener("click", loadFeedback);
+      btnTheme.addEventListener("click", function () {
+        applyTheme(document.body.classList.contains("theme-dark") ? "light" : "dark");
+      });
       btnBack.addEventListener("click", function () {
         window.location.assign("/ui/");
       });
 
+      applyTheme(safeGetItem("agora-ui-theme", "light"));
       loadFeedback();
     })();
   </script>
