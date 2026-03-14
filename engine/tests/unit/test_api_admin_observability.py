@@ -3,6 +3,7 @@
 from fastapi.testclient import TestClient
 
 from src.api import observability_routes
+from src.api import routes
 from src.api.app import app
 from src.api.schemas import AuthUserResponse
 
@@ -18,20 +19,23 @@ def test_admin_observability_page_requires_auth(monkeypatch):
 
 
 def test_admin_observability_page_renders_for_admin():
-    app.dependency_overrides[observability_routes.require_admin] = lambda: AuthUserResponse(
+    admin_override = lambda: AuthUserResponse(
         id="u-admin",
         username="admin",
         is_active=True,
         role="admin",
     )
+    app.dependency_overrides[observability_routes.require_admin] = admin_override
+    app.dependency_overrides[routes.require_admin] = admin_override
     client = TestClient(app)
     try:
         response = client.get("/admin/observability/")
         assert response.status_code == 200
         assert "Metricas operativas de Agora" in response.text
-        assert 'class="topbar"' in response.text
-        assert 'id="navAgora"' not in response.text
-        assert 'id="backToAgora"' not in response.text
+        assert 'id="agentDetailTable"' in response.text
+        assert 'id="notaryLog"' in response.text
+        assert '/ui/observability-static/styles.css?v=20260313h' in response.text
+        assert '/ui/observability-static/app.js?v=20260313h' in response.text
     finally:
         app.dependency_overrides.clear()
 

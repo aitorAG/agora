@@ -32,6 +32,7 @@ if ($postgresId) {
 
 docker compose --env-file .env.runtime -f observability-platform/docker-compose.telemetry.yml up -d --build --remove-orphans
 docker compose --env-file .env.runtime -f docker-compose.prod.yml up -d --build --remove-orphans
+docker compose --env-file .env.runtime -f docker-compose.prod.yml up -d --force-recreate nginx
 
 docker compose --env-file .env.runtime -f docker-compose.prod.yml ps
 docker compose --env-file .env.runtime -f observability-platform/docker-compose.telemetry.yml ps

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -101,6 +102,26 @@ def _safe_float(value: Any) -> float:
         return 0.0
 
 
+def _json_value(value: Any, fallback: Any) -> Any:
+    if value is None:
+        return fallback
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, memoryview):
+        value = value.tobytes()
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="ignore")
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return fallback
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return fallback
+    return fallback
+
+
 def _normalize_agent_type_value(agent_name: str, agent_type: str) -> str:
     cleaned = (agent_type or "").strip()
     if cleaned:
@@ -109,12 +130,14 @@ def _normalize_agent_type_value(agent_name: str, agent_type: str) -> str:
         return "observer"
     if (agent_name or "").strip() == "Guionista":
         return "guionista"
+    if (agent_name or "").strip() == "Notario":
+        return "notary"
     return "unknown"
 
 
 def _agent_group(agent_type: str) -> str:
     cleaned = (agent_type or "").strip().lower()
-    if cleaned in {"actor", "observer", "guionista"}:
+    if cleaned in {"actor", "observer", "guionista", "notary"}:
         return cleaned
     return "unknown"
 
@@ -127,7 +150,21 @@ def _agent_group_label(agent_type: str) -> str:
         return "Observer"
     if group == "guionista":
         return "Guionista"
+    if group == "notary":
+        return "Notario"
     return "Otros"
+
+
+def _normalized_agent_type_sql() -> str:
+    return """
+        CASE
+            WHEN TRIM(agent_type) <> '' THEN agent_type
+            WHEN agent_name = 'Observer' THEN 'observer'
+            WHEN agent_name = 'Guionista' THEN 'guionista'
+            WHEN agent_name = 'Notario' THEN 'notary'
+            ELSE 'unknown'
+        END
+    """
 
 
 def _runtime_context() -> str:
@@ -795,12 +832,10 @@ def _agent_metrics() -> dict[str, Any]:
     rows = _sqlite_fetchall(
         """
         SELECT
-            CASE
-                WHEN TRIM(agent_type) <> '' THEN agent_type
-                WHEN agent_name = 'Observer' THEN 'observer'
-                WHEN agent_name = 'Guionista' THEN 'guionista'
-                ELSE 'unknown'
-            END AS normalized_agent_type,
+            """
+        + _normalized_agent_type_sql()
+        + """
+            AS normalized_agent_type,
             COUNT(*) AS calls,
             COALESCE(SUM(usage_input_tokens), 0) AS input_tokens,
             COALESCE(SUM(usage_output_tokens), 0) AS output_tokens,
@@ -842,8 +877,68 @@ def _agent_metrics() -> dict[str, Any]:
             }
             for row in rows
             if str(row[0] or "").strip()
-        ]
+            ]
     }
+
+
+def _agent_detail() -> dict[str, Any]:
+    summary_rows = _sqlite_fetchall(
+        """
+        SELECT
+            """
+        + _normalized_agent_type_sql()
+        + """
+            AS normalized_agent_type,
+            COUNT(*) AS calls,
+            COALESCE(SUM(cost_total), 0.0) AS total_cost,
+            COALESCE(SUM(usage_total_tokens), 0) AS total_tokens
+        FROM llm_calls
+        WHERE TRIM(game_id) <> ''
+          AND NOT (TRIM(agent_name) = '' AND TRIM(agent_type) = '')
+        GROUP BY normalized_agent_type
+        ORDER BY total_cost DESC, total_tokens DESC
+        """
+    )
+    series_rows = _sqlite_fetchall(
+        """
+        SELECT
+            """
+        + _normalized_agent_type_sql()
+        + """
+            AS normalized_agent_type,
+            substr(timestamp, 1, 10) AS day,
+            COALESCE(SUM(usage_total_tokens), 0) AS total_tokens,
+            COALESCE(AVG(duration_ms), 0) AS avg_duration_ms
+        FROM llm_calls
+        WHERE TRIM(game_id) <> ''
+          AND NOT (TRIM(agent_name) = '' AND TRIM(agent_type) = '')
+        GROUP BY normalized_agent_type, day
+        ORDER BY day ASC
+        """
+    )
+    items: dict[str, dict[str, Any]] = {}
+    for row in summary_rows:
+        normalized_type = _agent_group(str(row[0] or "unknown"))
+        if not normalized_type:
+            continue
+        items[normalized_type] = {
+            "agent_type": normalized_type,
+            "agent_label": _agent_group_label(normalized_type),
+            "calls": _safe_int(row[1]),
+            "cost_total": _safe_float(row[2]),
+            "total_tokens": _safe_int(row[3]),
+            "tokens_series": [],
+            "times_series": [],
+        }
+    for row in series_rows:
+        normalized_type = _agent_group(str(row[0] or "unknown"))
+        target = items.get(normalized_type)
+        day = str(row[1] or "")
+        if not target or not day:
+            continue
+        target["tokens_series"].append({"day": day, "value": _safe_int(row[2])})
+        target["times_series"].append({"day": day, "value": _safe_int(row[3])})
+    return {"items": list(items.values())}
 
 def _all_users_detail() -> dict[str, Any]:
     telemetry_row = _sqlite_fetchone(
@@ -1042,11 +1137,11 @@ def _game_detail(game_id: str) -> dict[str, Any]:
     agent_rows = _sqlite_fetchall(
         f"""
         SELECT
-            agent_name,
             CASE
                 WHEN TRIM(agent_type) <> '' THEN agent_type
                 WHEN agent_name = 'Observer' THEN 'observer'
                 WHEN agent_name = 'Guionista' THEN 'guionista'
+                WHEN agent_name = 'Notario' THEN 'notary'
                 ELSE 'unknown'
             END AS normalized_agent_type,
             COALESCE(SUM(usage_input_tokens), 0),
@@ -1061,7 +1156,7 @@ def _game_detail(game_id: str) -> dict[str, Any]:
             COUNT(*)
         FROM llm_calls
         {summary_where}
-        GROUP BY agent_name, normalized_agent_type
+        GROUP BY normalized_agent_type
         ORDER BY 8 DESC, 5 DESC, 11 DESC
         """,
         summary_params,
@@ -1075,9 +1170,26 @@ def _game_detail(game_id: str) -> dict[str, Any]:
         """,
         [game_id],
     )
+    notary_rows = _app_fetchall(
+        """
+        SELECT
+            turn_number,
+            based_on_message_count,
+            window_size,
+            summary_text,
+            facts_json,
+            mission_progress_json,
+            open_threads_json,
+            created_at
+        FROM notary_entries
+        WHERE game_id = %s
+        ORDER BY turn_number DESC, created_at DESC
+        """,
+        [game_id],
+    )
     messages = []
     for row in message_rows:
-        metadata = row[2] if isinstance(row[2], dict) else {}
+        metadata = _json_value(row[2], {})
         sender = str(metadata.get("author") or row[0] or "")
         messages.append(
             {
@@ -1086,6 +1198,38 @@ def _game_detail(game_id: str) -> dict[str, Any]:
                     row[3].isoformat() if hasattr(row[3], "isoformat") else str(row[3] or "")
                 ),
                 "content": str(row[1] or ""),
+            }
+        )
+    notary_entries = []
+    for row in notary_rows:
+        facts_json = _json_value(row[4], [])
+        mission_progress_json = _json_value(row[5], {})
+        open_threads_json = _json_value(row[6], [])
+        notary_entries.append(
+            {
+                "turn": _safe_int(row[0]),
+                "based_on_message_count": _safe_int(row[1]),
+                "window_size": _safe_int(row[2]),
+                "summary_text": str(row[3] or ""),
+                "facts": [
+                    {
+                        "kind": str(item.get("kind") or ""),
+                        "subject": str(item.get("subject") or ""),
+                        "object": str(item.get("object") or ""),
+                        "summary": str(item.get("summary") or ""),
+                        "confidence": _safe_float(item.get("confidence")),
+                    }
+                    for item in facts_json
+                    if isinstance(item, dict)
+                ],
+                "mission_progress": {
+                    "status": str(mission_progress_json.get("status") or ""),
+                    "reason": str(mission_progress_json.get("reason") or ""),
+                },
+                "open_threads": [str(item) for item in open_threads_json if str(item).strip()],
+                "created_at": (
+                    row[7].isoformat() if hasattr(row[7], "isoformat") else str(row[7] or "")
+                ),
             }
         )
     return {
@@ -1115,22 +1259,23 @@ def _game_detail(game_id: str) -> dict[str, Any]:
         },
         "agents": [
             {
-                "agent_name": str(row[0] or "unknown"),
-                "agent_type": str(row[1] or "unknown"),
-                "input_tokens": _safe_int(row[2]),
-                "output_tokens": _safe_int(row[3]),
-                "total_tokens": _safe_int(row[4]),
-                "cost_input": _safe_float(row[5]),
-                "cost_output": _safe_float(row[6]),
-                "cost_total": _safe_float(row[7]),
-                "min_duration_ms": _safe_int(row[8]),
-                "max_duration_ms": _safe_int(row[9]),
-                "avg_duration_ms": _safe_int(row[10]),
-                "calls": _safe_int(row[11]),
+                "agent_name": _agent_group_label(str(row[0] or "unknown")),
+                "agent_type": _agent_group(str(row[0] or "unknown")),
+                "input_tokens": _safe_int(row[1]),
+                "output_tokens": _safe_int(row[2]),
+                "total_tokens": _safe_int(row[3]),
+                "cost_input": _safe_float(row[4]),
+                "cost_output": _safe_float(row[5]),
+                "cost_total": _safe_float(row[6]),
+                "min_duration_ms": _safe_int(row[7]),
+                "max_duration_ms": _safe_int(row[8]),
+                "avg_duration_ms": _safe_int(row[9]),
+                "calls": _safe_int(row[10]),
             }
             for row in agent_rows
             if str(row[0] or "").strip()
         ],
+        "notary_entries": notary_entries,
         "messages": messages,
     }
 
@@ -1370,6 +1515,11 @@ def analytics_general() -> dict[str, Any]:
 @app.get("/v1/analytics/agents")
 def analytics_agents() -> dict[str, Any]:
     return _agent_metrics()
+
+
+@app.get("/v1/analytics/agent-detail")
+def analytics_agent_detail() -> dict[str, Any]:
+    return _agent_detail()
 
 
 @app.get("/v1/analytics/user-detail")

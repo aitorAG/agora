@@ -4,10 +4,52 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Agora Observability</title>
-  <link rel="stylesheet" href="static/styles.css?v=20260305" />
+  <link rel="stylesheet" href="static/styles.css?v=20260313h" />
 </head>
-<body>
-  <main class="layout">
+<body class="theme-light">
+  <div class="layout">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button
+          type="button"
+          id="menu-go-app"
+          class="brand-link home-link"
+          aria-label="Ir a Agora"
+          title="Ir a Agora"
+        >
+          Agora
+        </button>
+      </div>
+      <div class="topbar-right">
+        <button
+          type="button"
+          id="btn-theme-toggle"
+          class="theme-toggle"
+          aria-label="Activar modo oscuro"
+          title="Cambiar tema"
+        >
+          <span id="theme-toggle-icon" aria-hidden="true">☀</span>
+        </button>
+        <button
+          type="button"
+          id="user-chip"
+          class="user-chip"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls="user-menu"
+        >
+          <span id="user-avatar" class="user-avatar">?</span>
+          <span id="user-name" class="user-name">Admin</span>
+        </button>
+        <div id="user-menu" class="user-menu hidden" role="menu" aria-labelledby="user-chip">
+          <button type="button" id="menu-feedback-admin" role="menuitem">Feedback admin</button>
+          <button type="button" id="menu-observability" role="menuitem" disabled>Observabilidad</button>
+          <button type="button" id="menu-logout" role="menuitem">Cerrar sesión</button>
+        </div>
+      </div>
+    </header>
+
+  <main>
     <header class="hero">
       <div>
         <p class="eyebrow">Admin / Observability</p>
@@ -134,10 +176,10 @@
     <section class="tab-panel" data-panel="agents">
       <article class="panel">
         <div class="panel-head">
-          <h2>Resumen por tipo de agente</h2>
-          <span>Agregado por actor, observer y guionista</span>
+          <h2>Detalle por tipo de agente</h2>
+          <span>Actores, observer, guionista y notario</span>
         </div>
-        <table id="agentsTable">
+        <table id="agentDetailTable">
           <thead>
             <tr>
               <th>Tipo</th>
@@ -196,8 +238,14 @@
           <button id="loadGame" class="secondary">Cargar partida</button>
         </div>
       </article>
-      <section class="cards" id="gameKpis"></section>
-      <div class="grid two-col">
+      <section class="game-detail-top">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Resumen de partida</h2>
+            <span>Turnos, tokens y coste</span>
+          </div>
+          <section class="cards compact game-kpis-compact" id="gameKpis"></section>
+        </article>
         <article class="panel">
           <div class="panel-head">
             <h2>Breakdown por agente</h2>
@@ -214,18 +262,28 @@
               </tr>
             </thead>
             <tbody></tbody>
-          </table>
+            </table>
+          </article>
+      </section>
+      <section class="game-detail-bottom">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Registro del notario</h2>
+            <span>Snapshots de escena y progreso de misión</span>
+          </div>
+          <div id="notaryLog" class="notary-log"></div>
         </article>
         <article class="panel">
           <div class="panel-head">
-            <h2>Registro de mensajes</h2>
+            <h2>Conversación</h2>
             <span>Quien lo envia (timestamp): contenido</span>
           </div>
           <div id="messageLog" class="message-log"></div>
         </article>
-      </div>
+      </section>
     </section>
   </main>
-  <script src="static/app.js?v=20260305"></script>
+  </div>
+  <script src="static/app.js?v=20260313h"></script>
 </body>
 </html>

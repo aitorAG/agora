@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, Response
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 
 from .auth import (
     authenticate_user,
@@ -124,7 +124,10 @@ admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
 _repo_root = Path(__file__).resolve().parents[3]
 _admin_feedback_page = _repo_root / "frontend" / "static" / "admin-feedback.html"
-_admin_observability_page = _repo_root / "frontend" / "static" / "admin-observability.html"
+_observability_static_dir = _repo_root / "observability_static"
+if not _observability_static_dir.is_dir():
+    _observability_static_dir = _repo_root / "observability-platform" / "telemetry-service" / "static"
+_admin_observability_page = _observability_static_dir / "index.html"
 
 
 def _ensure_game_ownership(engine, game_id: str, username: str) -> None:
@@ -213,7 +216,15 @@ def admin_feedback_page(_current_user: AuthUserResponse = Depends(require_admin)
 def admin_observability_redirect(_current_user: AuthUserResponse = Depends(require_admin)):
     if not _admin_observability_page.is_file():
         raise HTTPException(status_code=404, detail="Admin observability page not found")
-    return FileResponse(_admin_observability_page)
+    html = _admin_observability_page.read_text(encoding="utf-8")
+    html = html.replace(
+        'href="static/styles.css',
+        'href="/ui/observability-static/styles.css',
+    ).replace(
+        'src="static/app.js',
+        'src="/ui/observability-static/app.js',
+    )
+    return HTMLResponse(content=html)
 
 
 @admin_router.get("/feedback/list", response_model=AdminFeedbackListResponse)

@@ -16,6 +16,7 @@ class _InMemoryProvider(PersistenceProvider):
     def __init__(self):
         self.games: dict[str, dict] = {}
         self.messages: dict[str, list[dict]] = {}
+        self.outbox_events: list[dict] = []
 
     def create_game(
         self,
@@ -39,7 +40,7 @@ class _InMemoryProvider(PersistenceProvider):
             "created_at": now,
             "updated_at": now,
             "config_json": dict(config_json),
-            "state_json": {"turn": 0, "messages": [], "metadata": {}},
+            "state_json": {"turn": 0, "metadata": {}, "next_action": "character"},
         }
         self.messages[game_id] = []
         return game_id
@@ -53,6 +54,7 @@ class _InMemoryProvider(PersistenceProvider):
                 "id": str(uuid.uuid4()),
                 "game_id": game_id,
                 "turn_number": int(turn_number),
+                "author": (metadata_json or {}).get("author") or role,
                 "role": role,
                 "content": content,
                 "metadata_json": metadata_json or {},
@@ -80,6 +82,17 @@ class _InMemoryProvider(PersistenceProvider):
     def list_feedback(self, limit=500):
         _ = limit
         return []
+
+    def enqueue_domain_event(self, event_type, aggregate_type, aggregate_id, payload_json):
+        event = {
+            "id": str(uuid.uuid4()),
+            "event_type": event_type,
+            "aggregate_type": aggregate_type,
+            "aggregate_id": aggregate_id,
+            "payload_json": dict(payload_json),
+        }
+        self.outbox_events.append(event)
+        return event["id"]
 
 
 def _build_config():
@@ -117,15 +130,6 @@ def test_engine_rehydrate_restores_state_and_avoids_duplicates(monkeypatch):
         game_id,
         {
             "turn": 1,
-            "messages": [
-                {
-                    "author": "Usuario",
-                    "content": "hola",
-                    "timestamp": "2026-02-18T10:00:00+00:00",
-                    "turn": 1,
-                    "displayed": False,
-                }
-            ],
             "metadata": {"continuation_decision": {"who_should_respond": "user"}},
             "next_action": "user_input",
             "max_turns": 12,

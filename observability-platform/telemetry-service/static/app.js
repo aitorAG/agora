@@ -238,6 +238,14 @@ function buildLinePath(points) {
     .join(' ');
 }
 
+function buildAreaPath(points, baselineY) {
+  if (!points.length) return '';
+  const head = `M ${points[0].x.toFixed(2)} ${baselineY.toFixed(2)}`;
+  const body = points.map((point) => `L ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ');
+  const tail = `L ${points[points.length - 1].x.toFixed(2)} ${baselineY.toFixed(2)} Z`;
+  return `${head} ${body} ${tail}`;
+}
+
 function renderTimeSeriesChart(targetId, seriesItems, options = {}) {
   const node = document.getElementById(targetId);
   if (!node) return;
@@ -347,6 +355,99 @@ function renderTimeSeriesChart(targetId, seriesItems, options = {}) {
   `;
 }
 
+function renderMiniSeries(seriesItems, options = {}) {
+  const preparedSeries = (seriesItems || []).filter((item) => item && Array.isArray(item.values));
+  if (!preparedSeries.length) {
+    return '<div class="mini-series-empty">Sin datos</div>';
+  }
+  const days = buildDayRange(
+    preparedSeries.flatMap((item) => item.values.map((point) => point.day))
+  );
+  if (!days.length) {
+    return '<div class="mini-series-empty">Sin datos</div>';
+  }
+  const rows = days.map((day) => ({
+    day,
+    values: preparedSeries.map(() => 0),
+  }));
+  const rowsByDay = new Map(rows.map((row) => [row.day, row]));
+  preparedSeries.forEach((series, seriesIndex) => {
+    series.values.forEach((point) => {
+      const row = rowsByDay.get(String(point.day || ''));
+      if (row) row.values[seriesIndex] = Number(point.value || 0);
+    });
+  });
+  const width = 220;
+  const height = 72;
+  const padding = { top: 10, right: 10, bottom: 10, left: 10 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const maxValue = Math.max(...rows.flatMap((row) => row.values), 1);
+  const xStep = rows.length === 1 ? 0 : plotWidth / (rows.length - 1);
+  const pointX = (index) => (rows.length === 1
+    ? padding.left + (plotWidth / 2)
+    : padding.left + (xStep * index));
+  const paths = preparedSeries.map((series, seriesIndex) => {
+    const points = rows.map((row, rowIndex) => ({
+      x: pointX(rowIndex),
+      y: padding.top + plotHeight - ((row.values[seriesIndex] / maxValue) * plotHeight),
+      day: row.day,
+      value: row.values[seriesIndex],
+    }));
+    return {
+      color: series.color,
+      points,
+      path: buildLinePath(points),
+    };
+  });
+  const latestRow = rows[rows.length - 1];
+  const latestValue = preparedSeries.length ? Number(latestRow.values[0] || 0) : 0;
+  const formatter = options.formatter || integer;
+  const anchorIndices = pickTickIndices(rows.length, Math.min(3, rows.length));
+  const anchors = anchorIndices.map((index) => ({
+    day: rows[index].day,
+    value: Number(rows[index].values[0] || 0),
+  }));
+  const primary = paths[0];
+  const firstPoint = primary.points[0];
+  const lastPoint = primary.points[primary.points.length - 1];
+  const trendDirection = lastPoint && firstPoint && lastPoint.value > firstPoint.value
+    ? 'up'
+    : lastPoint && firstPoint && lastPoint.value < firstPoint.value
+      ? 'down'
+      : 'flat';
+  return `
+    <div class="mini-series mini-series--${trendDirection}">
+      <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="${padding.left}" y1="${padding.top + plotHeight}" x2="${width - padding.right}" y2="${padding.top + plotHeight}" class="mini-series-baseline"></line>
+        ${paths.map((item) => `<path d="${item.path}" class="mini-series-line" style="--series:${item.color}"></path>`).join('')}
+        ${paths.map((item) => item.points.map((point) => `
+          <circle
+            cx="${point.x}"
+            cy="${point.y}"
+            r="7"
+            class="mini-series-hit"
+            data-day="${point.day}"
+            data-value="${formatter(point.value)}"
+          ></circle>
+        `).join('')).join('')}
+        ${firstPoint ? `<circle cx="${firstPoint.x}" cy="${firstPoint.y}" r="2.75" class="mini-series-marker is-start" style="--series:${primary.color}"></circle>` : ''}
+        ${lastPoint ? `<circle cx="${lastPoint.x}" cy="${lastPoint.y}" r="3.8" class="mini-series-marker is-end" style="--series:${primary.color}"></circle>` : ''}
+      </svg>
+      <div class="mini-series-footer">
+        ${anchors.map((item, index) => `
+          <div class="mini-series-stat ${index === anchors.length - 1 ? 'is-current' : ''}">
+            <span class="mini-series-stat-day">${shortDayLabel(item.day)}</span>
+            <strong class="mini-series-stat-value">${formatter(item.value)}</strong>
+          </div>
+        `).join('')}
+      </div>
+      <div class="mini-series-meta">Último: ${formatter(latestValue)}</div>
+      <div class="mini-series-tooltip hidden"></div>
+    </div>
+  `;
+}
+
 function modeLabel(mode) {
   return String(mode || '').toLowerCase() === 'standard' ? 'Standard' : 'Custom';
 }
@@ -357,6 +458,15 @@ function phaseLabel(phaseName) {
   if (value === 'create_game_and_warmup') return 'Creacion + warmup';
   if (value === 'serialize_response') return 'Serializacion respuesta';
   return phaseName || 'Fase';
+}
+
+function agentTypeLabel(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'actor') return 'Actores';
+  if (normalized === 'observer') return 'Observer';
+  if (normalized === 'guionista') return 'Guionista';
+  if (normalized === 'notary') return 'Notario';
+  return value || 'Otros';
 }
 
 function phaseColor(phaseName) {
@@ -492,6 +602,44 @@ function renderMessages(items) {
   `).join('');
 }
 
+function renderNotaryEntries(items) {
+  const node = document.getElementById('notaryLog');
+  if (!node) return;
+  if (!items.length) {
+    setEmpty(node, 'Sin registros del notario para esta partida');
+    return;
+  }
+  node.innerHTML = items.map((item) => `
+    <article class="notary-item">
+      <div class="notary-meta">
+        <span>Turno ${integer(item.turn)}</span>
+        <span>${formatDate(item.created_at)}</span>
+      </div>
+      <div class="notary-summary">${item.summary_text || 'Sin resumen.'}</div>
+      <div class="notary-mission">
+        <strong>Misión:</strong>
+        <span>${item.mission_progress?.status || 'unknown'} · ${item.mission_progress?.reason || 'Sin evaluación.'}</span>
+      </div>
+      <div class="notary-facts">
+        ${(item.facts || []).length
+          ? item.facts.map((fact) => `
+              <div class="notary-fact">
+                <div class="notary-fact-head">
+                  <span>${fact.kind || 'fact'}</span>
+                  <span>${Math.round(Number(fact.confidence || 0) * 100)}%</span>
+                </div>
+                <div>${fact.summary || ''}</div>
+              </div>
+            `).join('')
+          : '<div class="empty">Sin facts estructurados</div>'}
+      </div>
+      ${(item.open_threads || []).length
+        ? `<div class="notary-threads">${item.open_threads.map((thread) => `<span class="notary-thread">${thread}</span>`).join('')}</div>`
+        : ''}
+    </article>
+  `).join('');
+}
+
 async function loadUsers() {
   const payload = await getJSON('/v1/options/users');
   const items = payload.items || [];
@@ -566,14 +714,18 @@ async function loadGeneral() {
 }
 
 async function loadAgents() {
-  const data = await getJSON('/v1/analytics/agents');
-  renderTable('agentsTable', data.items || [], [
+  const data = await getJSON('/v1/analytics/agent-detail');
+  renderTable('agentDetailTable', data.items || [], [
     (row) => row.agent_label,
     (row) => integer(row.calls),
     (row) => money(row.cost_total),
-    (row) => renderRangeMetric(row.min_tokens_per_call, row.avg_tokens_per_call, row.max_tokens_per_call, integer),
-    (row) => renderRangeMetric(row.min_duration_ms, row.avg_duration_ms, row.max_duration_ms, ms),
-  ]);
+    (row) => renderMiniSeries([
+      { color: 'var(--accent)', values: row.tokens_series || [] },
+    ], { formatter: integer }),
+    (row) => renderMiniSeries([
+      { color: 'var(--accent-2)', values: row.times_series || [] },
+    ], { formatter: ms }),
+  ], 'Sin llamadas LLM trackeadas todavía');
 }
 
 async function loadUserDetail() {
@@ -602,24 +754,24 @@ async function loadGameDetail() {
   if (!gameId) {
     renderCards('gameKpis', []);
     renderTable('gameAgentsTable', [], [() => '', () => '', () => '', () => '', () => ''], 'Selecciona una partida');
+    renderNotaryEntries([]);
     renderMessages([]);
     return;
   }
   const data = await getJSON('/v1/analytics/game-detail', { game_id: gameId });
   renderCards('gameKpis', [
-    { label: 'Partida', value: data.game.display_name },
-    { label: 'Usuario', value: data.game.username, hint: `Creada: ${formatDate(data.game.created_at)}` },
     { label: 'Turnos', value: integer(data.game.turns), hint: `Estado: ${data.game.status}` },
     { label: 'Tokens in/out/total', value: `${integer(data.tokens.input)} / ${integer(data.tokens.output)} / ${integer(data.tokens.total)}` },
     { label: 'Coste in/out/total', value: `${money(data.cost.input)} / ${money(data.cost.output)} / ${money(data.cost.total)}` },
   ]);
   renderTable('gameAgentsTable', data.agents || [], [
     (row) => row.agent_name,
-    (row) => row.agent_type,
+    (row) => agentTypeLabel(row.agent_type),
     (row) => `${integer(row.input_tokens)} / ${integer(row.output_tokens)} / ${integer(row.total_tokens)}`,
     (row) => money(row.cost_total),
     (row) => ms(row.avg_duration_ms),
   ], 'Sin llamadas LLM trackeadas para esta partida');
+  renderNotaryEntries(data.notary_entries || []);
   renderMessages(data.messages || []);
 }
 
@@ -679,6 +831,24 @@ document.getElementById('initSeriesAgg')?.addEventListener('change', () => {
   renderInitSeriesFromData(cachedGeneralData);
 });
 document.addEventListener('click', closeOnOutsideClick);
+document.addEventListener('mousemove', (event) => {
+  const target = event.target instanceof Element ? event.target.closest('.mini-series-hit') : null;
+  document.querySelectorAll('.mini-series-tooltip').forEach((node) => node.classList.add('hidden'));
+  if (!target) return;
+  const host = target.closest('.mini-series');
+  const tooltip = host?.querySelector('.mini-series-tooltip');
+  if (!(host instanceof HTMLElement) || !(tooltip instanceof HTMLElement)) return;
+  tooltip.textContent = `${target.getAttribute('data-day') || ''} · ${target.getAttribute('data-value') || ''}`;
+  tooltip.classList.remove('hidden');
+  const rect = host.getBoundingClientRect();
+  tooltip.style.left = `${event.clientX - rect.left + 8}px`;
+  tooltip.style.top = `${event.clientY - rect.top - 28}px`;
+});
+document.addEventListener('mouseleave', (event) => {
+  const target = event.target instanceof Element ? event.target.closest('.mini-series') : null;
+  if (!target) return;
+  target.querySelectorAll('.mini-series-tooltip').forEach((node) => node.classList.add('hidden'));
+}, true);
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') toggleUserMenu(false);
 });
@@ -690,7 +860,7 @@ document.addEventListener('keydown', (event) => {
     await refreshAll();
   } catch (error) {
     console.error(error);
-    document.querySelectorAll('.chart, .cards, tbody, #messageLog').forEach((node) => {
+    document.querySelectorAll('.chart, .cards, tbody, #messageLog, #notaryLog').forEach((node) => {
       if (node && !node.innerHTML) {
         node.innerHTML = '<div class="empty">No se pudieron cargar las metricas</div>';
       }

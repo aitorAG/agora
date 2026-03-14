@@ -417,27 +417,7 @@ class GameEngine:
 
         persisted_records = self._persistence.get_game_messages(game_id)
         restored_messages: list[dict[str, Any]] = []
-        raw_messages = state_json.get("messages", [])
-        if isinstance(raw_messages, list):
-            for msg in raw_messages:
-                if not isinstance(msg, dict):
-                    continue
-                try:
-                    msg_turn = int(msg.get("turn", 0))
-                except (TypeError, ValueError):
-                    msg_turn = 0
-                restored_messages.append(
-                    {
-                        "author": str(msg.get("author", "")),
-                        "content": str(msg.get("content", "")),
-                        "timestamp": self._parse_timestamp(msg.get("timestamp")),
-                        "turn": msg_turn,
-                        "displayed": bool(msg.get("displayed", False)),
-                    }
-                )
-
-        # Compatibilidad con snapshots antiguos sin messages en state_json.
-        if not restored_messages and isinstance(persisted_records, list):
+        if isinstance(persisted_records, list):
             for rec in persisted_records:
                 if not isinstance(rec, dict):
                     continue
@@ -450,11 +430,11 @@ class GameEngine:
                     rec_turn = 0
                 restored_messages.append(
                     {
-                        "author": str(metadata.get("author") or rec.get("role") or ""),
+                        "author": str(rec.get("author") or metadata.get("author") or rec.get("role") or ""),
                         "content": str(rec.get("content", "")),
                         "timestamp": self._parse_timestamp(metadata.get("timestamp") or rec.get("created_at")),
                         "turn": rec_turn,
-                        "displayed": False,
+                        "displayed": bool(metadata.get("displayed", False)),
                     }
                 )
 
@@ -716,33 +696,66 @@ class GameEngine:
                 return str(value)
         return value
 
-    def _persist_session_state(self, game_id: str, session: GameSession) -> None:
+    def _build_state_snapshot(self, session: GameSession) -> dict[str, Any]:
         state = session.manager.state
-        messages = state.get("messages", [])
-        if not isinstance(messages, list):
-            messages = []
-        for msg in messages[session.persisted_messages :]:
-            author = str(msg.get("author", ""))
-            self._persistence.append_message(
-                game_id=game_id,
-                turn_number=int(msg.get("turn", 0)),
-                role=self._map_role(author),
-                content=str(msg.get("content", "")),
-                metadata_json={
-                    "author": author,
-                    "timestamp": msg.get("timestamp").isoformat() if hasattr(msg.get("timestamp"), "isoformat") else str(msg.get("timestamp")) if msg.get("timestamp") is not None else None,
-                },
-            )
-        session.persisted_messages = len(messages)
-        state_json = {
+        return {
             "turn": state.get("turn", 0),
-            "messages": messages,
             "metadata": state.get("metadata", {}),
             "next_action": session.next_action,
             "max_turns": session.max_turns,
             "max_messages_before_user": session.max_messages_before_user,
         }
-        self._persistence.save_game_state(game_id, self._jsonable(state_json))
+
+    def _build_domain_events(self, game_id: str, session: GameSession, new_messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if session.next_action != "user_input" or not new_messages:
+            return []
+        actor_count = max(1, len(session.character_agents))
+        messages = session.manager.state.get("messages", [])
+        total_messages = len(messages) if isinstance(messages, list) else len(new_messages)
+        window_size = (actor_count + 1) * 2
+        return [
+            {
+                "event_type": "turn_reached_user_input",
+                "aggregate_type": "game",
+                "aggregate_id": game_id,
+                "payload_json": {
+                    "game_id": game_id,
+                    "turn": int(session.manager.state.get("turn", 0)),
+                    "actor_count": actor_count,
+                    "window_size": window_size,
+                    "message_count": total_messages,
+                    "next_action": session.next_action,
+                },
+            }
+        ]
+
+    def _persist_session_state(self, game_id: str, session: GameSession) -> None:
+        state = session.manager.state
+        messages = state.get("messages", [])
+        if not isinstance(messages, list):
+            messages = []
+        new_messages = []
+        for msg in messages[session.persisted_messages :]:
+            author = str(msg.get("author", ""))
+            new_messages.append(
+                {
+                    "author": author,
+                    "turn": int(msg.get("turn", 0)),
+                    "role": self._map_role(author),
+                    "content": str(msg.get("content", "")),
+                    "timestamp": msg.get("timestamp"),
+                    "displayed": bool(msg.get("displayed", False)),
+                }
+            )
+        state_snapshot = self._jsonable(self._build_state_snapshot(session))
+        domain_events = self._build_domain_events(game_id, session, new_messages)
+        self._persistence.persist_game_progress(
+            game_id=game_id,
+            new_messages=new_messages,
+            state_json=state_snapshot,
+            domain_events=domain_events,
+        )
+        session.persisted_messages = len(messages)
 
 
 def create_engine(persistence_provider: PersistenceProvider | None = None) -> GameEngine:

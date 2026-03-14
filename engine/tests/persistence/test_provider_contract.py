@@ -20,7 +20,7 @@ def assert_provider_contract(provider):
         },
     )
     provider.append_message(game_id, 0, "player", "hola", {"author": "Usuario"})
-    provider.save_game_state(game_id, {"turn": 1, "messages": [], "metadata": {"x": 1}})
+    provider.save_game_state(game_id, {"turn": 1, "metadata": {"x": 1}, "next_action": "user_input"})
     game = provider.get_game(game_id)
     msgs = provider.get_game_messages(game_id)
     games = provider.list_games_for_user("usuario")

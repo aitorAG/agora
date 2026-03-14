@@ -158,7 +158,7 @@ class DatabasePersistenceProvider(PersistenceProvider):
                 )
                 cur.execute(
                     "INSERT INTO game_states (game_id, state_json, updated_at) VALUES (%s, %s::jsonb, %s)",
-                    (game_id, json.dumps({"turn": 0, "messages": [], "metadata": {}}, ensure_ascii=False), now),
+                    (game_id, json.dumps({"turn": 0, "metadata": {}, "next_action": "character"}, ensure_ascii=False), now),
                 )
         return game_id
 
@@ -199,13 +199,14 @@ class DatabasePersistenceProvider(PersistenceProvider):
                 now = _utc_now()
                 cur.execute(
                     """
-                    INSERT INTO messages (id, game_id, turn_number, role, content, metadata_json, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s)
+                    INSERT INTO messages (id, game_id, turn_number, author, role, content, metadata_json, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s)
                     """,
                     (
                         msg_id,
                         game_id,
                         int(turn_number),
+                        str((metadata_json or {}).get("author") or role or "actor"),
                         role or "actor",
                         content or "",
                         json.dumps(metadata_json or {}, ensure_ascii=False),
@@ -213,6 +214,279 @@ class DatabasePersistenceProvider(PersistenceProvider):
                     ),
                 )
                 cur.execute("UPDATE games SET updated_at = %s WHERE id = %s", (now, game_id))
+
+    def persist_game_progress(
+        self,
+        game_id: str,
+        new_messages: list[dict[str, Any]],
+        state_json: dict[str, Any],
+        domain_events: list[dict[str, Any]] | None = None,
+    ) -> None:
+        if not isinstance(state_json, dict):
+            raise ValueError("state_json inválido")
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM games WHERE id = %s", (game_id,))
+                if not cur.fetchone():
+                    raise KeyError(f"Game not found: {game_id}")
+                now = _utc_now()
+                for msg in new_messages:
+                    turn_number = int(msg.get("turn", 0))
+                    if turn_number < 0:
+                        raise ValueError("turn_number debe ser >= 0")
+                    author = str(msg.get("author", "")).strip()
+                    timestamp = msg.get("timestamp")
+                    metadata_json = {
+                        "author": author,
+                        "timestamp": timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp) if timestamp is not None else None,
+                        "displayed": bool(msg.get("displayed", False)),
+                    }
+                    cur.execute(
+                        """
+                        INSERT INTO messages (id, game_id, turn_number, author, role, content, metadata_json, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+                        """,
+                        (
+                            str(uuid.uuid4()),
+                            game_id,
+                            turn_number,
+                            author or str(msg.get("role") or "actor"),
+                            str(msg.get("role") or "actor"),
+                            str(msg.get("content", "")),
+                            json.dumps(metadata_json, ensure_ascii=False),
+                            now,
+                        ),
+                    )
+                cur.execute(
+                    """
+                    UPDATE game_states
+                    SET state_json = %s::jsonb, updated_at = %s
+                    WHERE game_id = %s
+                    """,
+                    (json.dumps(state_json, ensure_ascii=False), now, game_id),
+                )
+                if cur.rowcount == 0:
+                    raise KeyError(f"Game not found: {game_id}")
+                for event in domain_events or []:
+                    cur.execute(
+                        """
+                        INSERT INTO outbox_events (
+                            id, event_type, aggregate_type, aggregate_id, payload_json, status, attempt_count,
+                            available_at, created_at, processed_at, last_error
+                        )
+                        VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            str(uuid.uuid4()),
+                            str(event.get("event_type") or ""),
+                            str(event.get("aggregate_type") or "game"),
+                            str(event.get("aggregate_id") or game_id),
+                            json.dumps(event.get("payload_json") or {}, ensure_ascii=False),
+                            "pending",
+                            0,
+                            now,
+                            now,
+                            None,
+                            None,
+                        ),
+                    )
+                cur.execute("UPDATE games SET updated_at = %s WHERE id = %s", (now, game_id))
+
+    def enqueue_domain_event(
+        self,
+        event_type: str,
+        aggregate_type: str,
+        aggregate_id: str,
+        payload_json: dict[str, Any],
+    ) -> str:
+        event_id = str(uuid.uuid4())
+        now = _utc_now()
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO outbox_events (
+                        id, event_type, aggregate_type, aggregate_id, payload_json, status, attempt_count,
+                        available_at, created_at, processed_at, last_error
+                    )
+                    VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        event_id,
+                        event_type,
+                        aggregate_type,
+                        aggregate_id,
+                        json.dumps(payload_json or {}, ensure_ascii=False),
+                        "pending",
+                        0,
+                        now,
+                        now,
+                        None,
+                        None,
+                    ),
+                )
+        return event_id
+
+    def claim_outbox_events(self, limit: int = 50) -> list[dict[str, Any]]:
+        safe_limit = max(1, min(int(limit), 500))
+        claimed_at = _utc_now()
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    WITH candidates AS (
+                        SELECT id
+                        FROM outbox_events
+                        WHERE status IN ('pending', 'retry')
+                          AND available_at <= %s
+                        ORDER BY created_at ASC
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT %s
+                    )
+                    UPDATE outbox_events o
+                    SET status = 'dispatching',
+                        processed_at = %s
+                    FROM candidates
+                    WHERE o.id = candidates.id
+                    RETURNING o.id::text, o.event_type, o.aggregate_type, o.aggregate_id,
+                              o.payload_json, o.status, o.attempt_count, o.available_at, o.created_at
+                    """,
+                    (claimed_at, safe_limit, claimed_at),
+                )
+                rows = cur.fetchall()
+                return [
+                    {
+                        "id": row[0],
+                        "event_type": row[1],
+                        "aggregate_type": row[2],
+                        "aggregate_id": row[3],
+                        "payload_json": row[4] or {},
+                        "status": row[5],
+                        "attempt_count": row[6],
+                        "available_at": row[7].isoformat() if row[7] else None,
+                        "created_at": row[8].isoformat() if row[8] else None,
+                    }
+                    for row in rows
+                ]
+
+    def mark_outbox_event_dispatched(self, event_id: str) -> None:
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE outbox_events
+                    SET status = 'dispatched', processed_at = %s, last_error = NULL
+                    WHERE id = %s
+                    """,
+                    (_utc_now(), event_id),
+                )
+                if cur.rowcount == 0:
+                    raise KeyError(f"Outbox event not found: {event_id}")
+
+    def mark_outbox_event_retry(self, event_id: str, error_message: str | None = None) -> None:
+        now = _utc_now()
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE outbox_events
+                    SET status = 'retry',
+                        attempt_count = attempt_count + 1,
+                        available_at = %s,
+                        processed_at = %s,
+                        last_error = %s
+                    WHERE id = %s
+                    """,
+                    (now, now, (error_message or "")[:1000] or None, event_id),
+                )
+                if cur.rowcount == 0:
+                    raise KeyError(f"Outbox event not found: {event_id}")
+
+    def create_notary_entry(
+        self,
+        game_id: str,
+        turn: int,
+        based_on_message_count: int,
+        window_size: int,
+        summary_text: str,
+        facts_json: list[dict[str, Any]],
+        mission_progress_json: dict[str, Any],
+        open_threads_json: list[str],
+    ) -> str:
+        entry_id = str(uuid.uuid4())
+        now = _utc_now()
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO notary_entries (
+                        id, game_id, turn_number, based_on_message_count, window_size,
+                        summary_text, facts_json, mission_progress_json, open_threads_json, created_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s)
+                    ON CONFLICT (game_id, turn_number, based_on_message_count) DO UPDATE
+                    SET summary_text = EXCLUDED.summary_text,
+                        facts_json = EXCLUDED.facts_json,
+                        mission_progress_json = EXCLUDED.mission_progress_json,
+                        open_threads_json = EXCLUDED.open_threads_json
+                    RETURNING id::text
+                    """,
+                    (
+                        entry_id,
+                        game_id,
+                        int(turn),
+                        int(based_on_message_count),
+                        int(window_size),
+                        summary_text,
+                        json.dumps(facts_json or [], ensure_ascii=False),
+                        json.dumps(mission_progress_json or {}, ensure_ascii=False),
+                        json.dumps(open_threads_json or [], ensure_ascii=False),
+                        now,
+                    ),
+                )
+                row = cur.fetchone()
+                return row[0]
+
+    def upsert_scene_snapshot(
+        self,
+        game_id: str,
+        source_notary_entry_id: str,
+        version_turn: int,
+        facts_json: list[dict[str, Any]],
+        mission_progress_json: dict[str, Any],
+        open_threads_json: list[str],
+        summary_text: str,
+    ) -> None:
+        now = _utc_now()
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO scene_snapshots (
+                        game_id, source_notary_entry_id, version_turn, facts_json,
+                        mission_progress_json, open_threads_json, summary_text, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s)
+                    ON CONFLICT (game_id) DO UPDATE
+                    SET source_notary_entry_id = EXCLUDED.source_notary_entry_id,
+                        version_turn = EXCLUDED.version_turn,
+                        facts_json = EXCLUDED.facts_json,
+                        mission_progress_json = EXCLUDED.mission_progress_json,
+                        open_threads_json = EXCLUDED.open_threads_json,
+                        summary_text = EXCLUDED.summary_text,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (
+                        game_id,
+                        source_notary_entry_id,
+                        int(version_turn),
+                        json.dumps(facts_json or [], ensure_ascii=False),
+                        json.dumps(mission_progress_json or {}, ensure_ascii=False),
+                        json.dumps(open_threads_json or [], ensure_ascii=False),
+                        summary_text,
+                        now,
+                    ),
+                )
 
     def get_game(self, game_id: str) -> dict[str, Any]:
         with self._connection() as conn:
@@ -255,7 +529,7 @@ class DatabasePersistenceProvider(PersistenceProvider):
                     raise KeyError(f"Game not found: {game_id}")
                 cur.execute(
                     """
-                    SELECT id::text, game_id::text, turn_number, role, content, metadata_json, created_at
+                    SELECT id::text, game_id::text, turn_number, author, role, content, metadata_json, created_at
                     FROM messages
                     WHERE game_id = %s
                     ORDER BY turn_number ASC, created_at ASC
@@ -268,10 +542,47 @@ class DatabasePersistenceProvider(PersistenceProvider):
                         "id": r[0],
                         "game_id": r[1],
                         "turn_number": r[2],
-                        "role": r[3],
-                        "content": r[4],
-                        "metadata_json": r[5] or {},
-                        "created_at": r[6].isoformat() if r[6] else None,
+                        "author": r[3],
+                        "role": r[4],
+                        "content": r[5],
+                        "metadata_json": r[6] or {},
+                        "created_at": r[7].isoformat() if r[7] else None,
+                    }
+                    for r in rows
+                ]
+
+    def get_recent_game_messages(self, game_id: str, limit: int) -> list[dict[str, Any]]:
+        safe_limit = max(1, min(int(limit), 500))
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM games WHERE id = %s", (game_id,))
+                if not cur.fetchone():
+                    raise KeyError(f"Game not found: {game_id}")
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM (
+                        SELECT id::text, game_id::text, turn_number, author, role, content, metadata_json, created_at
+                        FROM messages
+                        WHERE game_id = %s
+                        ORDER BY created_at DESC, id DESC
+                        LIMIT %s
+                    ) recent
+                    ORDER BY created_at ASC, id ASC
+                    """,
+                    (game_id, safe_limit),
+                )
+                rows = cur.fetchall()
+                return [
+                    {
+                        "id": r[0],
+                        "game_id": r[1],
+                        "turn_number": r[2],
+                        "author": r[3],
+                        "role": r[4],
+                        "content": r[5],
+                        "metadata_json": r[6] or {},
+                        "created_at": r[7].isoformat() if r[7] else None,
                     }
                     for r in rows
                 ]
