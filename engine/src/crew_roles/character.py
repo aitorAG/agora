@@ -11,6 +11,7 @@ def create_character_agent(
     personality: str,
     mission: str | None = None,
     background: str | None = None,
+    prompt_template: str | None = None,
     model: str = "deepseek-chat",
 ) -> CharacterAgent:
     """Crea un agente Character (rol CrewAI) para un personaje."""
@@ -19,6 +20,7 @@ def create_character_agent(
         personality=personality,
         mission=mission,
         background=background,
+        prompt_template=prompt_template,
         model=model,
     )
 

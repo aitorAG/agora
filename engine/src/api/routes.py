@@ -30,6 +30,11 @@ from .schemas import (
     FeedbackResponse,
     AdminFeedbackItem,
     AdminFeedbackListResponse,
+    AdminActorPromptField,
+    AdminActorPromptResponse,
+    AdminActorPromptUpdateRequest,
+    AdminActorPromptUpdateResponse,
+    AdminActorPromptValidation,
     ContextResponse,
     GameListItem,
     GameListResponse,
@@ -45,6 +50,11 @@ from .schemas import (
     AuthUserResponse,
 )
 from .dependencies import get_engine, get_current_user, require_admin, get_persistence_provider
+from ..agents.actor_prompt_template import (
+    actor_prompt_required_fields,
+    default_actor_prompt_template,
+    validate_actor_prompt_template,
+)
 from ..core.standard_games import (
     StandardTemplateError,
     list_standard_templates,
@@ -235,6 +245,50 @@ def admin_feedback_list(
 ):
     items = engine.list_feedback(limit=limit)
     return AdminFeedbackListResponse(items=[AdminFeedbackItem(**item) for item in items])
+
+
+@admin_router.get("/actor-prompt", response_model=AdminActorPromptResponse)
+def admin_get_actor_prompt(
+    _current_user: AuthUserResponse = Depends(require_admin),
+    provider=Depends(get_persistence_provider),
+):
+    _ = _current_user
+    stored_template = provider.get_actor_prompt_template()
+    template = str(stored_template or default_actor_prompt_template())
+    validation = validate_actor_prompt_template(template)
+    return AdminActorPromptResponse(
+        template=template,
+        source="custom" if stored_template else "default",
+        required_fields=[AdminActorPromptField(**item) for item in actor_prompt_required_fields()],
+        validation=AdminActorPromptValidation(**validation),
+    )
+
+
+@admin_router.post("/actor-prompt", response_model=AdminActorPromptUpdateResponse)
+def admin_update_actor_prompt(
+    body: AdminActorPromptUpdateRequest,
+    _current_user: AuthUserResponse = Depends(require_admin),
+    provider=Depends(get_persistence_provider),
+):
+    _ = _current_user
+    template = str(body.template or "").strip()
+    validation = validate_actor_prompt_template(template)
+    if not validation["valid"]:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "El prompt no es válido.",
+                "validation": validation,
+            },
+        )
+    provider.set_actor_prompt_template(template)
+    return AdminActorPromptUpdateResponse(
+        stored=True,
+        template=template,
+        source="custom",
+        required_fields=[AdminActorPromptField(**item) for item in actor_prompt_required_fields()],
+        validation=AdminActorPromptValidation(**validation),
+    )
 
 
 @auth_router.post("/logout")

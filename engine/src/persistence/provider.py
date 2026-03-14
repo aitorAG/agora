@@ -147,3 +147,27 @@ class PersistenceProvider(ABC):
     ) -> None:
         """Actualiza el snapshot materializado más reciente de la escena."""
         raise NotImplementedError("This persistence provider does not support scene snapshots")
+
+    def get_runtime_setting(self, key: str) -> dict[str, Any] | None:
+        """Lee una configuración runtime persistida."""
+        _ = key
+        return None
+
+    def set_runtime_setting(self, key: str, value_json: dict[str, Any]) -> None:
+        """Guarda una configuración runtime persistida."""
+        _ = (key, value_json)
+        raise NotImplementedError("This persistence provider does not support runtime settings")
+
+    def get_actor_prompt_template(self) -> str | None:
+        setting = self.get_runtime_setting("actor_prompt_template")
+        if not isinstance(setting, dict):
+            return None
+        value = setting.get("template")
+        text = str(value or "").strip()
+        return text or None
+
+    def set_actor_prompt_template(self, template: str) -> None:
+        self.set_runtime_setting(
+            "actor_prompt_template",
+            {"template": str(template or "")},
+        )

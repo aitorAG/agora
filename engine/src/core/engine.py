@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from ..state import ConversationState
 from ..manager import ConversationManager
+from ..agents.actor_prompt_template import default_actor_prompt_template
 from ..crew_roles.guionista import create_guionista_agent, run_setup_task
 from ..crew_roles.character import create_character_agent, run_character_response
 from ..crew_roles.observer import create_observer_agent
@@ -35,6 +36,7 @@ class GameSession:
     max_messages_before_user: int = 3
     next_action: Literal["character", "user_input", "ended"] = "character"
     persisted_messages: int = 0
+    actor_prompt_template: str = ""
 
 
 class GameEngine:
@@ -96,6 +98,7 @@ class GameEngine:
         session = self._build_session_from_setup(
             setup=game_setup,
             max_turns=max_turns,
+            actor_prompt_template=self._current_actor_prompt_template(),
         )
         self._registry[game_id] = session
         self._warmup_session(game_id, session, game_mode="custom")
@@ -128,6 +131,7 @@ class GameEngine:
         session = self._build_session_from_setup(
             setup=validated_setup,
             max_turns=max_turns,
+            actor_prompt_template=self._current_actor_prompt_template(),
         )
         self._registry[game_id] = session
         self._warmup_session(game_id, session, game_mode=game_mode)
@@ -137,6 +141,7 @@ class GameEngine:
         self,
         setup: dict[str, Any],
         max_turns: int,
+        actor_prompt_template: str | None = None,
     ) -> GameSession:
         actors_list = setup.get("actors", [])
         if not isinstance(actors_list, list) or not actors_list:
@@ -144,6 +149,9 @@ class GameEngine:
         manager = ConversationManager()
         character_agents: dict[str, Any] = {}
         actor_names: list[str] = []
+        resolved_actor_prompt_template = str(
+            actor_prompt_template or default_actor_prompt_template()
+        )
         for actor in actors_list:
             if not isinstance(actor, dict):
                 continue
@@ -156,6 +164,7 @@ class GameEngine:
                 personality=actor.get("personality"),
                 mission=actor.get("mission"),
                 background=actor.get("background"),
+                prompt_template=resolved_actor_prompt_template,
             )
         if not actor_names:
             raise ValueError("Invalid setup actors")
@@ -173,7 +182,12 @@ class GameEngine:
             max_messages_before_user=max_messages_before_user,
             next_action="character",
             persisted_messages=0,
+            actor_prompt_template=resolved_actor_prompt_template,
         )
+
+    def _current_actor_prompt_template(self) -> str:
+        persisted = self._persistence.get_actor_prompt_template()
+        return str(persisted or default_actor_prompt_template())
 
     def _build_standard_opening_instruction(self, session: GameSession) -> str:
         setup = session.setup
@@ -405,6 +419,10 @@ class GameEngine:
                 personality=actor.get("personality"),
                 mission=actor.get("mission"),
                 background=actor.get("background"),
+                prompt_template=str(
+                    state_json.get("actor_prompt_template")
+                    or default_actor_prompt_template()
+                ),
             )
 
         if not actor_names:
@@ -470,6 +488,10 @@ class GameEngine:
             max_messages_before_user=max_messages_before_user,
             next_action=self._valid_next_action(state_json.get("next_action")),
             persisted_messages=len(restored_messages),
+            actor_prompt_template=str(
+                state_json.get("actor_prompt_template")
+                or default_actor_prompt_template()
+            ),
         )
         self._registry[game_id] = session
         return session
@@ -704,6 +726,7 @@ class GameEngine:
             "next_action": session.next_action,
             "max_turns": session.max_turns,
             "max_messages_before_user": session.max_messages_before_user,
+            "actor_prompt_template": session.actor_prompt_template,
         }
 
     def _build_domain_events(self, game_id: str, session: GameSession, new_messages: list[dict[str, Any]]) -> list[dict[str, Any]]:

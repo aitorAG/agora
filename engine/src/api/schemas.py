@@ -95,6 +95,39 @@ class AdminFeedbackListResponse(BaseModel):
     items: list[AdminFeedbackItem] = Field(default_factory=list)
 
 
+# --- Admin actor prompt ---
+class AdminActorPromptField(BaseModel):
+    key: str
+    label: str
+    description: str
+
+
+class AdminActorPromptValidation(BaseModel):
+    valid: bool = False
+    missing_fields: list[str] = Field(default_factory=list)
+    unknown_fields: list[str] = Field(default_factory=list)
+    format_error: Optional[str] = None
+
+
+class AdminActorPromptResponse(BaseModel):
+    template: str
+    source: str = "default"
+    required_fields: list[AdminActorPromptField] = Field(default_factory=list)
+    validation: AdminActorPromptValidation
+
+
+class AdminActorPromptUpdateRequest(BaseModel):
+    template: str = Field(min_length=1, max_length=12000)
+
+
+class AdminActorPromptUpdateResponse(BaseModel):
+    stored: bool = True
+    template: str
+    source: str = "custom"
+    required_fields: list[AdminActorPromptField] = Field(default_factory=list)
+    validation: AdminActorPromptValidation
+
+
 # --- GET /game/context ---
 class ContextResponse(BaseModel):
     player_mission: str = ""

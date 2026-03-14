@@ -5,6 +5,7 @@ from typing import Dict, Any, Iterator
 
 from ..state import ConversationState
 from ..text_limits import truncate_agent_output
+from .actor_prompt_template import render_actor_prompt
 from .base import Agent
 from .deepseek_adapter import send_message
 
@@ -18,6 +19,7 @@ class CharacterAgent(Agent):
         personality: str,
         mission: str | None = None,
         background: str | None = None,
+        prompt_template: str | None = None,
         model: str = "deepseek-chat",
     ):
         """Inicializa el CharacterAgent.
@@ -27,12 +29,14 @@ class CharacterAgent(Agent):
             personality: Descripción de la personalidad
             mission: Misión privada que el actor debe intentar alcanzar (opcional)
             background: Contexto del personaje (origen, gustos, profesión, etc.) coherente con la ambientación (opcional)
+            prompt_template: Template runtime del prompt del actor (opcional)
             model: Modelo de DeepSeek a usar
         """
         super().__init__(name)
         self._personality = personality
         self._mission = mission
         self._background = background
+        self._prompt_template = prompt_template
         # Permitir sobreescribir modelo/temperatura vía entorno
         self._model = os.getenv("DEEPSEEK_MODEL_CHARACTER", model)
         try:
@@ -117,26 +121,14 @@ class CharacterAgent(Agent):
         extra_system_instruction: str | None = None,
     ) -> list[dict[str, str]]:
         """Construye la lista de mensajes para el LLM (lógica de dominio)."""
-        system_prompt = f"""Eres {self.name}, un personaje en una conversación grupal.
-Tu personalidad: {self.personality}
-
-Estas presente en la conversacion y responderas de manera natural y coherente con tu personalidad adressing un personaje presente en la escena, siguiendo la conversacion de los personajes y queriendo avanzar en tu objetivo
-Mantén tus respuestas concisas y no superes nunca 3 frases.
-Solo responde con el contenido del mensaje, sin prefijos ni explicaciones."""
-        if self._background:
-            system_prompt += f"""
-
-Tu background (contexto de tu personaje): {self._background}
-Actúa de forma coherente con este contexto."""
-        if self._mission:
-            system_prompt += f"""
-
-Tienes una misión secreta que debes intentar cumplir durante la conversación. No la reveles explícitamente, aunque puedes dar pistas sobre ella.
-Tu misión: {self._mission}"""
-        if extra_system_instruction:
-            system_prompt += f"""
-
-{extra_system_instruction.strip()}"""
+        system_prompt = render_actor_prompt(
+            template=self._prompt_template,
+            name=self.name,
+            personality=self.personality,
+            background=self._background,
+            mission=self._mission,
+            extra_system_instruction=extra_system_instruction,
+        )
 
         max_history = int(os.getenv("CHAR_CONTEXT_MESSAGES", "12"))
         history = state["messages"][-max_history:]

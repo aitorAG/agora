@@ -17,6 +17,7 @@ class _InMemoryProvider(PersistenceProvider):
         self.games: dict[str, dict] = {}
         self.messages: dict[str, list[dict]] = {}
         self.outbox_events: list[dict] = []
+        self.runtime_settings: dict[str, dict] = {}
 
     def create_game(
         self,
@@ -93,6 +94,12 @@ class _InMemoryProvider(PersistenceProvider):
         }
         self.outbox_events.append(event)
         return event["id"]
+
+    def get_runtime_setting(self, key: str):
+        return self.runtime_settings.get(key)
+
+    def set_runtime_setting(self, key: str, value_json: dict):
+        self.runtime_settings[key] = dict(value_json)
 
 
 def _build_config():
@@ -171,3 +178,44 @@ def test_engine_resume_invalid_game_state_raises_value_error(monkeypatch):
         assert False, "Debe lanzar ValueError cuando no hay actores válidos"
     except ValueError:
         pass
+
+
+def test_engine_rehydrate_preserves_actor_prompt_template_from_snapshot(monkeypatch):
+    captured_templates: list[str | None] = []
+
+    def _capture_character_agent(**kwargs):
+        captured_templates.append(kwargs.get("prompt_template"))
+        return object()
+
+    monkeypatch.setattr(engine_module, "create_character_agent", _capture_character_agent)
+    monkeypatch.setattr(engine_module, "create_observer_agent", lambda **_: object())
+
+    provider = _InMemoryProvider()
+    prompt_a = (
+        "Eres {name}. {personality}."
+        "{background_block}{mission_block}{extra_system_instruction_block}"
+    )
+    prompt_b = (
+        "CAMBIO {name} / {personality}"
+        "{background_block}{mission_block}{extra_system_instruction_block}"
+    )
+    provider.set_actor_prompt_template(prompt_a)
+    game_id = provider.create_game("Partida", _build_config())
+
+    engine = GameEngine(persistence_provider=provider)
+    session = engine._build_session_from_setup(
+        setup=_build_config(),
+        max_turns=10,
+        actor_prompt_template=provider.get_actor_prompt_template(),
+    )
+    engine._registry[game_id] = session
+    engine._persist_session_state(game_id, session)
+    assert provider.get_game(game_id)["state_json"]["actor_prompt_template"] == prompt_a
+
+    del engine._registry[game_id]
+    provider.set_actor_prompt_template(prompt_b)
+    captured_templates.clear()
+
+    engine.resume_game(game_id)
+
+    assert captured_templates == [prompt_a]

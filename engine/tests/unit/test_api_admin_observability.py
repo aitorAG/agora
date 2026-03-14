@@ -34,8 +34,10 @@ def test_admin_observability_page_renders_for_admin():
         assert "Metricas operativas de Agora" in response.text
         assert 'id="agentDetailTable"' in response.text
         assert 'id="notaryLog"' in response.text
-        assert '/ui/observability-static/styles.css?v=20260313h' in response.text
-        assert '/ui/observability-static/app.js?v=20260313h' in response.text
+        assert 'data-tab="prompt"' in response.text
+        assert 'id="actorPromptCurrent"' in response.text
+        assert '/ui/observability-static/styles.css?v=20260314a' in response.text
+        assert '/ui/observability-static/app.js?v=20260314a' in response.text
     finally:
         app.dependency_overrides.clear()
 

@@ -663,3 +663,46 @@ class DatabasePersistenceProvider(PersistenceProvider):
                     }
                     for r in rows
                 ]
+
+    def get_runtime_setting(self, key: str) -> dict[str, Any] | None:
+        safe_key = str(key or "").strip()
+        if not safe_key:
+            return None
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT value_json
+                    FROM runtime_settings
+                    WHERE key = %s
+                    """,
+                    (safe_key,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                value = row[0]
+                return value if isinstance(value, dict) else {}
+
+    def set_runtime_setting(self, key: str, value_json: dict[str, Any]) -> None:
+        safe_key = str(key or "").strip()
+        if not safe_key:
+            raise ValueError("runtime setting key is required")
+        if not isinstance(value_json, dict):
+            raise ValueError("value_json inválido")
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO runtime_settings (key, value_json, updated_at)
+                    VALUES (%s, %s::jsonb, %s)
+                    ON CONFLICT (key) DO UPDATE
+                    SET value_json = EXCLUDED.value_json,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (
+                        safe_key,
+                        json.dumps(value_json, ensure_ascii=False),
+                        _utc_now(),
+                    ),
+                )

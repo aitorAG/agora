@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Agora Observability</title>
-  <link rel="stylesheet" href="static/styles.css?v=20260313h" />
+  <link rel="stylesheet" href="static/styles.css?v=20260314a" />
 </head>
 <body class="theme-light">
   <div class="layout">
@@ -64,6 +64,7 @@
       <button class="tab" data-tab="agents">Detalle de agente</button>
       <button class="tab" data-tab="users">Detalle de usuario</button>
       <button class="tab" data-tab="games">Detalle de partida</button>
+      <button class="tab" data-tab="prompt">Prompt actor</button>
     </nav>
 
     <section class="tab-panel is-active" data-panel="general">
@@ -282,8 +283,46 @@
         </article>
       </section>
     </section>
+
+    <section class="tab-panel" data-panel="prompt">
+      <section class="grid two-col actor-prompt-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Prompt actual</h2>
+            <span>Solo afecta a partidas nuevas</span>
+          </div>
+          <div id="actorPromptCurrentMeta" class="prompt-meta"></div>
+          <pre id="actorPromptCurrent" class="prompt-preview">Cargando prompt...</pre>
+        </article>
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Editar prompt</h2>
+            <span>Validación al pulsar Apply</span>
+          </div>
+          <div class="prompt-editor-layout">
+            <section class="prompt-subpanel">
+              <h3>Campos obligatorios</h3>
+              <div id="actorPromptFields" class="prompt-fields"></div>
+            </section>
+            <section class="prompt-subpanel">
+              <h3>Texto editable</h3>
+              <textarea
+                id="actorPromptEditor"
+                class="prompt-textarea"
+                spellcheck="false"
+                aria-label="Editor del prompt del actor"
+              ></textarea>
+            </section>
+          </div>
+          <div id="actorPromptStatus" class="prompt-status hidden" aria-live="polite"></div>
+          <div class="prompt-actions">
+            <button id="applyActorPrompt" class="primary">Apply</button>
+          </div>
+        </article>
+      </section>
+    </section>
   </main>
   </div>
-  <script src="static/app.js?v=20260313h"></script>
+  <script src="static/app.js?v=20260314a"></script>
 </body>
 </html>

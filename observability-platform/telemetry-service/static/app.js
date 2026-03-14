@@ -3,6 +3,8 @@ const PROXIED_BASE = window.location.pathname.startsWith('/admin/observability')
   : '';
 const API_BASE = PROXIED_BASE ? `${PROXIED_BASE}/api` : '';
 let cachedGeneralData = null;
+let actorPromptLoaded = false;
+let actorPromptFieldsCache = [];
 const topbarState = {
   user: null,
   userMenuOpen: false,
@@ -128,6 +130,35 @@ async function getJSON(path, params = {}) {
     throw new Error(text || `HTTP ${response.status}`);
   }
   return response.json();
+}
+
+async function engineJSON(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+  const raw = await response.text();
+  const payload = raw ? (() => {
+    try {
+      return JSON.parse(raw);
+    } catch (_) {
+      return raw;
+    }
+  })() : null;
+  if (!response.ok) {
+    const error = new Error(
+      typeof payload === 'string'
+        ? payload
+        : payload?.detail?.message || payload?.detail || `HTTP ${response.status}`
+    );
+    error.payload = payload;
+    throw error;
+  }
+  return payload;
 }
 
 function money(value) {
@@ -602,6 +633,91 @@ function renderMessages(items) {
   `).join('');
 }
 
+function renderActorPromptFields(fields, validation = null) {
+  const node = document.getElementById('actorPromptFields');
+  if (!node) return;
+  const missing = new Set((validation?.missing_fields || []).map((item) => String(item)));
+  node.innerHTML = (fields || []).map((field) => `
+    <article class="prompt-field ${missing.has(field.key) ? 'is-missing' : ''}">
+      <div class="prompt-field-head">
+        <code>{${field.key}}</code>
+        <span>${field.label}</span>
+      </div>
+      <p>${field.description}</p>
+    </article>
+  `).join('');
+}
+
+function showActorPromptStatus(kind, message, validation = null) {
+  const node = document.getElementById('actorPromptStatus');
+  if (!node) return;
+  const unknown = validation?.unknown_fields || [];
+  const missing = validation?.missing_fields || [];
+  const formatError = validation?.format_error || '';
+  const details = [
+    missing.length ? `Faltan: ${missing.map((item) => `{${item}}`).join(', ')}` : '',
+    unknown.length ? `Campos desconocidos: ${unknown.map((item) => `{${item}}`).join(', ')}` : '',
+    formatError ? `Formato: ${formatError}` : '',
+  ].filter(Boolean);
+  node.className = `prompt-status is-${kind}`;
+  node.innerHTML = `
+    <div class="prompt-status-title">${message}</div>
+    ${details.length ? `<div class="prompt-status-details">${details.join(' · ')}</div>` : ''}
+  `;
+}
+
+function renderActorPromptPanel(payload) {
+  const current = document.getElementById('actorPromptCurrent');
+  const meta = document.getElementById('actorPromptCurrentMeta');
+  const editor = document.getElementById('actorPromptEditor');
+  const applyButton = document.getElementById('applyActorPrompt');
+  actorPromptFieldsCache = payload?.required_fields || [];
+  if (current) current.textContent = payload?.template || '';
+  if (meta) {
+    const source = payload?.source === 'custom' ? 'Custom activo' : 'Template por defecto';
+    meta.textContent = `${source} · Se fija al crear la partida`;
+  }
+  if (editor && !actorPromptLoaded) {
+    editor.value = payload?.template || '';
+  }
+  renderActorPromptFields(actorPromptFieldsCache, payload?.validation || null);
+  if (applyButton) applyButton.disabled = false;
+  actorPromptLoaded = true;
+}
+
+async function loadActorPrompt() {
+  const payload = await engineJSON('/admin/actor-prompt');
+  renderActorPromptPanel(payload);
+}
+
+async function applyActorPrompt() {
+  const editor = document.getElementById('actorPromptEditor');
+  const applyButton = document.getElementById('applyActorPrompt');
+  if (!(editor instanceof HTMLTextAreaElement) || !(applyButton instanceof HTMLButtonElement)) return;
+  const template = editor.value;
+  applyButton.disabled = true;
+  showActorPromptStatus('info', 'Validando y guardando prompt...');
+  try {
+    const payload = await engineJSON('/admin/actor-prompt', {
+      method: 'POST',
+      body: JSON.stringify({ template }),
+    });
+    renderActorPromptPanel(payload);
+    editor.value = payload.template || template;
+    showActorPromptStatus('success', 'Prompt actualizado. Solo se aplicará a partidas nuevas.');
+  } catch (error) {
+    const validation = error?.payload?.detail?.validation || null;
+    renderActorPromptFields(actorPromptFieldsCache, validation);
+    showActorPromptStatus(
+      'error',
+      error?.payload?.detail?.message || 'No se pudo guardar el prompt.',
+      validation
+    );
+  } finally {
+    applyButton.disabled = false;
+  }
+}
+
 function renderNotaryEntries(items) {
   const node = document.getElementById('notaryLog');
   if (!node) return;
@@ -790,7 +906,7 @@ function bindTabs() {
 async function refreshAll() {
   await loadUsers();
   await loadGamesForUser('gameSelect', document.getElementById('gameUserSelect')?.value || '');
-  await Promise.all([loadGeneral(), loadAgents(), loadUserDetail(), loadGameDetail()]);
+  await Promise.all([loadGeneral(), loadAgents(), loadUserDetail(), loadGameDetail(), loadActorPrompt()]);
 }
 
 bindTabs();
@@ -830,6 +946,7 @@ document.getElementById('initSeriesMetric')?.addEventListener('change', () => {
 document.getElementById('initSeriesAgg')?.addEventListener('change', () => {
   renderInitSeriesFromData(cachedGeneralData);
 });
+document.getElementById('applyActorPrompt')?.addEventListener('click', applyActorPrompt);
 document.addEventListener('click', closeOnOutsideClick);
 document.addEventListener('mousemove', (event) => {
   const target = event.target instanceof Element ? event.target.closest('.mini-series-hit') : null;
@@ -860,10 +977,11 @@ document.addEventListener('keydown', (event) => {
     await refreshAll();
   } catch (error) {
     console.error(error);
-    document.querySelectorAll('.chart, .cards, tbody, #messageLog, #notaryLog').forEach((node) => {
+    document.querySelectorAll('.chart, .cards, tbody, #messageLog, #notaryLog, #actorPromptCurrent, #actorPromptFields').forEach((node) => {
       if (node && !node.innerHTML) {
         node.innerHTML = '<div class="empty">No se pudieron cargar las metricas</div>';
       }
     });
+    showActorPromptStatus('error', 'No se pudo cargar la configuración del prompt.');
   }
 }());
