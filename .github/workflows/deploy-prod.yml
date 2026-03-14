@@ -28,9 +28,10 @@ jobs:
         run: |
           set -euo pipefail
           cd /srv/agora
-          git fetch origin
+          git fetch origin main
           git checkout main
-          git pull --ff-only origin main
+          git reset --hard origin/main
+          git clean -fd
 
       - name: Deploy stack
         shell: bash
