@@ -5,12 +5,14 @@
   "contexto_problema": "El Piernas le ha robado la merca a Turbo, hijo de la Juani, y Turbo esta decidido a vengarse esa misma noche. En la cabaña os habeis reunido varios colegas para fumar y debatir el plan, pero entre fanfarronadas y orgullo mal entendido la situacion puede explotar.",
   "relevancia_jugador": "Eres de los pocos a quien Turbo escucha de verdad. Si no logras frenarlo, la pelea puede terminar con detenidos, vendettas del barrio y una guerra ridicula que arrastre a toda la cuadrilla.",
   "player_mission": "Convencer a Turbo de no ir a por El Piernas y redirigir el conflicto hacia una salida no violenta que le permita salvar la cara.",
+  "player_public_mission": "Llegas a la cabaña con la intencion visible de bajar humos, ordenar la conversacion y evitar que la noche acabe en desgracia.",
   "narrativa_inicial": "La cabaña cruje con cada carcajada. Una bombilla desnuda cuelga del techo y parpadea sobre una mesa llena de vasos, cartas marcadas y ceniza. Alguien canta un cuple mal entonado mientras Turbo camina en circulos, encendido como un quinque.\n\nHace una hora llego gritando que El Piernas le habia levantado la merca y que esta noche le iba a romper las piernas de verdad. Ahora todos opinan: uno quiere ir con palos, otro propone esperar en la esquina de Lavapies y otro ni se entera porque se ha quedado dormido sobre un saco de harina.\n\nTu conoces a Turbo desde chaval y sabes como funciona su orgullo: si se siente humillado delante de los demas, no da un paso atras. Necesitas hablarle sin dejarlo en ridiculo, separarlo del ruido y encontrar una salida que suene a victoria, no a rendicion.\n\nFuera, Madrid sigue despierto. Dentro, la noche se decide en una conversacion.",
   "actors": [
     {
       "name": "Turbo",
       "personality": "Impulsivo, orgulloso y teatral. Pasa del enfado al drama en segundos.",
       "mission": "Recuperar la merca y vengarse de El Piernas para no quedar como un blando.",
+      "public_mission": "Quiere dejar claro delante de todos que no piensa tragarse la humillacion y que esta dispuesto a responder.",
       "background": "Hijo de la Juani, conocido en el barrio por meterse en lios y salir de ellos con mas cuento que razon.",
       "presencia_escena": "Centro de la cabaña, dando ordenes contradictorias mientras busca apoyo del grupo."
     },
@@ -18,6 +20,7 @@
       "name": "La Juani",
       "personality": "Protectora, lenguaraz y con sentido practico. Puede soltar un sermon o un chiste en la misma frase.",
       "mission": "Evitar que su hijo acabe en la carcel o en una camilla, aunque de cara al barrio finja dureza.",
+      "public_mission": "Se planta como la voz que exige respeto para Turbo pero tambien que nadie convierta la bronca en un desastre mayor.",
       "background": "Maneja media red de favores en el distrito y conoce los secretos de todos, incluido El Piernas.",
       "presencia_escena": "Entra y sale de la cabaña controlando a la pandilla y cortando discusiones."
     },
@@ -25,6 +28,7 @@
       "name": "El Chato",
       "personality": "Comico, exagerado y cobarde funcional. Siempre anima el caos desde una distancia segura.",
       "mission": "Que haya jaleo para tener algo que contar, pero sin arriesgar el pellejo.",
+      "public_mission": "Pincha la conversacion para no perder el espectaculo, aunque preferiria no acabar cerca de la pelea.",
       "background": "Amigo de ambos bandos, famoso por inventarse versiones epicas de peleas que nunca vio.",
       "presencia_escena": "Sentado junto a la estufa, metiendo cizana con frases grandilocuentes."
     },
@@ -32,6 +36,7 @@
       "name": "El Piernas",
       "personality": "Picaro, rapido de mente y provocador. Disfruta humillando a sus rivales con bromas.",
       "mission": "Mantener la merca y forzar a Turbo a negociar en sus terminos.",
+      "public_mission": "Su postura visible es desafiar a Turbo y forzar una negociacion en la que no parezca que cede terreno.",
       "background": "Ratero del barrio de Embajadores, experto en desaparecer por callejones y volver con coartada.",
       "presencia_escena": "No esta presente al inicio; manda recados y rumores desde una taberna cercana."
     }

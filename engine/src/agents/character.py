@@ -3,11 +3,13 @@ import re
 import sys
 from typing import Dict, Any, Iterator
 
+from ..player_identity import display_author, player_name_from_state
 from ..state import ConversationState
 from ..text_limits import truncate_agent_output
 from .actor_prompt_template import render_actor_prompt
 from .base import Agent
 from .deepseek_adapter import send_message
+from .scene_prompt_context import build_scene_participants_block
 
 
 class CharacterAgent(Agent):
@@ -19,6 +21,8 @@ class CharacterAgent(Agent):
         personality: str,
         mission: str | None = None,
         background: str | None = None,
+        player_public_mission: str | None = None,
+        scene_participants: list[dict[str, Any]] | None = None,
         prompt_template: str | None = None,
         model: str = "deepseek-chat",
     ):
@@ -29,6 +33,8 @@ class CharacterAgent(Agent):
             personality: Descripción de la personalidad
             mission: Misión privada que el actor debe intentar alcanzar (opcional)
             background: Contexto del personaje (origen, gustos, profesión, etc.) coherente con la ambientación (opcional)
+            player_public_mission: Punto de partida visible del jugador (opcional)
+            scene_participants: Participantes visibles de la escena (opcional)
             prompt_template: Template runtime del prompt del actor (opcional)
             model: Modelo de DeepSeek a usar
         """
@@ -36,6 +42,8 @@ class CharacterAgent(Agent):
         self._personality = personality
         self._mission = mission
         self._background = background
+        self._player_public_mission = player_public_mission
+        self._scene_participants = list(scene_participants or [])
         self._prompt_template = prompt_template
         # Permitir sobreescribir modelo/temperatura vía entorno
         self._model = os.getenv("DEEPSEEK_MODEL_CHARACTER", model)
@@ -67,6 +75,16 @@ class CharacterAgent(Agent):
     def background(self) -> str | None:
         """Background del personaje (opcional)."""
         return self._background
+
+    @property
+    def player_public_mission(self) -> str | None:
+        """Punto de partida visible del jugador."""
+        return self._player_public_mission
+
+    @property
+    def scene_participants(self) -> list[dict[str, Any]]:
+        """Participantes visibles en escena."""
+        return list(self._scene_participants)
 
     def process(
         self,
@@ -121,10 +139,19 @@ class CharacterAgent(Agent):
         extra_system_instruction: str | None = None,
     ) -> list[dict[str, str]]:
         """Construye la lista de mensajes para el LLM (lógica de dominio)."""
+        player_name = player_name_from_state(state)
+        scene_participants_block = build_scene_participants_block(
+            actor_name=self.name,
+            player_name=player_name,
+            player_public_mission=self._player_public_mission,
+            participants=self._scene_participants,
+        )
         system_prompt = render_actor_prompt(
             template=self._prompt_template,
             name=self.name,
             personality=self.personality,
+            player_name=player_name,
+            scene_participants_block=scene_participants_block,
             background=self._background,
             mission=self._mission,
             extra_system_instruction=extra_system_instruction,
@@ -135,7 +162,13 @@ class CharacterAgent(Agent):
         messages = [{"role": "system", "content": system_prompt}]
         for msg in history:
             messages.append(
-                {"role": "user", "content": f"[{msg['author']}] {msg['content']}"}
+                {
+                    "role": "user",
+                    "content": (
+                        f"[{display_author(msg.get('author'), player_name=player_name)}] "
+                        f"{msg['content']}"
+                    ),
+                }
             )
         return messages
 

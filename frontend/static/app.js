@@ -23,6 +23,7 @@
     },
     context: {
       player_mission: "",
+      player_public_mission: "",
       characters: [],
       narrativa_inicial: "",
     },
@@ -153,6 +154,8 @@
   const $storyTrack = () => $("story-track");
   const $contextStream = () => $("context-stream");
   const $storyMissionPrimary = () => $("story-mission-primary");
+  const $storyMissionPublicWrap = () => $("story-mission-public-wrap");
+  const $storyMissionPublic = () => $("story-mission-public");
   const $storyMissionInline = () => $("story-mission-inline");
   const $storyCharactersGrid = () => $("story-characters-grid");
   const $btnLandingCustom = () => $("btn-landing-custom");
@@ -685,6 +688,7 @@
       store.session_id = data.session_id;
       store.context.narrativa_inicial = data.narrativa_inicial || "";
       store.context.player_mission = data.player_mission || "";
+      store.context.player_public_mission = data.player_public_mission || "";
       store.context.characters = data.characters || [];
       store.status.turn_current = data.turn_current ?? 0;
       store.status.turn_max = data.turn_max ?? 10;
@@ -755,6 +759,7 @@
       store.session_id = data.session_id;
       store.context.narrativa_inicial = data.narrativa_inicial || "";
       store.context.player_mission = data.player_mission || "";
+      store.context.player_public_mission = data.player_public_mission || "";
       store.context.characters = data.characters || [];
       store.status.turn_current = data.turn_current ?? 0;
       store.status.turn_max = data.turn_max ?? 10;
@@ -789,6 +794,7 @@
     try {
       const data = await apiGet("/game/context", { session_id: store.session_id });
       store.context.player_mission = data.player_mission || "";
+      store.context.player_public_mission = data.player_public_mission || "";
       store.context.characters = data.characters || [];
       store.context.narrativa_inicial = data.narrativa_inicial || "";
     } catch (e) {
@@ -1038,6 +1044,7 @@
       .map((character, index) => {
         const name = normalizeText(character && character.name ? character.name : "") || `Personaje ${index + 1}`;
         const note = normalizeText(character && character.personality ? character.personality : "") || "Presencia clave en esta escena.";
+        const publicMission = normalizeText(character && character.public_mission ? character.public_mission : "");
         return `
           <article class="character-sheet-card">
             <div class="character-sheet-meta">
@@ -1045,7 +1052,8 @@
               <span class="character-sheet-role">Personaje</span>
             </div>
             <h3>${escapeHtml(name)}</h3>
-            <p>${escapeHtml(note)}</p>
+            <p class="character-sheet-personality">${escapeHtml(note)}</p>
+            ${publicMission ? `<p class="character-sheet-public-mission">${escapeHtml(publicMission)}</p>` : ""}
           </article>
         `;
       })
@@ -1069,6 +1077,7 @@
       : Math.min(fullContext.length, Math.max(0, store.ui.contextRevealChars));
     const contextPreview = fullContext.slice(0, revealLength);
     const mission = normalizeText(store.context.player_mission) || "Descubre la situación y decide cómo avanzar.";
+    const publicMission = normalizeText(store.context.player_public_mission);
 
     $storyTabs().forEach((button) => {
       const tab = button.getAttribute("data-story-tab") || "";
@@ -1091,6 +1100,10 @@
     }
     const missionPrimary = $storyMissionPrimary();
     if (missionPrimary) missionPrimary.textContent = mission;
+    const missionPublicWrap = $storyMissionPublicWrap();
+    if (missionPublicWrap) missionPublicWrap.classList.toggle("hidden", !publicMission);
+    const missionPublicNode = $storyMissionPublic();
+    if (missionPublicNode) missionPublicNode.textContent = publicMission || "—";
     const missionInline = $storyMissionInline();
     if (missionInline) missionInline.textContent = mission;
     const charactersGrid = $storyCharactersGrid();

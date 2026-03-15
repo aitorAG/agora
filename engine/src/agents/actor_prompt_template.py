@@ -7,6 +7,7 @@ from typing import Any
 
 DEFAULT_ACTOR_PROMPT_TEMPLATE = """Eres {name}, un personaje en una conversación grupal.
 Tu personalidad: {personality}
+El jugador presente en la escena se llama "{player_name}".{scene_participants_block}
 
 Estas presente en la conversacion y responderas de manera natural y coherente con tu personalidad adressing un personaje presente en la escena, siguiendo la conversacion de los personajes y queriendo avanzar en tu objetivo.
 Mantén tus respuestas concisas y no superes nunca 3 frases.
@@ -22,6 +23,16 @@ REQUIRED_ACTOR_PROMPT_FIELDS = (
         "key": "personality",
         "label": "Personalidad",
         "description": "Descripción breve del carácter del actor.",
+    },
+    {
+        "key": "player_name",
+        "label": "Nombre del jugador",
+        "description": "Nombre visible del jugador presente en la escena.",
+    },
+    {
+        "key": "scene_participants_block",
+        "label": "Bloque de escena",
+        "description": "Contexto publico con jugador y participantes visibles en la escena.",
     },
     {
         "key": "background_block",
@@ -120,6 +131,8 @@ def render_actor_prompt(
     template: str | None,
     name: str,
     personality: str,
+    player_name: str,
+    scene_participants_block: str,
     background: str | None = None,
     mission: str | None = None,
     extra_system_instruction: str | None = None,
@@ -131,6 +144,8 @@ def render_actor_prompt(
     return prompt_template.format(
         name=name,
         personality=personality,
+        player_name=player_name,
+        scene_participants_block=scene_participants_block,
         background_block=_background_block(background),
         mission_block=_mission_block(mission),
         extra_system_instruction_block=_extra_system_instruction_block(extra_system_instruction),

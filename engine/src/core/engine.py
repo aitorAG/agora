@@ -21,6 +21,11 @@ from ..crew_roles.observer import create_observer_agent
 from ..crew_roles.director import run_one_step
 from ..persistence import PersistenceProvider, create_persistence_provider
 from ..observability import emit_event, trace_interaction, trace_setup
+from ..player_identity import INTERNAL_PLAYER_AUTHOR
+from ..public_missions import (
+    fallback_actor_public_mission,
+    fallback_player_public_mission,
+)
 from ..text_limits import validate_custom_seed, validate_user_message
 from .game_setup_contract import validate_game_setup
 
@@ -99,6 +104,7 @@ class GameEngine:
             setup=game_setup,
             max_turns=max_turns,
             actor_prompt_template=self._current_actor_prompt_template(),
+            player_name=username,
         )
         self._registry[game_id] = session
         self._warmup_session(game_id, session, game_mode="custom")
@@ -132,6 +138,7 @@ class GameEngine:
             setup=validated_setup,
             max_turns=max_turns,
             actor_prompt_template=self._current_actor_prompt_template(),
+            player_name=username,
         )
         self._registry[game_id] = session
         self._warmup_session(game_id, session, game_mode=game_mode)
@@ -142,13 +149,24 @@ class GameEngine:
         setup: dict[str, Any],
         max_turns: int,
         actor_prompt_template: str | None = None,
+        player_name: str | None = None,
     ) -> GameSession:
         actors_list = setup.get("actors", [])
         if not isinstance(actors_list, list) or not actors_list:
             raise ValueError("Invalid setup actors")
         manager = ConversationManager()
+        resolved_player_name = str(player_name or "").strip() or INTERNAL_PLAYER_AUTHOR
+        manager.update_metadata("player_name", resolved_player_name)
         character_agents: dict[str, Any] = {}
         actor_names: list[str] = []
+        player_public_mission = str(
+            setup.get("player_public_mission")
+            or fallback_player_public_mission(
+                relevancia_jugador=setup.get("relevancia_jugador"),
+                contexto_problema=setup.get("contexto_problema"),
+            )
+        ).strip()
+        scene_participants = self._build_scene_participants(setup)
         resolved_actor_prompt_template = str(
             actor_prompt_template or default_actor_prompt_template()
         )
@@ -164,6 +182,8 @@ class GameEngine:
                 personality=actor.get("personality"),
                 mission=actor.get("mission"),
                 background=actor.get("background"),
+                player_public_mission=player_public_mission,
+                scene_participants=scene_participants,
                 prompt_template=resolved_actor_prompt_template,
             )
         if not actor_names:
@@ -184,6 +204,34 @@ class GameEngine:
             persisted_messages=0,
             actor_prompt_template=resolved_actor_prompt_template,
         )
+
+    @staticmethod
+    def _build_scene_participants(setup: dict[str, Any]) -> list[dict[str, str]]:
+        actors = setup.get("actors", [])
+        if not isinstance(actors, list):
+            return []
+        scene_participants: list[dict[str, str]] = []
+        for actor in actors:
+            if not isinstance(actor, dict):
+                continue
+            name = str(actor.get("name", "")).strip()
+            if not name:
+                continue
+            scene_participants.append(
+                {
+                    "name": name,
+                    "personality": str(actor.get("personality", "")).strip(),
+                    "public_mission": str(
+                        actor.get("public_mission")
+                        or fallback_actor_public_mission(
+                            personality=actor.get("personality"),
+                            presencia_escena=actor.get("presencia_escena"),
+                        )
+                    ).strip(),
+                    "presencia_escena": str(actor.get("presencia_escena", "")).strip(),
+                }
+            )
+        return scene_participants
 
     def _current_actor_prompt_template(self) -> str:
         persisted = self._persistence.get_actor_prompt_template()
@@ -330,6 +378,11 @@ class GameEngine:
                 "name": a.get("name", ""),
                 "personality": a.get("personality", ""),
                 "mission": a.get("mission", ""),
+                "public_mission": a.get("public_mission", "")
+                or fallback_actor_public_mission(
+                    personality=a.get("personality"),
+                    presencia_escena=a.get("presencia_escena"),
+                ),
                 "background": a.get("background", ""),
                 "presencia_escena": a.get("presencia_escena", ""),
             }
@@ -337,6 +390,11 @@ class GameEngine:
         ]
         return {
             "player_mission": setup.get("player_mission", ""),
+            "player_public_mission": setup.get("player_public_mission", "")
+            or fallback_player_public_mission(
+                relevancia_jugador=setup.get("relevancia_jugador", ""),
+                contexto_problema=setup.get("contexto_problema", ""),
+            ),
             "characters": characters,
             "ambientacion": setup.get("ambientacion", ""),
             "contexto_problema": setup.get("contexto_problema", ""),
@@ -407,6 +465,14 @@ class GameEngine:
 
         character_agents: dict[str, Any] = {}
         actor_names: list[str] = []
+        player_public_mission = str(
+            config_json.get("player_public_mission")
+            or fallback_player_public_mission(
+                relevancia_jugador=config_json.get("relevancia_jugador"),
+                contexto_problema=config_json.get("contexto_problema"),
+            )
+        ).strip()
+        scene_participants = self._build_scene_participants(config_json)
         for actor in actors:
             if not isinstance(actor, dict):
                 continue
@@ -419,6 +485,8 @@ class GameEngine:
                 personality=actor.get("personality"),
                 mission=actor.get("mission"),
                 background=actor.get("background"),
+                player_public_mission=player_public_mission,
+                scene_participants=scene_participants,
                 prompt_template=str(
                     state_json.get("actor_prompt_template")
                     or default_actor_prompt_template()
@@ -471,6 +539,11 @@ class GameEngine:
                 "turn": restored_turn,
                 "metadata": metadata,
             }
+        )
+        restored_player_name = str(metadata.get("player_name") or game.get("user") or "").strip()
+        manager.update_metadata(
+            "player_name",
+            restored_player_name or INTERNAL_PLAYER_AUTHOR,
         )
 
         try:

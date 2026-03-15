@@ -1,5 +1,7 @@
 """Tests unitarios de la decisión de cierre (game_ended) del Observer."""
 
+from unittest.mock import patch
+
 from src.agents.observer import ObserverAgent
 
 
@@ -49,3 +51,25 @@ def test_compute_game_ended_truncates_reason_to_three_sentences():
     ended, reason = agent._compute_game_ended(ev)
     assert ended is True
     assert reason == "El jugador ha cumplido su misión. Primera frase. Segunda frase."
+
+
+def test_evaluate_missions_uses_player_name_in_prompt_and_context():
+    agent = ObserverAgent(actor_names=["A"], player_mission="Convencer al consejo.")
+    state = {
+        "messages": [
+            {"author": "Usuario", "content": "Necesito vuestro apoyo.", "timestamp": None, "turn": 1},
+        ],
+        "turn": 1,
+        "metadata": {"player_name": "alice"},
+    }
+
+    with patch(
+        "src.agents.observer.send_message",
+        return_value='{"player_mission_achieved": false, "reasoning": "Aún no."}',
+    ) as mocked_send:
+        agent.evaluate_missions(state)
+
+    sent_messages = mocked_send.call_args.args[0]
+    assert '[alice] Necesito vuestro apoyo.' in sent_messages[1]["content"]
+    assert 'participante "alice"' in sent_messages[1]["content"]
+    assert "jugador (alice)" in sent_messages[1]["content"]

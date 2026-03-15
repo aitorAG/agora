@@ -11,6 +11,8 @@ def create_character_agent(
     personality: str,
     mission: str | None = None,
     background: str | None = None,
+    player_public_mission: str | None = None,
+    scene_participants: list[dict[str, Any]] | None = None,
     prompt_template: str | None = None,
     model: str = "deepseek-chat",
 ) -> CharacterAgent:
@@ -20,6 +22,8 @@ def create_character_agent(
         personality=personality,
         mission=mission,
         background=background,
+        player_public_mission=player_public_mission,
+        scene_participants=scene_participants,
         prompt_template=prompt_template,
         model=model,
     )

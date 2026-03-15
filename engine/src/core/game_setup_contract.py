@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from typing import Any, Callable
+from ..public_missions import (
+    fallback_actor_public_mission,
+    fallback_player_public_mission,
+)
 
 REQUIRED_SETUP_FIELDS = (
     "titulo",
@@ -48,6 +52,14 @@ def validate_game_setup(
             raise error_factory(f"{source_name} field '{field}' must be a non-empty string")
         normalized[field] = value
 
+    player_public_mission = str(normalized.get("player_public_mission", "")).strip()
+    if not player_public_mission:
+        player_public_mission = fallback_player_public_mission(
+            relevancia_jugador=normalized.get("relevancia_jugador"),
+            contexto_problema=normalized.get("contexto_problema"),
+        )
+    normalized["player_public_mission"] = player_public_mission
+
     actors = normalized.get("actors")
     if not isinstance(actors, list) or not actors:
         raise error_factory(f"{source_name} actors must be a non-empty list")
@@ -65,6 +77,13 @@ def validate_game_setup(
                     f"{source_name} actor #{idx} field '{field}' must be a non-empty string"
                 )
             actor_copy[field] = value
+        public_mission = str(actor_copy.get("public_mission", "")).strip()
+        if not public_mission:
+            public_mission = fallback_actor_public_mission(
+                personality=actor_copy.get("personality"),
+                presencia_escena=actor_copy.get("presencia_escena"),
+            )
+        actor_copy["public_mission"] = public_mission
 
         actor_name_key = actor_copy["name"].lower()
         if actor_name_key in seen_actor_names:

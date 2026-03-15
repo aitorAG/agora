@@ -922,6 +922,44 @@ body {
   line-height: 1.55;
 }
 
+.character-sheet-personality {
+  color: var(--muted);
+}
+
+.character-sheet-public-mission {
+  padding: 0.72rem 0.85rem;
+  border-radius: 16px;
+  border: 1px solid rgba(184, 103, 50, 0.22);
+  background: linear-gradient(180deg, rgba(255, 236, 210, 0.9), rgba(249, 224, 190, 0.78));
+  color: #8f4d1f;
+  font-weight: 700;
+}
+
+.mission-public-block {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.85rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(157, 98, 54, 0.14);
+}
+
+.mission-public-label {
+  margin: 0;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.mission-public-copy {
+  margin: 0;
+  color: var(--accent);
+  line-height: 1.45;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
 .chat-stage-brief {
   display: flex;
   align-items: stretch;
@@ -1701,6 +1739,16 @@ body.theme-dark .theme-toggle:hover,
 body.theme-dark .home-link:hover,
 body.theme-dark .game-item:hover {
   background: rgba(127, 108, 96, 0.92);
+}
+
+body.theme-dark .character-sheet-public-mission {
+  border-color: rgba(211, 140, 79, 0.28);
+  background: linear-gradient(180deg, rgba(112, 77, 47, 0.88), rgba(92, 62, 39, 0.8));
+  color: #ffe0ba;
+}
+
+body.theme-dark .mission-public-block {
+  border-top-color: rgba(215, 192, 166, 0.16);
 }
 
 body.theme-dark .landing-action-card,

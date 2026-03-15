@@ -13,11 +13,12 @@ REQUIRED_KEYS = {
     "contexto_problema",
     "relevancia_jugador",
     "player_mission",
+    "player_public_mission",
     "narrativa_inicial",
     "actors",
 }
 
-ACTOR_KEYS = {"name", "personality", "mission", "background", "presencia_escena"}
+ACTOR_KEYS = {"name", "personality", "mission", "public_mission", "background", "presencia_escena"}
 
 
 def test_default_setup_has_required_keys():
@@ -52,9 +53,9 @@ def test_default_setup_narrativa_inicial_non_empty():
 _MINIMAL_SETUP_JSON = (
     '{"titulo":"Ecos de Roma Rota","descripcion_breve":"Intrigas en la ciudad eterna.\\nDescubre al asesino del césar.",'
     '"ambientacion":"A","contexto_problema":"B","relevancia_jugador":"C",'
-    '"player_mission":"D","narrativa_inicial":"E","actors":['
-    '{"name":"X","personality":"P","mission":"M","background":"B","presencia_escena":"S"},'
-    '{"name":"Y","personality":"P2","mission":"M2","background":"B2","presencia_escena":"S2"}'
+    '"player_mission":"D","player_public_mission":"DP","narrativa_inicial":"E","actors":['
+    '{"name":"X","personality":"P","mission":"M","public_mission":"PM","background":"B","presencia_escena":"S"},'
+    '{"name":"Y","personality":"P2","mission":"M2","public_mission":"PM2","background":"B2","presencia_escena":"S2"}'
     "]}"
 )
 
@@ -69,6 +70,8 @@ def test_guionista_generate_setup_stream_false_returns_setup():
     assert len(setup["actors"]) == 2
     assert setup["actors"][0]["name"] == "X"
     assert setup["actors"][1]["name"] == "Y"
+    assert setup["player_public_mission"] == "DP"
+    assert setup["actors"][0]["public_mission"] == "PM"
     assert isinstance(setup["titulo"], str) and setup["titulo"].strip()
     assert len(setup["titulo"].split()) <= 6
     assert isinstance(setup["descripcion_breve"], str) and setup["descripcion_breve"].strip()
@@ -90,6 +93,8 @@ def test_guionista_generate_setup_stream_true_returns_same_setup_and_writes_stdo
     assert len(setup["actors"]) == 2
     assert setup["actors"][0]["name"] == "X"
     assert setup["actors"][1]["name"] == "Y"
+    assert setup["player_public_mission"] == "DP"
+    assert setup["actors"][1]["public_mission"] == "PM2"
     assert isinstance(setup["titulo"], str) and setup["titulo"].strip()
     assert isinstance(setup["descripcion_breve"], str) and setup["descripcion_breve"].strip()
     assert mock_stdout.write.called

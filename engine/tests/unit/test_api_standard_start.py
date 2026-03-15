@@ -61,12 +61,14 @@ def _sample_setup():
         "contexto_problema": "Problema",
         "relevancia_jugador": "Relevancia",
         "player_mission": "Mision",
+        "player_public_mission": "Punto de partida",
         "narrativa_inicial": "Inicio",
         "actors": [
             {
                 "name": "Bruto",
                 "personality": "Dubitativo",
                 "mission": "Decidir",
+                "public_mission": "Pide calma",
                 "background": "Senador",
                 "presencia_escena": "Curia",
             }
@@ -95,6 +97,8 @@ def test_standard_start_uses_prebuilt_setup_without_guionista(monkeypatch):
         assert body["session_id"] == "sid-standard"
         assert body["game_mode"] == "standard"
         assert body["standard_template_id"] == "rome_caesar_harry"
+        assert body["player_public_mission"] == "Punto de partida"
+        assert body["characters"][0]["public_mission"] == "Pide calma"
         assert engine.calls[0]["username"] == "usuario"
         assert engine.calls[0]["standard_template_id"] == "rome_caesar_harry"
     finally:

@@ -63,6 +63,8 @@ def test_admin_actor_prompt_get_returns_default_template():
         assert "{name}" in payload["template"]
         assert payload["validation"]["valid"] is True
         assert any(item["key"] == "background_block" for item in payload["required_fields"])
+        assert any(item["key"] == "player_name" for item in payload["required_fields"])
+        assert any(item["key"] == "scene_participants_block" for item in payload["required_fields"])
     finally:
         app.dependency_overrides.clear()
 
@@ -73,7 +75,8 @@ def test_admin_actor_prompt_post_persists_template():
     app.dependency_overrides[routes_module.get_persistence_provider] = lambda: provider
     client = TestClient(app)
     template = (
-        "Eres {name}. Tu personalidad: {personality}."
+        'Eres {name}. Tu personalidad: {personality}. '
+        'Jugador: {player_name}. {scene_participants_block}'
         "{background_block}{mission_block}{extra_system_instruction_block}"
     )
     try:
@@ -98,5 +101,7 @@ def test_admin_actor_prompt_post_validates_required_fields():
         detail = response.json()["detail"]
         assert detail["message"] == "El prompt no es válido."
         assert "personality" in detail["validation"]["missing_fields"]
+        assert "player_name" in detail["validation"]["missing_fields"]
+        assert "scene_participants_block" in detail["validation"]["missing_fields"]
     finally:
         app.dependency_overrides.clear()

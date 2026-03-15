@@ -15,7 +15,7 @@ def sample_state() -> ConversationState:
             {"author": "Usuario", "content": "Hola.", "timestamp": None, "turn": 0},
         ],
         "turn": 1,
-        "metadata": {},
+        "metadata": {"player_name": "alice"},
     }
 
 
@@ -25,6 +25,21 @@ def agent() -> CharacterAgent:
     return CharacterAgent(
         name="Test",
         personality="Amable.",
+        player_public_mission="Quiere orientar la escena.",
+        scene_participants=[
+            {
+                "name": "Test",
+                "personality": "Amable.",
+                "public_mission": "Tender puentes.",
+                "presencia_escena": "De pie junto a la mesa.",
+            },
+            {
+                "name": "Livia",
+                "personality": "Calculadora.",
+                "public_mission": "Pide prudencia.",
+                "presencia_escena": "Observa desde el fondo.",
+            },
+        ],
         model="deepseek-chat",
     )
 
@@ -94,3 +109,28 @@ def test_character_stream_truncates_before_fourth_sentence(
     assert result["message"] == "Primera frase. Segunda frase. Tercera frase."
     writes = [call.args[0] for call in mock_stdout.write.call_args_list]
     assert "".join(writes) == "Primera frase. Segunda frase. Tercera frase.\n"
+
+
+def test_character_build_messages_includes_public_scene_context(
+    agent: CharacterAgent, sample_state: ConversationState
+):
+    messages = agent._build_messages(sample_state)
+
+    system_prompt = messages[0]["content"]
+    assert 'El jugador presente en la escena se llama "alice".' in system_prompt
+    assert "Contexto publico de la escena:" in system_prompt
+    assert 'Jugador "alice":' in system_prompt
+    assert "Punto de partida visible: Quiere orientar la escena." in system_prompt
+    assert "- Tu (Test):" in system_prompt
+    assert "- Livia:" in system_prompt
+    assert "Postura publica ante el conflicto: Pide prudencia." in system_prompt
+    assert "No conoces las misiones privadas ajenas." in system_prompt
+
+
+def test_character_build_messages_uses_player_name_in_prompt_and_history(
+    agent: CharacterAgent, sample_state: ConversationState
+):
+    messages = agent._build_messages(sample_state)
+
+    assert 'El jugador presente en la escena se llama "alice".' in messages[0]["content"]
+    assert messages[1]["content"] == "[alice] Hola."

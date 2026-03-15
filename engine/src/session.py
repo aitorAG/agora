@@ -8,6 +8,10 @@ from .state import ConversationState
 from .manager import ConversationManager
 from .io_adapters import InputProvider, OutputHandler
 from .logging_config import get_logger
+from .public_missions import (
+    fallback_actor_public_mission,
+    fallback_player_public_mission,
+)
 from .crew_roles import (
     create_guionista_agent,
     run_setup_task,
@@ -52,6 +56,29 @@ def create_session(
     initial_state: ConversationState = manager.state
 
     actors_list = game_setup["actors"]
+    player_public_mission = str(
+        game_setup.get("player_public_mission")
+        or fallback_player_public_mission(
+            relevancia_jugador=game_setup.get("relevancia_jugador"),
+            contexto_problema=game_setup.get("contexto_problema"),
+        )
+    ).strip()
+    scene_participants = [
+        {
+            "name": str(a.get("name", "")).strip(),
+            "personality": str(a.get("personality", "")).strip(),
+            "public_mission": str(
+                a.get("public_mission")
+                or fallback_actor_public_mission(
+                    personality=a.get("personality"),
+                    presencia_escena=a.get("presencia_escena"),
+                )
+            ).strip(),
+            "presencia_escena": str(a.get("presencia_escena", "")).strip(),
+        }
+        for a in actors_list
+        if isinstance(a, dict) and str(a.get("name", "")).strip()
+    ]
     character_agents: dict[str, Any] = {}
     for a in actors_list:
         character_agents[a["name"]] = create_character_agent(
@@ -59,6 +86,8 @@ def create_session(
             personality=a["personality"],
             mission=a.get("mission"),
             background=a.get("background"),
+            player_public_mission=player_public_mission,
+            scene_participants=scene_participants,
         )
 
     observer = create_observer_agent(

@@ -34,8 +34,9 @@ class _DummyEngine:
         )
         setup = {
             "player_mission": "Misión",
+            "player_public_mission": "Punto de partida visible",
             "narrativa_inicial": "Inicio",
-            "actors": [{"name": "A", "personality": "P", "mission": "M", "background": "B"}],
+            "actors": [{"name": "A", "personality": "P", "mission": "M", "public_mission": "PM", "background": "B"}],
         }
         return "sid-1", setup
 
@@ -69,6 +70,8 @@ def test_new_game_empty_body_uses_env_theme_and_default_num_actors(monkeypatch):
         assert engine.calls[0]["theme"] == "Tema desde .env"
         assert engine.calls[0]["num_actors"] == 3
         assert engine.calls[0]["username"] == "usuario"
+        assert res.json()["player_public_mission"] == "Punto de partida visible"
+        assert res.json()["characters"][0]["public_mission"] == "PM"
     finally:
         app.dependency_overrides.clear()
 

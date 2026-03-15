@@ -5,6 +5,10 @@ import logging
 import sys
 from typing import Dict, Any, List, Iterator
 from ..state import ConversationState
+from ..public_missions import (
+    fallback_actor_public_mission,
+    fallback_player_public_mission,
+)
 from .base import Agent
 from .deepseek_adapter import send_message
 
@@ -40,6 +44,7 @@ def _default_setup(num_actors: int) -> Dict[str, Any]:
             "name": name,
             "personality": "Eres amigable y conversador.",
             "mission": "Mantener una conversación interesante.",
+            "public_mission": "Mostrarse abierto a la conversacion e influir con un tono cercano.",
             "background": "Personaje de una historia generada por defecto.",
             "presencia_escena": "Presente en la escena.",
         })
@@ -54,6 +59,10 @@ def _default_setup(num_actors: int) -> Dict[str, Any]:
         "contexto_problema": "Hay una situación que requiere la participación del jugador.",
         "relevancia_jugador": "Tu intervención puede cambiar el curso de los acontecimientos.",
         "player_mission": "Participar en la conversación y lograr conectar con los personajes.",
+        "player_public_mission": (
+            "Llegas a la escena con disposicion a entender el conflicto y mover la "
+            "conversacion hacia una salida."
+        ),
         "narrativa_inicial": narrativa_default,
         "actors": actors,
     }
@@ -92,12 +101,14 @@ Debes generar un JSON válido con esta estructura exacta (sin comentarios, sin c
   "contexto_problema": "Explicación de la situación o el problema en el que se encuentra la escena (2-4 frases). Qué está en juego, qué conflicto o tensión existe.",
   "relevancia_jugador": "Por qué esta situación es relevante o importante para el jugador (1-2 frases). Qué puede ganar o perder, por qué su participación importa.",
   "player_mission": "Objetivo principal que el jugador debe intentar alcanzar durante la conversación (privado, 1-2 frases). es un objetivo concreto que un director puede evaluar que ha ocurrido, no una actitud o disposición a algo.",
+  "player_public_mission": "Punto de partida publico del jugador ante el conflicto (1-2 frases). Debe poder compartirse con los personajes sin revelar su mision privada exacta.",
   "narrativa_inicial": "Prosa continua de 1 a 3 párrafos que integre todo: el escenario y la atmósfera, la situación o el problema en juego, por qué le importa al jugador, y la presencia en escena de los tres personajes (nombres y breve descripción de dónde o cómo están). Sin apartados ni títulos dentro del texto pero con parrafos legibles; tono dinámico y excitante, como el arranque de una novela o una partida de rol.",
   "actors": [
     {
       "name": "Nombre del personaje",
       "personality": "Descripción en tercera persona para el LLM del personaje: cómo es, cómo habla (ej. Es reservada, le gusta el chocolate...).",
       "mission": "Objetivo privado que este personaje intenta alcanzar durante la conversación (1-2 frases).",
+      "public_mission": "Actitud o postura publica inicial del personaje ante el conflicto (1-2 frases). Debe ser visible o inferible para otros, no su objetivo secreto.",
       "background": "Breve contexto del personaje: gustos, origen, profesión, rasgos relevantes, coherente con la ambientación.",
       "presencia_escena": "Una sola frase que describa su presencia en la escena (ej. sentada junto a la ventana, observando la calle; de pie junto a la puerta; acurrucada en el sofá con una taza de té)."
     }
@@ -105,11 +116,13 @@ Debes generar un JSON válido con esta estructura exacta (sin comentarios, sin c
 }
 
 Reglas:
-- titulo, descripcion_breve, ambientacion, contexto_problema, relevancia_jugador, player_mission, narrativa_inicial y cada actor deben ser coherentes entre sí.
+- titulo, descripcion_breve, ambientacion, contexto_problema, relevancia_jugador, player_mission, player_public_mission, narrativa_inicial y cada actor deben ser coherentes entre sí.
 - titulo debe tener entre 4 y 5 palabras y sonar atractivo.
 - descripcion_breve debe tener exactamente dos líneas (usa un salto de línea).
+- player_public_mission no debe revelar la mision privada exacta del jugador; expresa su punto de partida visible.
 - narrativa_inicial debe ser prosa continua: sin secciones tituladas (no uses "Ambientación:", "Personajes:", etc.). Integra de forma natural escenario, situación, relevancia y los personajes con su presencia en la escena.
 - actors debe tener exactamente el número de personajes que se te indique.
+- public_mission debe describir la postura publica del personaje ante el conflicto; no debe delatar su mission secreta.
 - presencia_escena debe ser muy breve: una frase por personaje para la descripción inicial.
 - Responde SOLO con el JSON, sin texto antes ni después. Si usas markdown, envuelve el JSON en ```json ... ```."""
 
@@ -172,7 +185,7 @@ Responde únicamente con el JSON especificado."""
         stream: bool = False,
         stream_sink: Any = None,
     ) -> Dict[str, Any]:
-        """Genera el setup de la partida: ambientación, contexto del problema, relevancia, player_mission y actores (name, personality, mission, background, presencia_escena).
+        """Genera el setup de la partida: ambientación, contexto del problema, relevancia, player_mission y actores.
 
         Args:
             theme: Tema o semilla opcional (ej. "historia romántica en Alemania siglo XVII, trama de detectives en un mundo de fantasia o aventuras de humor en ciberpunk magico"). Si es None, el Guionista inventa.
@@ -181,7 +194,7 @@ Responde únicamente con el JSON especificado."""
             stream_sink: Si se pasa y stream=True, cada chunk se envía a stream_sink(str); si no, se usa stdout.
 
         Returns:
-            Diccionario con keys: ambientacion, contexto_problema, relevancia_jugador, player_mission, actors (lista con name, personality, mission, background, presencia_escena).
+            Diccionario con keys de setup y actors (name, personality, mission, public_mission, background, presencia_escena).
         """
         messages = self._build_setup_messages(theme, num_actors)
         try:
@@ -224,6 +237,7 @@ Responde únicamente con el JSON especificado."""
                     "name": str(a.get("name", f"Personaje{i + 1}")).strip(),
                     "personality": str(a.get("personality", "Eres amigable.")).strip(),
                     "mission": str(a.get("mission", "Mantener la conversación.")).strip(),
+                    "public_mission": str(a.get("public_mission", "")).strip(),
                     "background": str(a.get("background", "Sin background.")).strip(),
                     "presencia_escena": str(a.get("presencia_escena", "Presente en la escena.")).strip(),
                 })
@@ -231,6 +245,7 @@ Responde únicamente con el JSON especificado."""
             contexto_problema = str(data.get("contexto_problema", "")).strip()
             relevancia_jugador = str(data.get("relevancia_jugador", "")).strip()
             player_mission = str(data.get("player_mission", "")).strip()
+            player_public_mission = str(data.get("player_public_mission", "")).strip()
             titulo = str(data.get("titulo", "")).strip()
             descripcion_breve = str(data.get("descripcion_breve", "")).strip()
             narrativa_inicial = str(data.get("narrativa_inicial", "")).strip()
@@ -238,6 +253,17 @@ Responde únicamente con el JSON especificado."""
                 titulo = _fallback_titulo(ambientacion, contexto_problema, player_mission)
             if not descripcion_breve:
                 descripcion_breve = _fallback_descripcion_breve(contexto_problema, player_mission)
+            if not player_public_mission:
+                player_public_mission = fallback_player_public_mission(
+                    relevancia_jugador=relevancia_jugador,
+                    contexto_problema=contexto_problema,
+                )
+            for actor in normalized_actors:
+                if not actor["public_mission"]:
+                    actor["public_mission"] = fallback_actor_public_mission(
+                        personality=actor.get("personality"),
+                        presencia_escena=actor.get("presencia_escena"),
+                    )
             if not narrativa_inicial:
                 parts = [ambientacion, contexto_problema, relevancia_jugador]
                 for a in normalized_actors:
@@ -250,6 +276,7 @@ Responde únicamente con el JSON especificado."""
                 "contexto_problema": contexto_problema,
                 "relevancia_jugador": relevancia_jugador,
                 "player_mission": player_mission,
+                "player_public_mission": player_public_mission,
                 "narrativa_inicial": narrativa_inicial,
                 "actors": normalized_actors,
             }

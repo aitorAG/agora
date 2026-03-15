@@ -61,10 +61,11 @@ from ..core.standard_games import (
     load_standard_template,
 )
 from ..observability import record_user_login
+from ..player_identity import display_author
 from ..text_limits import validate_custom_seed, validate_user_message
 
 
-def _serialize_message(m: dict) -> dict:
+def _serialize_message(m: dict, player_name: str | None = None) -> dict:
     """Convierte mensaje a dict con timestamp serializable."""
     ts = m.get("timestamp")
     if isinstance(ts, datetime):
@@ -72,11 +73,23 @@ def _serialize_message(m: dict) -> dict:
     elif ts is not None:
         ts = str(ts)
     return {
-        "author": m.get("author", ""),
+        "author": display_author(m.get("author", ""), player_name=player_name),
         "content": m.get("content", ""),
         "timestamp": ts,
         "turn": m.get("turn", 0),
     }
+
+
+def _serialize_character_info(actor: dict | None) -> CharacterInfo:
+    payload = actor if isinstance(actor, dict) else {}
+    return CharacterInfo(
+        name=payload.get("name", ""),
+        personality=payload.get("personality"),
+        mission=payload.get("mission"),
+        public_mission=payload.get("public_mission"),
+        background=payload.get("background"),
+        presencia_escena=payload.get("presencia_escena"),
+    )
 
 
 def _format_sse(event: str, data: str) -> str:
@@ -376,16 +389,7 @@ def new_game(
     try:
         status = engine.get_status(session_id)
         actors = setup.get("actors", [])
-        characters = [
-            CharacterInfo(
-                name=a.get("name", ""),
-                personality=a.get("personality"),
-                mission=a.get("mission"),
-                background=a.get("background"),
-                presencia_escena=a.get("presencia_escena"),
-            )
-            for a in actors
-        ]
+        characters = [_serialize_character_info(a) for a in actors]
         phases["serialize_response"] = int((time.perf_counter() - phase_t0) * 1000)
     except Exception as exc:
         phases["serialize_response"] = int((time.perf_counter() - phase_t0) * 1000)
@@ -416,6 +420,7 @@ def new_game(
         turn_max=status["turn_max"],
         player_can_write=status["player_can_write"],
         player_mission=setup.get("player_mission", ""),
+        player_public_mission=setup.get("player_public_mission", ""),
         characters=characters,
         narrativa_inicial=setup.get("narrativa_inicial", ""),
     )
@@ -527,16 +532,7 @@ def start_standard_game(
     try:
         status = engine.get_status(session_id)
         actors = final_setup.get("actors", [])
-        characters = [
-            CharacterInfo(
-                name=a.get("name", ""),
-                personality=a.get("personality"),
-                mission=a.get("mission"),
-                background=a.get("background"),
-                presencia_escena=a.get("presencia_escena"),
-            )
-            for a in actors
-        ]
+        characters = [_serialize_character_info(a) for a in actors]
         phases["serialize_response"] = int((time.perf_counter() - phase_t0) * 1000)
     except Exception as exc:
         phases["serialize_response"] = int((time.perf_counter() - phase_t0) * 1000)
@@ -567,6 +563,7 @@ def start_standard_game(
         turn_max=status["turn_max"],
         player_can_write=status["player_can_write"],
         player_mission=final_setup.get("player_mission", ""),
+        player_public_mission=final_setup.get("player_public_mission", ""),
         characters=characters,
         narrativa_inicial=final_setup.get("narrativa_inicial", ""),
         game_mode="standard",
@@ -587,7 +584,10 @@ def get_status(
         status = engine.get_status(session_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Session not found")
-    messages_out = [MessageOut(**_serialize_message(m)) for m in status.get("messages", [])]
+    messages_out = [
+        MessageOut(**_serialize_message(m, player_name=current_user.username))
+        for m in status.get("messages", [])
+    ]
     result = status.get("result")
     result_out = GameResultOut(**result) if result else None
     return StatusResponse(
@@ -668,7 +668,12 @@ def turn(
                 data = json.dumps({"type": "message_start", "author": ev.get("author", "")})
             elif ev_type == "message":
                 msg = ev.get("message", {})
-                data = json.dumps({"type": "message", "message": _serialize_message(msg)})
+                data = json.dumps(
+                    {
+                        "type": "message",
+                        "message": _serialize_message(msg, player_name=current_user.username),
+                    }
+                )
             elif ev_type == "game_ended":
                 data = json.dumps({
                     "type": "game_ended",
@@ -729,18 +734,10 @@ def get_context(
         ctx = engine.get_context(session_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Session not found")
-    characters = [
-        CharacterInfo(
-            name=c.get("name", ""),
-            personality=c.get("personality"),
-            mission=c.get("mission"),
-            background=c.get("background"),
-            presencia_escena=c.get("presencia_escena"),
-        )
-        for c in ctx.get("characters", [])
-    ]
+    characters = [_serialize_character_info(c) for c in ctx.get("characters", [])]
     return ContextResponse(
         player_mission=ctx.get("player_mission", ""),
+        player_public_mission=ctx.get("player_public_mission", ""),
         characters=characters,
         ambientacion=ctx.get("ambientacion", ""),
         contexto_problema=ctx.get("contexto_problema", ""),

@@ -154,6 +154,7 @@ def test_engine_rehydrate_restores_state_and_avoids_duplicates(monkeypatch):
     assert status["player_can_write"] is True
     assert len(status["messages"]) == 1
     assert status["messages"][0]["author"] == "Usuario"
+    assert engine._registry[game_id].manager.state["metadata"]["player_name"] == "usuario"
 
     resumed_again = engine.resume_game(game_id)
     assert resumed_again["loaded_from_memory"] is True
@@ -192,11 +193,11 @@ def test_engine_rehydrate_preserves_actor_prompt_template_from_snapshot(monkeypa
 
     provider = _InMemoryProvider()
     prompt_a = (
-        "Eres {name}. {personality}."
+        "Eres {name}. {personality}. {player_name}. {scene_participants_block}"
         "{background_block}{mission_block}{extra_system_instruction_block}"
     )
     prompt_b = (
-        "CAMBIO {name} / {personality}"
+        "CAMBIO {name} / {personality} / {player_name} / {scene_participants_block}"
         "{background_block}{mission_block}{extra_system_instruction_block}"
     )
     provider.set_actor_prompt_template(prompt_a)
@@ -207,10 +208,12 @@ def test_engine_rehydrate_preserves_actor_prompt_template_from_snapshot(monkeypa
         setup=_build_config(),
         max_turns=10,
         actor_prompt_template=provider.get_actor_prompt_template(),
+        player_name="alice",
     )
     engine._registry[game_id] = session
     engine._persist_session_state(game_id, session)
     assert provider.get_game(game_id)["state_json"]["actor_prompt_template"] == prompt_a
+    assert provider.get_game(game_id)["state_json"]["metadata"]["player_name"] == "alice"
 
     del engine._registry[game_id]
     provider.set_actor_prompt_template(prompt_b)

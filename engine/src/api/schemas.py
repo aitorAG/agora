@@ -18,6 +18,7 @@ class CharacterInfo(BaseModel):
     name: str
     personality: Optional[str] = None
     mission: Optional[str] = None
+    public_mission: Optional[str] = None
     background: Optional[str] = None
     presencia_escena: Optional[str] = None
 
@@ -28,6 +29,7 @@ class NewGameResponse(BaseModel):
     turn_max: int = 10
     player_can_write: bool = False
     player_mission: str = ""
+    player_public_mission: str = ""
     characters: list[CharacterInfo] = Field(default_factory=list)
     narrativa_inicial: str = ""
 
@@ -131,6 +133,7 @@ class AdminActorPromptUpdateResponse(BaseModel):
 # --- GET /game/context ---
 class ContextResponse(BaseModel):
     player_mission: str = ""
+    player_public_mission: str = ""
     characters: list[CharacterInfo] = Field(default_factory=list)
     ambientacion: str = ""
     contexto_problema: str = ""

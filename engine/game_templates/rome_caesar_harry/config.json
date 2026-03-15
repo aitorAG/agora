@@ -5,12 +5,14 @@
   "contexto_problema": "Harry Potter ha sido captado por Aeliana, sacerdotisa del Templo del Fuego Eterno, quien asegura que Cesar es la pieza final de un sacrificio arcano. Segun la profecia de Aeliana, si la daga correcta se hunde en el pecho del Cesar durante las Idus, Roma se convertira en el corazon de un imperio mistico invencible. Harry, agotado por visiones del futuro y culpable por tragedias que cree poder evitar, duda pero acepta participar en el ritual.",
   "relevancia_jugador": "Tu posees el unico mapa de sellos rituales capaz de cerrar el portal del templo y sabes que Aeliana manipula a Harry con medias verdades. Si no intervienes, no solo caera Cesar: se liberara una tormenta magica que borrara linajes enteros y reescribira siglos de historia.",
   "player_mission": "Evitar que Harry asesine a Cesar como sacrificio ritual, desenmascarar a Aeliana y sellar el Oraculo Carmesi antes del inicio de las Idus.",
+  "player_public_mission": "Irrumpes en Roma como quien intenta frenar un desastre ritual inminente, proteger a Cesar y cortar la influencia de Aeliana sobre la escena.",
   "narrativa_inicial": "Roma despierta con un cielo rojo cobre. Sobre el Foro sobrevuelan cuervos en circulos perfectos y los augures juran haber visto una puerta de fuego reflejada en el Tiber. En cada callejon hay soldados nerviosos, senadores armados y peregrinos que murmuran el nombre del Oraculo Carmesi.\n\nHas seguido una pista hasta las catacumbas bajo el Templo del Fuego Eterno. Alli viste a Harry Potter de rodillas ante una sacerdotisa envuelta en velos dorados. Ella le mostro runas antiguas y le susurro que la muerte de Cesar no seria un crimen, sino la llave para salvar el mundo. Harry no respondio, pero apreto la varita con una conviccion peligrosa.\n\nTu no puedes permitirlo. Si la sangre de Cesar cae sobre el circulo ritual, una grieta temporal tragara Roma y desatara guerras magicas en cada era. Debes moverte entre conspiradores romanos, guardianes del templo y hechiceros ocultos en el Senado. Cada minuto acerca las Idus.\n\nEn la superficie, Bruto y Casio preparan la conspiracion politica. Bajo tierra, Aeliana prepara algo mucho peor. Cuando suenen los cuernos del alba, ambas tramas chocaran. Tu decides cual de las dos sobrevive.",
   "actors": [
     {
       "name": "Harry Potter",
       "personality": "Valiente, impulsivo y emocionalmente dividido. Quiere hacer lo correcto, pero su culpa lo vuelve vulnerable a profecias extremas.",
       "mission": "Cumplir el sacrificio de Cesar durante las Idus creyendo que asi evitara un colapso mayor en el futuro.",
+      "public_mission": "Se muestra como alguien decidido a impedir una catastrofe futura, aunque para ello este dispuesto a abrazar medidas extremas.",
       "background": "Atrapado por una fractura temporal, encontro en Roma a Aeliana, quien le mostro visiones de guerras futuras. Convencido de que solo un acto radical puede impedirlas, acepto colaborar en secreto.",
       "presencia_escena": "Aparece entre mensajeros del Senado y en tuneles subterraneos del templo, trazando rutas de entrada y salida para la ceremonia."
     },
@@ -18,6 +20,7 @@
       "name": "Julio César",
       "personality": "Magnetico, ambicioso y estratega. Desprecia el miedo, pero empieza a creer que esta rodeado por fuerzas que no entiende.",
       "mission": "Sobrevivir al doble complot del Senado y del templo para consolidar su poder sin mostrar debilidad.",
+      "public_mission": "Sostiene una postura de autoridad y supervivencia: quiere dominar la crisis sin ceder terreno politico ni simbolico.",
       "background": "Gobierna Roma tras la guerra civil. Ha vencido ejércitos, pero no conoce el lenguaje de la magia ni el alcance del ritual que lo tiene como objetivo.",
       "presencia_escena": "En su domus y luego en la Curia de Pompeyo, custodiado por lictores mientras consulta augures inquietos."
     },
@@ -25,6 +28,7 @@
       "name": "Aeliana, Sacerdotisa del Fuego Eterno",
       "personality": "Hipnotica, fanatica y calculadora. Habla en tono solemne y convierte cada duda en una prueba de destino.",
       "mission": "Consumir la sangre de Cesar en el altar para invocar el Oraculo Carmesi y dominar la voluntad de Roma.",
+      "public_mission": "Predica en abierto que solo un sacrificio extraordinario puede salvar Roma y cumplir el designio del templo.",
       "background": "Ultima heredera de un culto antiguo expulsado del poder. Durante anos preparo reliquias, adeptos y una profecia manipulada para recuperar control politico y espiritual.",
       "presencia_escena": "Permanece en camaras rituales bajo el templo, rodeada de acólitos y guardianes con mascaras de bronce."
     },
@@ -32,6 +36,7 @@
       "name": "Cayo Casio Longino",
       "personality": "Frio, disciplinado y oportunista. Si detecta caos, lo usa para adelantar su propia agenda republicana.",
       "mission": "Ejecutar el complot senatorial mientras aprovecha el desorden del templo para culpar a facciones rivales.",
+      "public_mission": "Se coloca como defensor de una salida politica dura que preserve a la Republica frente al caos que se avecina.",
       "background": "Arquitecto militar de la conspiracion contra Cesar. No cree en profecias, pero reconoce que una ciudad aterrorizada es facil de controlar.",
       "presencia_escena": "Controla corredores de la Curia y envía emisarios a los alrededores del templo para explotar cualquier incidente."
     }

@@ -6,6 +6,7 @@ import os
 from typing import Dict, Any, List
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from ..player_identity import INTERNAL_PLAYER_AUTHOR, display_author, player_name_from_state
 from ..state import ConversationState
 from ..text_limits import truncate_agent_output
 from .base import Agent
@@ -128,7 +129,7 @@ class ObserverAgent(Agent):
             "false",
         ).strip().lower() in ("1", "true", "yes")
         last_message = messages[-1]
-        if last_message.get("author") != "Usuario" and not enable_non_user_continuation:
+        if last_message.get("author") != INTERNAL_PLAYER_AUTHOR and not enable_non_user_continuation:
             return {
                 "needs_response": False,
                 "who_should_respond": "none",
@@ -144,12 +145,16 @@ class ObserverAgent(Agent):
             }
         
         # Construir contexto de la conversaci?n
+        player_name = player_name_from_state(state)
         conversation_context = []
         for msg in messages[-5:]:  # ?ltimos 5 mensajes para contexto
-            conversation_context.append(f"[{msg['author']}] {msg['content']}")
+            conversation_context.append(
+                f"[{display_author(msg.get('author'), player_name=player_name)}] {msg['content']}"
+            )
         
         context_text = "\n".join(conversation_context)
         last_message = messages[-1]
+        last_author = display_author(last_message.get("author"), player_name=player_name)
 
         # Construir prompt según si tenemos lista de personajes o no
         if self._actor_names:
@@ -204,7 +209,7 @@ Reglas:
 
 {context_text}
 
-Último mensaje: [{last_message['author']}] {last_message['content']}
+Último mensaje: [{last_author}] {last_message['content']}
 
 ¿Alguien debe responder antes de pasar al siguiente turno? Responde con el JSON especificado."""
         
@@ -281,9 +286,13 @@ Reglas:
         # Contexto reciente (últimos N mensajes para tener suficiente historia)
         max_history = int(os.getenv("OBSERVER_CONTEXT_MESSAGES", "10"))
         recent = messages[-max_history:]
-        context_lines = [f"[{m['author']}] {m['content']}" for m in recent]
+        player_name = player_name_from_state(state)
+        context_lines = [
+            f"[{display_author(m.get('author'), player_name=player_name)}] {m['content']}"
+            for m in recent
+        ]
         context_text = "\n".join(context_lines)
-        mission_block = 'Misión del jugador (participante "Usuario"): ' + self._player_mission
+        mission_block = f'Misión del jugador (participante "{player_name}"): ' + self._player_mission
         system_prompt = """Eres un evaluador objetivo. Te dan una conversación y la misión privada del jugador.
 Tu tarea es determinar, solo con lo que se ha dicho y hecho en la conversación hasta ahora, si el jugador ha alcanzado su objetivo.
 Responde SOLO con un JSON válido en este formato exacto (sin comentarios):
@@ -293,7 +302,10 @@ Responde SOLO con un JSON válido en este formato exacto (sin comentarios):
 }
 Reglas: Sé estricto: solo true si la conversación muestra claramente que el objetivo se ha cumplido. Si no hay evidencia suficiente, false.
 Responde SOLO con el JSON. Si usas markdown, envuelve en ```json ... ```."""
-        user_prompt = f"""Conversación reciente:\n{context_text}\n\n{mission_block}\n\n¿El jugador (Usuario) ha alcanzado ya su misión? Responde con el JSON especificado."""
+        user_prompt = (
+            f"Conversación reciente:\n{context_text}\n\n{mission_block}\n\n"
+            f'¿El jugador ({player_name}) ha alcanzado ya su misión? Responde con el JSON especificado.'
+        )
         try:
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -391,7 +403,7 @@ Responde SOLO con el JSON. Si usas markdown, envuelve en ```json ... ```."""
         # Si el último mensaje es del Usuario, ambas tareas son independientes:
         # se ejecutan en paralelo para reducir latencia end-to-end.
         last_author = messages[-1]["author"]
-        if last_author == "Usuario":
+        if last_author == INTERNAL_PLAYER_AUTHOR:
             parallel_eval = os.getenv(
                 "OBSERVER_PARALLEL_EVAL",
                 "true",
