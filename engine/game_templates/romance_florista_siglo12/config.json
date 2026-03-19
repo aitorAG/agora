@@ -1,4 +1,7 @@
 {
+  "id": "romance_florista_siglo12",
+  "version": "1.0.0",
+  "active": true,
   "titulo": "Rosas y Tierras de Invierno",
   "descripcion_breve": "En una Alemania del siglo XII con estetica victoriana, amas a la hija del librero, pero tu madre quiere casarte con la hija de un conde.\nConvence a tu familia para evitar un matrimonio de conveniencia y salvar tu amor.",
   "ambientacion": "Alemania alternativa del siglo XII, con ciudades amuralladas, carruajes de vapor primitivo y salones de etiqueta victoriana. El tono es romantico, melancolico y de conflicto familiar.",

@@ -1,4 +1,7 @@
 {
+  "id": "nave_transpondedor_fluzo",
+  "version": "1.0.0",
+  "active": true,
   "titulo": "Ecos en la Bodega 9",
   "descripcion_breve": "Una nave mercante transporta contenedores de especies alienigenas y alguien ha robado el transpondedor de fluzo.\nDescubre al traidor antes de que los aliens escapen y aniquilen a toda la tripulacion.",
   "ambientacion": "Ano 2471. La carguera interestelar Nereida-12 cruza un corredor sin cobertura con luz de emergencia intermitente y pasillos llenos de escarcha. El tono es oscuro, claustrofobico y paranoico.",
