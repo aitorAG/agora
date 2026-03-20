@@ -1,10 +1,20 @@
-const PROXIED_BASE = window.location.pathname.startsWith('/admin/observability')
-  ? '/admin/observability'
-  : '';
+const PROXIED_BASE = window.location.pathname.startsWith('/admin/panel-control')
+  ? '/admin/panel-control'
+  : window.location.pathname.startsWith('/admin/observability')
+    ? '/admin/observability'
+    : '';
 const API_BASE = PROXIED_BASE ? `${PROXIED_BASE}/api` : '';
 let cachedGeneralData = null;
 let actorPromptLoaded = false;
 let actorPromptFieldsCache = [];
+const templateLibraryState = {
+  items: [],
+  selectedId: '',
+  current: null,
+  draft: null,
+  pickerOpen: false,
+  collapsedSections: {},
+};
 const topbarState = {
   user: null,
   userMenuOpen: false,
@@ -117,6 +127,18 @@ function closeOnOutsideClick(event) {
   if (!inMenu && !inChip) toggleUserMenu(false);
 }
 
+function closeTemplatePickerOnOutsideClick(event) {
+  if (!templateLibraryState.pickerOpen) return;
+  const picker = document.querySelector('.template-picker');
+  const layer = document.getElementById('templatePickerLayer');
+  const inPicker = picker && picker.contains(event.target);
+  const inLayer = layer && layer.contains(event.target);
+  if (!inPicker && !inLayer) {
+    templateLibraryState.pickerOpen = false;
+    renderTemplateLibrary();
+  }
+}
+
 async function getJSON(path, params = {}) {
   const url = new URL(apiUrl(path), window.location.origin);
   Object.entries(params).forEach(([key, value]) => {
@@ -159,6 +181,19 @@ async function engineJSON(path, options = {}) {
     throw error;
   }
   return payload;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 function money(value) {
@@ -718,6 +753,411 @@ async function applyActorPrompt() {
   }
 }
 
+function actorFieldDefinitions() {
+  return [
+    { key: 'name', label: 'Nombre', multiline: false },
+    { key: 'personality', label: 'Personalidad', multiline: true },
+    { key: 'mission', label: 'Mision privada', multiline: true },
+    { key: 'public_mission', label: 'Mision publica', multiline: true },
+    { key: 'background', label: 'Background', multiline: true },
+    { key: 'presencia_escena', label: 'Presencia en escena', multiline: true },
+  ];
+}
+
+function showTemplateLibraryStatus(kind, message, details = '') {
+  const node = document.getElementById('templateLibraryStatus');
+  if (!node) return;
+  node.className = `prompt-status is-${kind}`;
+  node.innerHTML = `
+    <div class="prompt-status-title">${escapeHtml(message)}</div>
+    ${details ? `<div class="prompt-status-details">${escapeHtml(details)}</div>` : ''}
+  `;
+}
+
+function hideTemplateLibraryStatus() {
+  const node = document.getElementById('templateLibraryStatus');
+  if (!node) return;
+  node.className = 'prompt-status hidden';
+  node.innerHTML = '';
+}
+
+function templateOptionLabel(item) {
+  const count = Number(item?.num_personajes || 0);
+  return `${String(item?.id || '')} (${count})`;
+}
+
+function renderTemplatePicker() {
+  const host = document.getElementById('templateSelect');
+  const layer = document.getElementById('templatePickerLayer');
+  if (!host) return;
+  const selected = templateLibraryState.items.find((item) => item.id === templateLibraryState.selectedId) || null;
+  const buttonLabel = selected ? templateOptionLabel(selected) : 'Selecciona una partida';
+  host.innerHTML = `
+    <div class="template-picker">
+      <button id="templatePickerButton" type="button" class="template-picker-button">
+        <span class="template-picker-value">${escapeHtml(buttonLabel)}</span>
+        <span class="template-picker-caret" aria-hidden="true">▾</span>
+      </button>
+    </div>
+  `;
+  if (!layer) return;
+  if (!templateLibraryState.pickerOpen) {
+    layer.classList.add('hidden');
+    layer.setAttribute('aria-hidden', 'true');
+    layer.innerHTML = '';
+    return;
+  }
+  const button = document.getElementById('templatePickerButton');
+  if (!button) return;
+  const rect = button.getBoundingClientRect();
+  const width = Math.max(rect.width, 320);
+  const top = rect.bottom + 8;
+  const maxLeft = Math.max(12, window.innerWidth - width - 12);
+  const left = Math.min(rect.left, maxLeft);
+  layer.classList.remove('hidden');
+  layer.setAttribute('aria-hidden', 'false');
+  layer.innerHTML = `
+    <div
+      class="template-picker-menu"
+      style="top:${Math.max(12, top)}px; left:${Math.max(12, left)}px; width:${width}px;"
+    >
+      ${templateLibraryState.items.length
+        ? templateLibraryState.items.map((item) => `
+            <button
+              type="button"
+              class="template-picker-item ${item.id === templateLibraryState.selectedId ? 'is-selected' : ''}"
+              data-template-id="${escapeHtml(item.id)}"
+            >
+              <span class="template-picker-id ${item.active ? 'is-active' : 'is-inactive'}">${escapeHtml(item.id)}</span>
+              <span class="template-picker-meta">(${Number(item.num_personajes || 0)})</span>
+            </button>
+          `).join('')
+        : '<div class="empty">No hay partidas disponibles</div>'}
+    </div>
+  `;
+}
+
+function isTemplateSectionCollapsed(sectionKey) {
+  return Boolean(templateLibraryState.collapsedSections?.[sectionKey]);
+}
+
+function createEmptyActor() {
+  return {
+    name: '',
+    personality: '',
+    mission: '',
+    public_mission: '',
+    background: '',
+    presencia_escena: '',
+    _pending_delete: false,
+  };
+}
+
+function visibleDraftActors(config) {
+  const actors = Array.isArray(config?.actors) ? config.actors : [];
+  return actors.filter((actor) => !actor?._pending_delete);
+}
+
+function sanitizeActorForSave(actor) {
+  return {
+    name: String(actor?.name || ''),
+    personality: String(actor?.personality || ''),
+    mission: String(actor?.mission || ''),
+    public_mission: String(actor?.public_mission || ''),
+    background: String(actor?.background || ''),
+    presencia_escena: String(actor?.presencia_escena || ''),
+  };
+}
+
+function buildTemplateSections(current, draft) {
+  const currentConfig = current?.config_json || {};
+  const draftConfig = draft?.config_json || currentConfig;
+  const currentActors = Array.isArray(currentConfig.actors) ? currentConfig.actors : [];
+  const actors = Array.isArray(draftConfig.actors) ? draftConfig.actors : [];
+  return [
+    {
+      key: 'basic',
+      title: 'Informacion base',
+      currentFields: [
+        { label: 'Titulo', value: currentConfig.titulo || '' },
+        { label: 'Descripcion breve', value: currentConfig.descripcion_breve || '' },
+        { label: 'Version', value: current?.version || '' },
+      ],
+      editorFields: [
+        { type: 'input', label: 'Titulo', key: 'titulo', value: draftConfig.titulo || '' },
+        { type: 'textarea', label: 'Descripcion breve', key: 'descripcion_breve', value: draftConfig.descripcion_breve || '' },
+        { type: 'input', label: 'Version', key: 'version', value: draft?.version || current?.version || '', metadata: true },
+      ],
+    },
+    {
+      key: 'scene',
+      title: 'Escena y conflicto',
+      currentFields: [
+        { label: 'Ambientacion', value: currentConfig.ambientacion || '' },
+        { label: 'Contexto problema', value: currentConfig.contexto_problema || '' },
+        { label: 'Relevancia jugador', value: currentConfig.relevancia_jugador || '' },
+      ],
+      editorFields: [
+        { type: 'textarea', label: 'Ambientacion', key: 'ambientacion', value: draftConfig.ambientacion || '' },
+        { type: 'textarea', label: 'Contexto problema', key: 'contexto_problema', value: draftConfig.contexto_problema || '' },
+        { type: 'textarea', label: 'Relevancia jugador', key: 'relevancia_jugador', value: draftConfig.relevancia_jugador || '' },
+      ],
+    },
+    {
+      key: 'player',
+      title: 'Jugador',
+      currentFields: [
+        { label: 'Mision privada del jugador', value: currentConfig.player_mission || '' },
+        { label: 'Mision publica del jugador', value: currentConfig.player_public_mission || '' },
+      ],
+      editorFields: [
+        { type: 'textarea', label: 'Mision privada del jugador', key: 'player_mission', value: draftConfig.player_mission || '' },
+        { type: 'textarea', label: 'Mision publica del jugador', key: 'player_public_mission', value: draftConfig.player_public_mission || '' },
+      ],
+    },
+    {
+      key: 'opening',
+      title: 'Apertura',
+      currentFields: [
+        { label: 'Narrativa inicial', value: currentConfig.narrativa_inicial || '' },
+      ],
+      editorFields: [
+        { type: 'textarea', label: 'Narrativa inicial', key: 'narrativa_inicial', value: draftConfig.narrativa_inicial || '' },
+      ],
+    },
+    ...actors.map((actor, index) => ({
+      key: `actor-${index}`,
+      title: `Actor ${index + 1} · ${actor?.name || 'Sin nombre'}`,
+      actorIndex: index,
+      actorDeleted: Boolean(actor?._pending_delete),
+      currentFields: actorFieldDefinitions().map((field) => {
+        const currentActor = currentActors[index] || null;
+        return {
+          label: field.label,
+          value: currentActor?.[field.key] || '',
+        };
+      }),
+      editorFields: actorFieldDefinitions().map((field) => ({
+        type: field.multiline ? 'textarea' : 'input',
+        label: field.label,
+        actorIndex: index,
+        actorField: field.key,
+        value: actor?.[field.key] || '',
+      })),
+    })),
+  ];
+}
+
+function renderTemplateFieldList(fields) {
+  if (!fields.length) {
+    return '<div class="empty">Sin contenido</div>';
+  }
+  return fields.map((field) => `
+    <div class="template-field-row">
+      <div class="template-field-name">${escapeHtml(field.label)}</div>
+      <div class="template-field-value">${escapeHtml(field.value || '') || '<span class="empty">Vacio</span>'}</div>
+    </div>
+  `).join('');
+}
+
+function renderTemplateEditorFields(fields, options = {}) {
+  if (!fields.length) {
+    return '<div class="empty">Sin contenido editable</div>';
+  }
+  const disabledAttr = options.disabled ? 'disabled' : '';
+  return fields.map((field) => {
+    const attrs = field.actorField
+      ? `data-actor-index="${field.actorIndex}" data-actor-field="${escapeHtml(field.actorField)}"`
+      : `data-template-field="${escapeHtml(field.key)}" ${field.metadata ? 'data-template-metadata="true"' : ''}`;
+    if (field.type === 'textarea') {
+      return `
+        <label class="template-editor-block">
+          <span>${escapeHtml(field.label)}</span>
+          <textarea ${attrs} ${disabledAttr}>${escapeHtml(field.value || '')}</textarea>
+        </label>
+      `;
+    }
+    return `
+      <label class="template-editor-block">
+        <span>${escapeHtml(field.label)}</span>
+        <input type="text" value="${escapeHtml(field.value || '')}" ${attrs} ${disabledAttr} />
+      </label>
+    `;
+  }).join('');
+}
+
+function renderTemplateSections() {
+  const node = document.getElementById('templateSections');
+  const idNode = document.getElementById('templateIdValue');
+  const activeInput = document.getElementById('templateActiveInput');
+  if (!node || !idNode || !activeInput) return;
+  const current = templateLibraryState.current;
+  if (!current) {
+    idNode.textContent = 'Selecciona una partida';
+    idNode.className = 'template-id-value';
+    activeInput.checked = false;
+    activeInput.disabled = true;
+    node.innerHTML = '<div class="empty">Selecciona una partida</div>';
+    return;
+  }
+  const activeValue = Boolean(templateLibraryState.draft?.active ?? current.active);
+  idNode.textContent = current.id || '';
+  idNode.className = `template-id-value ${activeValue ? 'is-active' : 'is-inactive'}`;
+  activeInput.checked = activeValue;
+  activeInput.disabled = false;
+  node.innerHTML = buildTemplateSections(current, templateLibraryState.draft || current).map((section) => {
+    const collapsed = isTemplateSectionCollapsed(section.key);
+    const actorDeleted = Boolean(section.actorDeleted);
+    return `
+      <section class="template-section ${collapsed ? 'is-collapsed' : ''} ${actorDeleted ? 'is-pending-delete' : ''}">
+        <div class="template-section-head">
+          <button
+            type="button"
+            class="template-section-toggle"
+            data-template-section-toggle="${escapeHtml(section.key)}"
+            aria-expanded="${collapsed ? 'false' : 'true'}"
+          >
+            <span>${escapeHtml(section.title)}</span>
+            <span class="template-section-caret" aria-hidden="true">${collapsed ? '+' : '−'}</span>
+          </button>
+          ${typeof section.actorIndex === 'number'
+            ? `
+              <button
+                type="button"
+                class="template-section-delete"
+                data-template-actor-delete="${section.actorIndex}"
+                title="${actorDeleted ? 'Restaurar actor' : 'Marcar actor para eliminar'}"
+                aria-label="${actorDeleted ? 'Restaurar actor' : 'Marcar actor para eliminar'}"
+              >
+                🗑
+              </button>
+            `
+            : ''}
+        </div>
+        <div class="template-section-body ${collapsed ? 'hidden' : ''}">
+          <article class="template-field-card">
+            ${renderTemplateFieldList(section.currentFields)}
+          </article>
+          <article class="template-field-card template-field-card-edit">
+            ${actorDeleted ? '<div class="template-delete-note">Este actor se eliminara al guardar cambios.</div>' : ''}
+            ${renderTemplateEditorFields(section.editorFields, { disabled: actorDeleted })}
+          </article>
+        </div>
+      </section>
+    `;
+  }).join('');
+}
+
+function renderTemplateLibrary() {
+  renderTemplatePicker();
+  renderTemplateSections();
+}
+
+async function loadStandardTemplateLibraryList() {
+  const payload = await engineJSON('/admin/standard-templates');
+  templateLibraryState.items = payload?.items || [];
+  if (!templateLibraryState.selectedId && templateLibraryState.items.length) {
+    templateLibraryState.selectedId = templateLibraryState.items[0].id;
+  }
+  renderTemplatePicker();
+}
+
+async function loadSelectedStandardTemplate() {
+  if (!templateLibraryState.selectedId) {
+    templateLibraryState.current = null;
+    templateLibraryState.draft = null;
+    renderTemplateLibrary();
+    return;
+  }
+  const payload = await engineJSON(`/admin/standard-templates/${encodeURIComponent(templateLibraryState.selectedId)}`);
+  templateLibraryState.current = payload;
+  templateLibraryState.draft = cloneJson(payload);
+  hideTemplateLibraryStatus();
+  renderTemplateLibrary();
+}
+
+function discardTemplateChanges() {
+  if (!templateLibraryState.current) return;
+  templateLibraryState.draft = cloneJson(templateLibraryState.current);
+  hideTemplateLibraryStatus();
+  renderTemplateLibrary();
+}
+
+function updateTemplateDraftField(target) {
+  const draft = templateLibraryState.draft;
+  if (!draft) return;
+  const field = target.getAttribute('data-template-field');
+  if (field) {
+    if (target.getAttribute('data-template-metadata') === 'true') {
+      draft[field] = target.value;
+    } else {
+      draft.config_json[field] = target.value;
+    }
+    return;
+  }
+  const actorIndex = target.getAttribute('data-actor-index');
+  const actorField = target.getAttribute('data-actor-field');
+  if (actorIndex === null || !actorField) return;
+  const index = Number(actorIndex);
+  if (!Array.isArray(draft.config_json?.actors) || !draft.config_json.actors[index]) return;
+  if (draft.config_json.actors[index]._pending_delete) return;
+  draft.config_json.actors[index][actorField] = target.value;
+}
+
+function toggleDraftActorDelete(index) {
+  const draft = templateLibraryState.draft;
+  const actors = draft?.config_json?.actors;
+  if (!Array.isArray(actors) || !actors[index]) return;
+  actors[index]._pending_delete = !Boolean(actors[index]._pending_delete);
+  renderTemplateSections();
+}
+
+function addDraftActor() {
+  const draft = templateLibraryState.draft;
+  if (!draft) return;
+  if (!Array.isArray(draft.config_json?.actors)) {
+    draft.config_json.actors = [];
+  }
+  draft.config_json.actors.push(createEmptyActor());
+  renderTemplateSections();
+}
+
+async function saveTemplateChanges() {
+  if (!templateLibraryState.selectedId || !templateLibraryState.draft) return;
+  const saveButton = document.getElementById('saveTemplateChanges');
+  if (saveButton) saveButton.disabled = true;
+  showTemplateLibraryStatus('info', 'Validando y guardando partida...');
+  try {
+    const draft = cloneJson(templateLibraryState.draft);
+    draft.config_json.id = templateLibraryState.selectedId;
+    draft.config_json.actors = visibleDraftActors(draft.config_json).map((actor) => sanitizeActorForSave(actor));
+    const payload = await engineJSON(
+      `/admin/standard-templates/${encodeURIComponent(templateLibraryState.selectedId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          version: draft.version,
+          active: Boolean(draft.active),
+          config_json: draft.config_json,
+        }),
+      }
+    );
+    templateLibraryState.current = payload;
+    templateLibraryState.draft = cloneJson(payload);
+    await loadStandardTemplateLibraryList();
+    showTemplateLibraryStatus('success', 'Partida actualizada en la libreria.');
+    renderTemplateLibrary();
+  } catch (error) {
+    showTemplateLibraryStatus(
+      'error',
+      'No se pudo guardar la partida.',
+      typeof error?.message === 'string' ? error.message : ''
+    );
+  } finally {
+    if (saveButton) saveButton.disabled = false;
+  }
+}
+
 function renderNotaryEntries(items) {
   const node = document.getElementById('notaryLog');
   if (!node) return;
@@ -906,7 +1346,15 @@ function bindTabs() {
 async function refreshAll() {
   await loadUsers();
   await loadGamesForUser('gameSelect', document.getElementById('gameUserSelect')?.value || '');
-  await Promise.all([loadGeneral(), loadAgents(), loadUserDetail(), loadGameDetail(), loadActorPrompt()]);
+  await loadStandardTemplateLibraryList();
+  await Promise.all([
+    loadGeneral(),
+    loadAgents(),
+    loadUserDetail(),
+    loadGameDetail(),
+    loadActorPrompt(),
+    loadSelectedStandardTemplate(),
+  ]);
 }
 
 bindTabs();
@@ -925,6 +1373,7 @@ document.getElementById('menu-feedback-admin')?.addEventListener('click', () => 
 });
 document.getElementById('menu-observability')?.addEventListener('click', () => {
   toggleUserMenu(false);
+  window.location.assign('/admin/panel-control/');
 });
 document.getElementById('menu-logout')?.addEventListener('click', async () => {
   toggleUserMenu(false);
@@ -947,7 +1396,52 @@ document.getElementById('initSeriesAgg')?.addEventListener('change', () => {
   renderInitSeriesFromData(cachedGeneralData);
 });
 document.getElementById('applyActorPrompt')?.addEventListener('click', applyActorPrompt);
-document.addEventListener('click', closeOnOutsideClick);
+document.getElementById('loadTemplate')?.addEventListener('click', loadSelectedStandardTemplate);
+document.getElementById('addTemplateActor')?.addEventListener('click', addDraftActor);
+document.getElementById('discardTemplateChanges')?.addEventListener('click', discardTemplateChanges);
+document.getElementById('saveTemplateChanges')?.addEventListener('click', saveTemplateChanges);
+document.getElementById('templateActiveInput')?.addEventListener('change', (event) => {
+  if (!templateLibraryState.draft) return;
+  templateLibraryState.draft.active = Boolean(event.target.checked);
+  renderTemplateSections();
+});
+document.addEventListener('input', (event) => {
+  const target = event.target;
+  if (
+    target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+  ) {
+    updateTemplateDraftField(target);
+  }
+});
+document.addEventListener('click', (event) => {
+  closeOnOutsideClick(event);
+  closeTemplatePickerOnOutsideClick(event);
+  const target = event.target instanceof Element ? event.target.closest('[data-template-actor-delete], [data-template-section-toggle], [data-template-id], #templatePickerButton') : null;
+  if (!(target instanceof HTMLElement)) return;
+  const actorDeleteIndex = target.getAttribute('data-template-actor-delete');
+  if (actorDeleteIndex !== null) {
+    toggleDraftActorDelete(Number(actorDeleteIndex));
+    return;
+  }
+  const sectionKey = target.getAttribute('data-template-section-toggle');
+  if (sectionKey) {
+    templateLibraryState.collapsedSections[sectionKey] = !isTemplateSectionCollapsed(sectionKey);
+    renderTemplateSections();
+    return;
+  }
+  if (target.id === 'templatePickerButton') {
+    templateLibraryState.pickerOpen = !templateLibraryState.pickerOpen;
+    renderTemplatePicker();
+    return;
+  }
+  const templateId = target.getAttribute('data-template-id');
+  if (!templateId) return;
+  templateLibraryState.selectedId = templateId;
+  templateLibraryState.pickerOpen = false;
+  renderTemplatePicker();
+  void loadSelectedStandardTemplate();
+});
 document.addEventListener('mousemove', (event) => {
   const target = event.target instanceof Element ? event.target.closest('.mini-series-hit') : null;
   document.querySelectorAll('.mini-series-tooltip').forEach((node) => node.classList.add('hidden'));
@@ -969,6 +1463,12 @@ document.addEventListener('mouseleave', (event) => {
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') toggleUserMenu(false);
 });
+window.addEventListener('resize', () => {
+  if (templateLibraryState.pickerOpen) renderTemplatePicker();
+});
+window.addEventListener('scroll', () => {
+  if (templateLibraryState.pickerOpen) renderTemplatePicker();
+}, true);
 
 (async function init() {
   try {
@@ -977,11 +1477,12 @@ document.addEventListener('keydown', (event) => {
     await refreshAll();
   } catch (error) {
     console.error(error);
-    document.querySelectorAll('.chart, .cards, tbody, #messageLog, #notaryLog, #actorPromptCurrent, #actorPromptFields').forEach((node) => {
+    document.querySelectorAll('.chart, .cards, tbody, #messageLog, #notaryLog, #actorPromptCurrent, #actorPromptFields, #templateSections, #templateSelect').forEach((node) => {
       if (node && !node.innerHTML) {
         node.innerHTML = '<div class="empty">No se pudieron cargar las metricas</div>';
       }
     });
     showActorPromptStatus('error', 'No se pudo cargar la configuración del prompt.');
+    showTemplateLibraryStatus('error', 'No se pudo cargar la libreria de partidas.');
   }
 }());

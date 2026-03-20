@@ -130,6 +130,34 @@ class AdminActorPromptUpdateResponse(BaseModel):
     validation: AdminActorPromptValidation
 
 
+# --- Admin standard templates ---
+class AdminStandardTemplateListItem(BaseModel):
+    id: str
+    titulo: str = ""
+    descripcion_breve: str = ""
+    version: str = "1.0.0"
+    num_personajes: int = 0
+    active: bool = True
+
+
+class AdminStandardTemplateListResponse(BaseModel):
+    items: list[AdminStandardTemplateListItem] = Field(default_factory=list)
+
+
+class AdminStandardTemplateResponse(BaseModel):
+    id: str
+    version: str = "1.0.0"
+    active: bool = True
+    num_personajes: int = 0
+    config_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class AdminStandardTemplateUpdateRequest(BaseModel):
+    version: str = Field(min_length=1, max_length=40)
+    active: bool = True
+    config_json: dict[str, Any] = Field(default_factory=dict)
+
+
 # --- GET /game/context ---
 class ContextResponse(BaseModel):
     player_mission: str = ""

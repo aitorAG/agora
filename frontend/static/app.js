@@ -2038,7 +2038,7 @@
   if (menuObservability) {
     menuObservability.addEventListener("click", () => {
       toggleUserMenu(false);
-      window.location.assign("/admin/observability/");
+      window.location.assign("/admin/panel-control/");
     });
   }
   if (gamesDrawerOverlay) {

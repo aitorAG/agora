@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Agora Observability</title>
+  <title>Agora Panel de control</title>
   <link rel="stylesheet" href="static/styles.css?v=20260314a" />
 </head>
 <body class="theme-light">
@@ -43,7 +43,7 @@
         </button>
         <div id="user-menu" class="user-menu hidden" role="menu" aria-labelledby="user-chip">
           <button type="button" id="menu-feedback-admin" role="menuitem">Feedback admin</button>
-          <button type="button" id="menu-observability" role="menuitem" disabled>Observabilidad</button>
+          <button type="button" id="menu-observability" role="menuitem" disabled>Panel de control</button>
           <button type="button" id="menu-logout" role="menuitem">Cerrar sesión</button>
         </div>
       </div>
@@ -52,8 +52,8 @@
   <main>
     <header class="hero">
       <div>
-        <p class="eyebrow">Admin / Observability</p>
-        <h1>Metricas operativas de Agora</h1>
+        <p class="eyebrow">Admin / Panel de control</p>
+        <h1>Panel de control de Agora</h1>
         <p class="subtitle">Coste, tokens, latencia y actividad por usuario, partida, turno y agente.</p>
       </div>
       <button id="refreshAll" class="primary">Recargar</button>
@@ -65,6 +65,7 @@
       <button class="tab" data-tab="users">Detalle de usuario</button>
       <button class="tab" data-tab="games">Detalle de partida</button>
       <button class="tab" data-tab="prompt">Prompt actor</button>
+      <button class="tab" data-tab="library">Libreria de partidas</button>
     </nav>
 
     <section class="tab-panel is-active" data-panel="general">
@@ -321,8 +322,60 @@
         </article>
       </section>
     </section>
+
+    <section class="tab-panel" data-panel="library">
+      <article class="panel template-toolbar-panel">
+        <div class="toolbar double">
+          <label>
+            <span>Partida</span>
+            <div id="templateSelect" class="template-select"></div>
+          </label>
+          <button id="loadTemplate" class="secondary">Cargar partida</button>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="template-editor-header">
+          <div class="template-id-block">
+            <div class="template-label">ID</div>
+            <div id="templateIdValue" class="template-id-value">Selecciona una partida</div>
+          </div>
+          <label class="template-active-toggle" for="templateActiveInput">
+            <span>Active</span>
+            <input id="templateActiveInput" type="checkbox" />
+          </label>
+        </div>
+      </article>
+      <section class="panel template-library-shell">
+        <div class="template-columns-head">
+          <div class="template-column-title">
+            <h2>Contenido actual</h2>
+            <span>Lectura del contenido persistido</span>
+          </div>
+          <div class="template-column-title">
+            <h2>Edicion</h2>
+            <span>Los cambios afectan a partidas standard nuevas</span>
+          </div>
+        </div>
+        <form id="templateEditorForm" class="template-editor-form">
+          <div id="templateSections" class="template-sections">
+            <div class="empty">Selecciona una partida</div>
+          </div>
+        </form>
+        <div class="template-add-actor-row">
+          <button id="addTemplateActor" class="secondary" type="button">Añadir actor</button>
+        </div>
+        <div class="template-library-footer">
+          <div id="templateLibraryStatus" class="prompt-status hidden" aria-live="polite"></div>
+          <div class="prompt-actions">
+            <button id="discardTemplateChanges" class="secondary" type="button">Descartar</button>
+            <button id="saveTemplateChanges" class="primary" type="button">Guardar cambios</button>
+          </div>
+        </div>
+      </section>
+    </section>
   </main>
   </div>
+  <div id="templatePickerLayer" class="template-picker-layer hidden" aria-hidden="true"></div>
   <script src="static/app.js?v=20260314a"></script>
 </body>
 </html>

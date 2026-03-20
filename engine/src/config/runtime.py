@@ -69,7 +69,7 @@ def _resolve_telemetry_endpoint() -> str:
 def _apply_derived_defaults() -> None:
     resolved_base = _resolve_public_base_url()
     os.environ["AGORA_RESOLVED_BASE_URL"] = resolved_base
-    os.environ["AGORA_OBSERVABILITY_URL"] = f"{resolved_base}/admin/observability"
+    os.environ["AGORA_OBSERVABILITY_URL"] = f"{resolved_base}/admin/panel-control"
     os.environ["DATABASE_URL"] = _resolve_database_url()
     os.environ["TELEMETRY_ENDPOINT"] = _resolve_telemetry_endpoint()
 

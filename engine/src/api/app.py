@@ -15,7 +15,10 @@ bootstrap_runtime_config()
 from ..observability import flush_observability
 from .dependencies import get_persistence_provider
 from .auth import InvalidAuthConfigurationError, ensure_seed_user, validate_auth_configuration
-from .observability_routes import router as observability_router
+from .observability_routes import (
+    router as observability_router,
+    panel_control_router,
+)
 from .routes import router, auth_router, authz_router, admin_router
 from .schemas import HealthResponse
 
@@ -52,6 +55,7 @@ app.include_router(auth_router)
 app.include_router(authz_router)
 app.include_router(admin_router)
 app.include_router(observability_router)
+app.include_router(panel_control_router)
 
 
 @app.middleware("http")

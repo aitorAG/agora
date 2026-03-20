@@ -35,6 +35,10 @@ from .schemas import (
     AdminActorPromptUpdateRequest,
     AdminActorPromptUpdateResponse,
     AdminActorPromptValidation,
+    AdminStandardTemplateListItem,
+    AdminStandardTemplateListResponse,
+    AdminStandardTemplateResponse,
+    AdminStandardTemplateUpdateRequest,
     ContextResponse,
     GameListItem,
     GameListResponse,
@@ -235,10 +239,9 @@ def admin_feedback_page(_current_user: AuthUserResponse = Depends(require_admin)
     return FileResponse(_admin_feedback_page)
 
 
-@admin_router.get("/observability/")
-def admin_observability_redirect(_current_user: AuthUserResponse = Depends(require_admin)):
+def _render_admin_control_panel() -> HTMLResponse:
     if not _admin_observability_page.is_file():
-        raise HTTPException(status_code=404, detail="Admin observability page not found")
+        raise HTTPException(status_code=404, detail="Admin control panel page not found")
     html = _admin_observability_page.read_text(encoding="utf-8")
     html = html.replace(
         'href="static/styles.css',
@@ -248,6 +251,16 @@ def admin_observability_redirect(_current_user: AuthUserResponse = Depends(requi
         'src="/ui/observability-static/app.js',
     )
     return HTMLResponse(content=html)
+
+
+@admin_router.get("/observability/")
+def admin_observability_redirect(_current_user: AuthUserResponse = Depends(require_admin)):
+    return _render_admin_control_panel()
+
+
+@admin_router.get("/panel-control/")
+def admin_panel_control_page(_current_user: AuthUserResponse = Depends(require_admin)):
+    return _render_admin_control_panel()
 
 
 @admin_router.get("/feedback/list", response_model=AdminFeedbackListResponse)
@@ -302,6 +315,72 @@ def admin_update_actor_prompt(
         required_fields=[AdminActorPromptField(**item) for item in actor_prompt_required_fields()],
         validation=AdminActorPromptValidation(**validation),
     )
+
+
+@admin_router.get(
+    "/standard-templates",
+    response_model=AdminStandardTemplateListResponse,
+)
+def admin_list_standard_templates(
+    _current_user: AuthUserResponse = Depends(require_admin),
+    provider=Depends(get_persistence_provider),
+):
+    _ = _current_user
+    try:
+        items = provider.list_standard_templates_admin()
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=501, detail=str(exc))
+    return AdminStandardTemplateListResponse(
+        items=[AdminStandardTemplateListItem(**item) for item in items]
+    )
+
+
+@admin_router.get(
+    "/standard-templates/{template_id}",
+    response_model=AdminStandardTemplateResponse,
+)
+def admin_get_standard_template(
+    template_id: str,
+    _current_user: AuthUserResponse = Depends(require_admin),
+    provider=Depends(get_persistence_provider),
+):
+    _ = _current_user
+    try:
+        item = provider.get_standard_template(template_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Standard template not found")
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=501, detail=str(exc))
+    return AdminStandardTemplateResponse(**item)
+
+
+@admin_router.put(
+    "/standard-templates/{template_id}",
+    response_model=AdminStandardTemplateResponse,
+)
+def admin_update_standard_template(
+    template_id: str,
+    body: AdminStandardTemplateUpdateRequest,
+    _current_user: AuthUserResponse = Depends(require_admin),
+    provider=Depends(get_persistence_provider),
+):
+    _ = _current_user
+    config_json = dict(body.config_json or {})
+    payload_id = str(config_json.get("id") or template_id).strip()
+    if payload_id != str(template_id).strip():
+        raise HTTPException(status_code=422, detail="Template id is immutable")
+    try:
+        item = provider.upsert_standard_template(
+            template_id,
+            version=body.version,
+            active=body.active,
+            config_json=config_json,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=501, detail=str(exc))
+    return AdminStandardTemplateResponse(**item)
 
 
 @auth_router.post("/logout")
@@ -429,11 +508,12 @@ def new_game(
 @router.get("/standard/list", response_model=StandardTemplateListResponse)
 def list_standard_templates_endpoint(
     current_user: AuthUserResponse = Depends(get_current_user),
+    provider=Depends(get_persistence_provider),
 ):
     """Lista templates estándar disponibles para creación rápida."""
     _ = current_user
     templates = [
-        item for item in list_standard_templates() if bool(item.get("active", True))
+        item for item in list_standard_templates(provider=provider) if bool(item.get("active", True))
     ]
     return StandardTemplateListResponse(
         templates=[StandardTemplateItem(**item) for item in templates]
@@ -445,6 +525,7 @@ def start_standard_game(
     body: StandardStartRequest,
     current_user: AuthUserResponse = Depends(get_current_user),
     engine=Depends(get_engine),
+    provider=Depends(get_persistence_provider),
 ):
     """Crea partida copiando un template standard ya preconstruido."""
     route_t0 = time.perf_counter()
@@ -452,7 +533,7 @@ def start_standard_game(
     session_id = ""
     phase_t0 = time.perf_counter()
     try:
-        loaded = load_standard_template(body.template_id)
+        loaded = load_standard_template(body.template_id, provider=provider)
         phases["template_load_validate"] = int((time.perf_counter() - phase_t0) * 1000)
     except KeyError:
         _emit_game_init_metrics(

@@ -13,6 +13,7 @@ from .dependencies import require_admin
 from .schemas import AuthUserResponse
 
 router = APIRouter(prefix="/admin/observability", tags=["admin-observability"])
+panel_control_router = APIRouter(prefix="/admin/panel-control", tags=["admin-panel-control"])
 _ALLOWED_PREFIXES = ("v1/options/", "v1/analytics/", "v1/metrics/")
 
 
@@ -77,6 +78,20 @@ def fetch_observability_bytes(
 
 @router.get("/api/{telemetry_path:path}")
 def observability_proxy(
+    telemetry_path: str,
+    request: FastAPIRequest,
+    _current_user: AuthUserResponse = Depends(require_admin),
+):
+    status_code, body, content_type = fetch_observability_bytes(
+        telemetry_path,
+        list(request.query_params.multi_items()),
+    )
+    media_type = (content_type or "application/json").split(";", 1)[0].strip() or "application/json"
+    return Response(content=body, status_code=status_code, media_type=media_type)
+
+
+@panel_control_router.get("/api/{telemetry_path:path}")
+def panel_control_proxy(
     telemetry_path: str,
     request: FastAPIRequest,
     _current_user: AuthUserResponse = Depends(require_admin),

@@ -51,6 +51,7 @@ def _client_with_engine(engine):
         username="usuario",
         is_active=True,
     )
+    app.dependency_overrides[routes_module.get_persistence_provider] = lambda: object()
     return TestClient(app)
 
 
@@ -82,7 +83,7 @@ def test_standard_start_uses_prebuilt_setup_without_guionista(monkeypatch):
     monkeypatch.setattr(
         routes_module,
         "load_standard_template",
-        lambda _template_id: {
+        lambda _template_id, provider=None: {
             "template_id": "rome_caesar_harry",
             "template_version": "1.0.0",
             "active": True,
@@ -111,7 +112,7 @@ def test_standard_start_returns_400_for_invalid_template(monkeypatch):
     monkeypatch.setattr(
         routes_module,
         "load_standard_template",
-        lambda _template_id: (_ for _ in ()).throw(StandardTemplateError("broken config")),
+        lambda _template_id, provider=None: (_ for _ in ()).throw(StandardTemplateError("broken config")),
     )
     try:
         res = client.post("/game/standard/start", json={"template_id": "broken"})
@@ -127,7 +128,7 @@ def test_standard_start_rejects_inactive_template(monkeypatch):
     monkeypatch.setattr(
         routes_module,
         "load_standard_template",
-        lambda _template_id: {
+        lambda _template_id, provider=None: {
             "template_id": "rome_caesar_harry",
             "template_version": "1.0.0",
             "active": False,

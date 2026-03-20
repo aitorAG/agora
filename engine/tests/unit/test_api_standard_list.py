@@ -13,10 +13,11 @@ def test_standard_list_only_returns_active_templates(monkeypatch):
         username="usuario",
         is_active=True,
     )
+    app.dependency_overrides[routes_module.get_persistence_provider] = lambda: object()
     monkeypatch.setattr(
         routes_module,
         "list_standard_templates",
-        lambda: [
+        lambda provider=None: [
             {
                 "id": "t1",
                 "titulo": "Plantilla 1",

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..core.game_setup_contract import validate_game_setup
 from .provider import PersistenceProvider
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -37,6 +38,7 @@ class DatabasePersistenceProvider(PersistenceProvider):
             self.apply_migrations()
         if ensure_user:
             self.ensure_default_user()
+        self.bootstrap_standard_templates_from_files()
 
     @contextmanager
     def _connection(self):
@@ -103,6 +105,71 @@ class DatabasePersistenceProvider(PersistenceProvider):
         if not row:
             raise KeyError(f"User not found: {username}")
         return row[0]
+
+    @staticmethod
+    def _read_json_file(path: Path) -> dict[str, Any]:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - defensivo
+            raise ValueError(f"Invalid JSON in {path.name}") from exc
+        if not isinstance(payload, dict):
+            raise ValueError(f"{path.name} must be an object")
+        return payload
+
+    @staticmethod
+    def _normalize_standard_template_payload(
+        template_id: str,
+        *,
+        version: str,
+        active: bool,
+        config_json: dict[str, Any],
+    ) -> tuple[str, str, bool, dict[str, Any]]:
+        safe_id = str(template_id or "").strip()
+        if not safe_id:
+            raise ValueError("template_id is required")
+        safe_version = str(version or "").strip() or "1.0.0"
+        if not isinstance(config_json, dict):
+            raise ValueError("config_json must be an object")
+        payload = dict(config_json)
+        payload_id = str(payload.get("id") or safe_id).strip()
+        if payload_id != safe_id:
+            raise ValueError("config_json.id must match template_id")
+        payload["id"] = safe_id
+        payload["version"] = safe_version
+        payload["active"] = bool(active)
+        normalized = validate_game_setup(
+            payload,
+            error_factory=ValueError,
+            source_name="config_json",
+        )
+        normalized["id"] = safe_id
+        normalized["version"] = safe_version
+        normalized["active"] = bool(active)
+        return safe_id, safe_version, bool(active), normalized
+
+    @staticmethod
+    def _serialize_standard_template_row(
+        *,
+        template_id: str,
+        version: str,
+        active: bool,
+        config_json: dict[str, Any],
+        created_at: Any = None,
+        updated_at: Any = None,
+    ) -> dict[str, Any]:
+        payload = dict(config_json or {})
+        actors = payload.get("actors")
+        return {
+            "id": template_id,
+            "version": version,
+            "active": bool(active),
+            "titulo": str(payload.get("titulo") or "").strip(),
+            "descripcion_breve": str(payload.get("descripcion_breve") or "").strip(),
+            "num_personajes": len(actors) if isinstance(actors, list) else 0,
+            "config_json": payload,
+            "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else created_at,
+            "updated_at": updated_at.isoformat() if hasattr(updated_at, "isoformat") else updated_at,
+        }
 
     def ensure_default_user(self, username: str = "usuario") -> None:
         with self._connection() as conn:
@@ -663,6 +730,145 @@ class DatabasePersistenceProvider(PersistenceProvider):
                     }
                     for r in rows
                 ]
+
+    def bootstrap_standard_templates_from_files(self) -> None:
+        templates_root = PROJECT_ROOT / "game_templates"
+        if not templates_root.exists() or not templates_root.is_dir():
+            return
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM standard_templates")
+                row = cur.fetchone()
+                if row and int(row[0] or 0) > 0:
+                    return
+
+                for child in sorted(templates_root.iterdir(), key=lambda item: item.name):
+                    if not child.is_dir():
+                        continue
+                    config_path = child / "config.json"
+                    if not config_path.exists():
+                        continue
+                    raw_payload = self._read_json_file(config_path)
+                    safe_id, safe_version, safe_active, normalized = (
+                        self._normalize_standard_template_payload(
+                            str(raw_payload.get("id") or child.name),
+                            version=str(raw_payload.get("version") or "1.0.0"),
+                            active=bool(raw_payload.get("active", True)),
+                            config_json=raw_payload,
+                        )
+                    )
+                    now = _utc_now()
+                    cur.execute(
+                        """
+                        INSERT INTO standard_templates (id, version, active, config_json, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s::jsonb, %s, %s)
+                        ON CONFLICT (id) DO NOTHING
+                        """,
+                        (
+                            safe_id,
+                            safe_version,
+                            safe_active,
+                            json.dumps(normalized, ensure_ascii=False),
+                            now,
+                            now,
+                        ),
+                    )
+
+    def list_standard_templates_admin(self) -> list[dict[str, Any]]:
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, version, active, config_json, created_at, updated_at
+                    FROM standard_templates
+                    ORDER BY id ASC
+                    """
+                )
+                rows = cur.fetchall()
+                return [
+                    self._serialize_standard_template_row(
+                        template_id=str(row[0]),
+                        version=str(row[1] or "1.0.0"),
+                        active=bool(row[2]),
+                        config_json=row[3] or {},
+                        created_at=row[4],
+                        updated_at=row[5],
+                    )
+                    for row in rows
+                ]
+
+    def get_standard_template(self, template_id: str) -> dict[str, Any]:
+        safe_id = str(template_id or "").strip()
+        if not safe_id:
+            raise ValueError("template_id is required")
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, version, active, config_json, created_at, updated_at
+                    FROM standard_templates
+                    WHERE id = %s
+                    """,
+                    (safe_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise KeyError(safe_id)
+                return self._serialize_standard_template_row(
+                    template_id=str(row[0]),
+                    version=str(row[1] or "1.0.0"),
+                    active=bool(row[2]),
+                    config_json=row[3] or {},
+                    created_at=row[4],
+                    updated_at=row[5],
+                )
+
+    def upsert_standard_template(
+        self,
+        template_id: str,
+        *,
+        version: str,
+        active: bool,
+        config_json: dict[str, Any],
+    ) -> dict[str, Any]:
+        safe_id, safe_version, safe_active, normalized = self._normalize_standard_template_payload(
+            template_id,
+            version=version,
+            active=active,
+            config_json=config_json,
+        )
+        now = _utc_now()
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO standard_templates (id, version, active, config_json, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s::jsonb, %s, %s)
+                    ON CONFLICT (id) DO UPDATE
+                    SET version = EXCLUDED.version,
+                        active = EXCLUDED.active,
+                        config_json = EXCLUDED.config_json,
+                        updated_at = EXCLUDED.updated_at
+                    RETURNING created_at, updated_at
+                    """,
+                    (
+                        safe_id,
+                        safe_version,
+                        safe_active,
+                        json.dumps(normalized, ensure_ascii=False),
+                        now,
+                        now,
+                    ),
+                )
+                row = cur.fetchone()
+                return self._serialize_standard_template_row(
+                    template_id=safe_id,
+                    version=safe_version,
+                    active=safe_active,
+                    config_json=normalized,
+                    created_at=row[0] if row else now,
+                    updated_at=row[1] if row else now,
+                )
 
     def get_runtime_setting(self, key: str) -> dict[str, Any] | None:
         safe_key = str(key or "").strip()

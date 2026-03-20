@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .game_setup_contract import validate_game_setup
+from ..persistence.provider import PersistenceProvider
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -60,8 +61,66 @@ def _load_template_document(template_dir: Path) -> dict[str, Any]:
     return merged
 
 
-def list_standard_templates() -> list[dict[str, Any]]:
+def _normalize_loaded_template(template_doc: dict[str, Any], clean_id: str) -> dict[str, Any]:
+    manifest_id = str(template_doc.get("id") or clean_id).strip()
+    if not manifest_id:
+        raise StandardTemplateError("config_json must define a non-empty id")
+    if not str(template_doc.get("titulo", "")).strip():
+        raise StandardTemplateError("config_json must define a non-empty titulo")
+    if not str(template_doc.get("descripcion_breve", "")).strip():
+        raise StandardTemplateError(
+            "config_json must define a non-empty descripcion_breve"
+        )
+    config = validate_game_setup(
+        template_doc,
+        error_factory=StandardTemplateError,
+        source_name="config.json",
+    )
+    setup = dict(config)
+    setup["titulo"] = str(setup.get("titulo") or template_doc.get("titulo") or "Plantilla").strip()
+    setup["descripcion_breve"] = str(
+        setup.get("descripcion_breve") or template_doc.get("descripcion_breve") or ""
+    ).strip()
+    metadata = {
+        "id": manifest_id,
+        "titulo": setup["titulo"],
+        "descripcion_breve": setup["descripcion_breve"],
+        "version": str(template_doc.get("version") or "1.0.0"),
+        "active": _template_active(template_doc),
+    }
+    return {
+        "template_id": manifest_id,
+        "template_version": metadata["version"],
+        "active": metadata["active"],
+        "setup": setup,
+        "manifest": metadata,
+    }
+
+
+def list_standard_templates(
+    provider: PersistenceProvider | None = None,
+) -> list[dict[str, Any]]:
     """Lista templates estándar disponibles usando config.json unificado."""
+    if provider is not None:
+        try:
+            items = provider.list_standard_templates_admin()
+        except NotImplementedError:
+            items = []
+        else:
+            return [
+                {
+                    "id": str(item.get("id") or "").strip(),
+                    "titulo": str(item.get("titulo") or "").strip(),
+                    "descripcion_breve": str(item.get("descripcion_breve") or "").strip(),
+                    "version": str(item.get("version") or "1.0.0").strip() or "1.0.0",
+                    "num_personajes": max(0, int(item.get("num_personajes") or 0)),
+                    "active": bool(item.get("active", True)),
+                }
+                for item in items
+                if str(item.get("id") or "").strip()
+                and str(item.get("titulo") or "").strip()
+                and str(item.get("descripcion_breve") or "").strip()
+            ]
     templates: list[dict[str, Any]] = []
     root = _standard_root()
     if not root.exists() or not root.is_dir():
@@ -96,50 +155,34 @@ def list_standard_templates() -> list[dict[str, Any]]:
         )
     return templates
 
-
-def load_standard_template(template_id: str) -> dict[str, Any]:
-    """Carga template por id y devuelve setup + metadatos de plantilla."""
-    clean_id = str(template_id or "").strip()
-    if not clean_id:
-        raise StandardTemplateError("template_id is required")
+def _load_standard_template_from_files(clean_id: str) -> dict[str, Any]:
     template_dir = _standard_root() / clean_id
     if not template_dir.exists() or not template_dir.is_dir():
         raise KeyError(clean_id)
 
     template_doc = _load_template_document(template_dir)
-    manifest_id = str(template_doc.get("id") or clean_id).strip()
-    if not manifest_id:
-        raise StandardTemplateError("config.json must define a non-empty id")
-    if not str(template_doc.get("titulo", "")).strip():
-        raise StandardTemplateError("config.json must define a non-empty titulo")
-    if not str(template_doc.get("descripcion_breve", "")).strip():
-        raise StandardTemplateError(
-            "config.json must define a non-empty descripcion_breve"
-        )
-    config = validate_game_setup(
-        template_doc,
-        error_factory=StandardTemplateError,
-        source_name="config.json",
-    )
+    return _normalize_loaded_template(template_doc, clean_id)
 
-    setup = dict(config)
-    # Garantiza consistencia de los metadatos narrativos usados por UI/listados.
-    setup["titulo"] = str(setup.get("titulo") or template_doc.get("titulo") or "Plantilla").strip()
-    setup["descripcion_breve"] = str(
-        setup.get("descripcion_breve") or template_doc.get("descripcion_breve") or ""
-    ).strip()
-    metadata = {
-        "id": manifest_id,
-        "titulo": setup["titulo"],
-        "descripcion_breve": setup["descripcion_breve"],
-        "version": str(template_doc.get("version") or "1.0.0"),
-        "active": _template_active(template_doc),
-    }
 
-    return {
-        "template_id": manifest_id,
-        "template_version": metadata["version"],
-        "active": metadata["active"],
-        "setup": setup,
-        "manifest": metadata,
-    }
+def load_standard_template(
+    template_id: str,
+    provider: PersistenceProvider | None = None,
+) -> dict[str, Any]:
+    """Carga template por id y devuelve setup + metadatos de plantilla."""
+    clean_id = str(template_id or "").strip()
+    if not clean_id:
+        raise StandardTemplateError("template_id is required")
+    if provider is not None:
+        try:
+            stored = provider.get_standard_template(clean_id)
+        except NotImplementedError:
+            stored = None
+        except KeyError:
+            raise
+        else:
+            template_doc = dict(stored.get("config_json") or {})
+            template_doc["id"] = str(stored.get("id") or clean_id)
+            template_doc["version"] = str(stored.get("version") or "1.0.0")
+            template_doc["active"] = bool(stored.get("active", True))
+            return _normalize_loaded_template(template_doc, clean_id)
+    return _load_standard_template_from_files(clean_id)

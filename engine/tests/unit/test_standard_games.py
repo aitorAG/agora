@@ -10,6 +10,7 @@ from src.core.standard_games import (
     list_standard_templates,
     load_standard_template,
 )
+from src.persistence.provider import PersistenceProvider
 
 
 def _write_json(path, payload):
@@ -39,6 +40,43 @@ def _base_setup():
             }
         ],
     }
+
+
+class _ProviderBackedTemplates(PersistenceProvider):
+    def __init__(self, payload):
+        self.payload = payload
+
+    def create_game(self, title, config_json, username=None, game_mode="custom", standard_template_id=None, template_version=None):
+        raise NotImplementedError
+
+    def save_game_state(self, game_id, state_json):
+        raise NotImplementedError
+
+    def append_message(self, game_id, turn_number, role, content, metadata_json=None):
+        raise NotImplementedError
+
+    def get_game(self, game_id):
+        raise NotImplementedError
+
+    def get_game_messages(self, game_id):
+        raise NotImplementedError
+
+    def list_games_for_user(self, username):
+        return []
+
+    def create_feedback(self, game_id, user_id, feedback_text):
+        raise NotImplementedError
+
+    def list_feedback(self, limit=500):
+        return []
+
+    def list_standard_templates_admin(self):
+        return [self.payload]
+
+    def get_standard_template(self, template_id: str):
+        if template_id != self.payload["id"]:
+            raise KeyError(template_id)
+        return self.payload
 
 
 def test_list_standard_templates_reads_unified_config_catalog(tmp_path, monkeypatch):
@@ -179,3 +217,30 @@ def test_load_standard_template_rejects_missing_actor_fields(tmp_path, monkeypat
 
     with pytest.raises(StandardTemplateError, match="actor #1 field 'mission'"):
         load_standard_template("t3")
+
+
+def test_list_and_load_standard_template_from_provider():
+    payload = {
+        "id": "db-template",
+        "version": "9.9.9",
+        "active": True,
+        "titulo": "Plantilla DB",
+        "descripcion_breve": "Sale de base de datos",
+        "num_personajes": 1,
+        "config_json": {
+            **_base_setup(),
+            "id": "db-template",
+            "version": "9.9.9",
+            "titulo": "Plantilla DB",
+            "descripcion_breve": "Sale de base de datos",
+        },
+    }
+    provider = _ProviderBackedTemplates(payload)
+
+    templates = list_standard_templates(provider=provider)
+    loaded = load_standard_template("db-template", provider=provider)
+
+    assert templates[0]["id"] == "db-template"
+    assert templates[0]["version"] == "9.9.9"
+    assert loaded["template_id"] == "db-template"
+    assert loaded["setup"]["titulo"] == "Plantilla DB"

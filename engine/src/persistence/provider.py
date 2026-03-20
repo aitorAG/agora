@@ -171,3 +171,30 @@ class PersistenceProvider(ABC):
             "actor_prompt_template",
             {"template": str(template or "")},
         )
+
+    def list_standard_templates_admin(self) -> list[dict[str, Any]]:
+        """Lista todas las plantillas estándar persistidas para panel admin."""
+        raise NotImplementedError(
+            "This persistence provider does not support standard template management"
+        )
+
+    def get_standard_template(self, template_id: str) -> dict[str, Any]:
+        """Recupera una plantilla estándar persistida por id."""
+        _ = template_id
+        raise NotImplementedError(
+            "This persistence provider does not support standard template management"
+        )
+
+    def upsert_standard_template(
+        self,
+        template_id: str,
+        *,
+        version: str,
+        active: bool,
+        config_json: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Crea o actualiza una plantilla estándar persistida."""
+        _ = (template_id, version, active, config_json)
+        raise NotImplementedError(
+            "This persistence provider does not support standard template management"
+        )
