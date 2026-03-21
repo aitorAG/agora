@@ -138,6 +138,7 @@ Responde únicamente con el JSON especificado."""
         self,
         messages: List[Dict[str, str]],
         stream_sink: Any = None,
+        timeout_seconds: float | None = None,
     ) -> str:
         """Consume el stream del modelo; escribe en stdout o en stream_sink(str). Devuelve el texto completo."""
         if stream_sink is None:
@@ -160,6 +161,7 @@ Responde únicamente con el JSON especificado."""
             model=self._model,
             temperature=self._temperature,
             stream=True,
+            timeout=timeout_seconds,
         )
         assert isinstance(response, Iterator)
         full_content: List[str] = []
@@ -184,6 +186,7 @@ Responde únicamente con el JSON especificado."""
         num_actors: int = 3,
         stream: bool = False,
         stream_sink: Any = None,
+        timeout_seconds: float | None = None,
     ) -> Dict[str, Any]:
         """Genera el setup de la partida: ambientación, contexto del problema, relevancia, player_mission y actores.
 
@@ -199,13 +202,18 @@ Responde únicamente con el JSON especificado."""
         messages = self._build_setup_messages(theme, num_actors)
         try:
             if stream:
-                content = self._stream_setup_to_stdout(messages, stream_sink=stream_sink)
+                content = self._stream_setup_to_stdout(
+                    messages,
+                    stream_sink=stream_sink,
+                    timeout_seconds=timeout_seconds,
+                )
             else:
                 content = send_message(
                     messages,
                     model=self._model,
                     temperature=self._temperature,
                     stream=False,
+                    timeout=timeout_seconds,
                 )
                 assert isinstance(content, str)
             content = content.strip()

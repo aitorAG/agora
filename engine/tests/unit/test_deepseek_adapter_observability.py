@@ -92,3 +92,54 @@ def test_send_message_stream_reports_usage_and_output(monkeypatch):
     _, payload = calls[0]
     assert payload["output"] == "hola"
     assert payload["usage_details"] == {"input": 20, "output": 10, "total": 30}
+
+
+def test_send_message_passes_timeout_to_provider(monkeypatch):
+    captured = {}
+
+    class FakeCompletions:
+        @staticmethod
+        def create(**kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))],
+                usage=None,
+            )
+
+    class FakeClient:
+        chat = SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setattr(da, "_get_client", lambda: FakeClient())
+    monkeypatch.setattr(da, "start_generation", lambda **kwargs: "gen-timeout")
+    monkeypatch.setattr(da, "end_generation", lambda *args, **kwargs: None)
+
+    out = da.send_message(
+        [{"role": "user", "content": "hola"}],
+        timeout=42.0,
+    )
+
+    assert out == "ok"
+    assert captured["timeout"] == 42.0
+
+
+def test_send_message_normalizes_provider_timeout(monkeypatch):
+    class FakeTimeoutError(Exception):
+        pass
+
+    class FakeCompletions:
+        @staticmethod
+        def create(**_kwargs):
+            raise FakeTimeoutError("provider timeout")
+
+    class FakeClient:
+        chat = SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setattr(da, "_get_client", lambda: FakeClient())
+    monkeypatch.setattr(da, "start_generation", lambda **kwargs: "gen-timeout-error")
+    monkeypatch.setattr(da, "end_generation", lambda *args, **kwargs: None)
+
+    try:
+        da.send_message([{"role": "user", "content": "hola"}], timeout=10.0)
+        assert False, "Expected TimeoutError"
+    except TimeoutError as exc:
+        assert "provider timeout" in str(exc)

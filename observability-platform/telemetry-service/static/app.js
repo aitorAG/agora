@@ -14,6 +14,15 @@ const templateLibraryState = {
   draft: null,
   pickerOpen: false,
   collapsedSections: {},
+  mode: 'edit',
+  previousSelectedId: '',
+};
+const templateGeneratorState = {
+  open: false,
+  loading: false,
+  abortController: null,
+  timeoutId: null,
+  statusTimers: [],
 };
 const topbarState = {
   user: null,
@@ -137,6 +146,66 @@ function closeTemplatePickerOnOutsideClick(event) {
     templateLibraryState.pickerOpen = false;
     renderTemplateLibrary();
   }
+}
+
+function showTemplateGeneratorStatus(kind, message, details = '') {
+  const node = document.getElementById('templateGeneratorStatus');
+  if (!node) return;
+  node.className = `prompt-status is-${kind}`;
+  node.innerHTML = `
+    <div class="prompt-status-title">${escapeHtml(message)}</div>
+    ${details ? `<div class="prompt-status-details">${escapeHtml(details)}</div>` : ''}
+  `;
+}
+
+function hideTemplateGeneratorStatus() {
+  const node = document.getElementById('templateGeneratorStatus');
+  if (!node) return;
+  node.className = 'prompt-status hidden';
+  node.innerHTML = '';
+}
+
+function clearTemplateGeneratorTimers() {
+  if (templateGeneratorState.timeoutId) {
+    window.clearTimeout(templateGeneratorState.timeoutId);
+    templateGeneratorState.timeoutId = null;
+  }
+  (templateGeneratorState.statusTimers || []).forEach((timerId) => window.clearTimeout(timerId));
+  templateGeneratorState.statusTimers = [];
+}
+
+function scheduleTemplateGeneratorProgress() {
+  clearTemplateGeneratorTimers();
+  const steps = [
+    {
+      delay: 0,
+      kind: 'info',
+      message: 'Enviando seed al backend...',
+      details: 'El panel ha lanzado la generación. Si el backend responde, pasarás al borrador sin guardar.',
+    },
+    {
+      delay: 1200,
+      kind: 'info',
+      message: 'Esperando respuesta del LLM...',
+      details: 'La historia se está generando en el servidor. Puedes cancelar en cualquier momento.',
+    },
+    {
+      delay: 7000,
+      kind: 'info',
+      message: 'El LLM sigue trabajando...',
+      details: 'Si tarda demasiado, la petición se cortará automáticamente y verás un error claro.',
+    },
+    {
+      delay: 20000,
+      kind: 'info',
+      message: 'Generación lenta, pero todavía activa...',
+      details: 'En este punto conviene revisar la pestaña Network o los logs del engine si sospechas un bloqueo.',
+    },
+  ];
+  templateGeneratorState.statusTimers = steps.map((step) => window.setTimeout(() => {
+    if (!templateGeneratorState.loading) return;
+    showTemplateGeneratorStatus(step.kind, step.message, step.details);
+  }, step.delay));
 }
 
 async function getJSON(path, params = {}) {
@@ -781,6 +850,69 @@ function hideTemplateLibraryStatus() {
   node.innerHTML = '';
 }
 
+function renderTemplateGeneratorModal() {
+  const modal = document.getElementById('templateGeneratorModal');
+  const submitButton = document.getElementById('submitTemplateGenerator');
+  const closeButton = document.getElementById('closeTemplateGenerator');
+  const cancelButton = document.getElementById('cancelTemplateGenerator');
+  const seedInput = document.getElementById('templateGeneratorSeed');
+  if (!modal) return;
+  modal.classList.toggle('hidden', !templateGeneratorState.open);
+  modal.setAttribute('aria-hidden', templateGeneratorState.open ? 'false' : 'true');
+  document.body.classList.toggle('modal-open', templateGeneratorState.open);
+  if (submitButton) {
+    submitButton.disabled = templateGeneratorState.loading;
+    submitButton.textContent = templateGeneratorState.loading ? 'Generando...' : 'Generar borrador';
+  }
+  if (closeButton) closeButton.disabled = false;
+  if (cancelButton) {
+    cancelButton.disabled = false;
+    cancelButton.textContent = templateGeneratorState.loading ? 'Cancelar generación' : 'Cancelar';
+  }
+  if (seedInput) seedInput.disabled = templateGeneratorState.loading;
+}
+
+function openTemplateGeneratorModal() {
+  templateGeneratorState.open = true;
+  hideTemplateGeneratorStatus();
+  renderTemplateGeneratorModal();
+  window.setTimeout(() => {
+    document.getElementById('templateGeneratorSeed')?.focus();
+  }, 0);
+}
+
+function closeTemplateGeneratorModal(options = {}) {
+  if (templateGeneratorState.loading && options.abortIfLoading) {
+    cancelTemplateGenerator();
+  }
+  if (templateGeneratorState.loading && !options.force) return;
+  templateGeneratorState.open = false;
+  templateGeneratorState.loading = false;
+  templateGeneratorState.abortController = null;
+  clearTemplateGeneratorTimers();
+  if (options.clear) {
+    const seedInput = document.getElementById('templateGeneratorSeed');
+    if (seedInput) seedInput.value = '';
+  }
+  hideTemplateGeneratorStatus();
+  renderTemplateGeneratorModal();
+}
+
+function cancelTemplateGenerator() {
+  if (templateGeneratorState.abortController) {
+    templateGeneratorState.abortController.abort();
+  }
+  templateGeneratorState.abortController = null;
+  templateGeneratorState.loading = false;
+  clearTemplateGeneratorTimers();
+  showTemplateGeneratorStatus(
+    'info',
+    'Generación cancelada.',
+    'Puedes ajustar la semilla y volver a intentarlo cuando quieras.'
+  );
+  renderTemplateGeneratorModal();
+}
+
 function templateOptionLabel(item) {
   const count = Number(item?.num_personajes || 0);
   return `${String(item?.id || '')} (${count})`;
@@ -791,7 +923,11 @@ function renderTemplatePicker() {
   const layer = document.getElementById('templatePickerLayer');
   if (!host) return;
   const selected = templateLibraryState.items.find((item) => item.id === templateLibraryState.selectedId) || null;
-  const buttonLabel = selected ? templateOptionLabel(selected) : 'Selecciona una partida';
+  const buttonLabel = templateLibraryState.mode === 'create'
+    ? 'Nueva partida (sin guardar)'
+    : selected
+      ? templateOptionLabel(selected)
+      : 'Selecciona una partida';
   host.innerHTML = `
     <div class="template-picker">
       <button id="templatePickerButton" type="button" class="template-picker-button">
@@ -853,6 +989,29 @@ function createEmptyActor() {
   };
 }
 
+function createEmptyTemplateDraft() {
+  return {
+    id: '',
+    version: '1.0.0',
+    active: true,
+    num_personajes: 1,
+    config_json: {
+      id: '',
+      version: '1.0.0',
+      active: true,
+      titulo: '',
+      descripcion_breve: '',
+      ambientacion: '',
+      contexto_problema: '',
+      relevancia_jugador: '',
+      player_mission: '',
+      player_public_mission: '',
+      narrativa_inicial: '',
+      actors: [createEmptyActor()],
+    },
+  };
+}
+
 function visibleDraftActors(config) {
   const actors = Array.isArray(config?.actors) ? config.actors : [];
   return actors.filter((actor) => !actor?._pending_delete);
@@ -874,16 +1033,19 @@ function buildTemplateSections(current, draft) {
   const draftConfig = draft?.config_json || currentConfig;
   const currentActors = Array.isArray(currentConfig.actors) ? currentConfig.actors : [];
   const actors = Array.isArray(draftConfig.actors) ? draftConfig.actors : [];
+  const createMode = templateLibraryState.mode === 'create';
   return [
     {
       key: 'basic',
       title: 'Informacion base',
       currentFields: [
+        ...(createMode ? [] : [{ label: 'ID', value: current?.id || '' }]),
         { label: 'Titulo', value: currentConfig.titulo || '' },
         { label: 'Descripcion breve', value: currentConfig.descripcion_breve || '' },
         { label: 'Version', value: current?.version || '' },
       ],
       editorFields: [
+        ...(createMode ? [{ type: 'input', label: 'ID', key: 'id', value: draft?.id || '', metadata: true }] : []),
         { type: 'input', label: 'Titulo', key: 'titulo', value: draftConfig.titulo || '' },
         { type: 'textarea', label: 'Descripcion breve', key: 'descripcion_breve', value: draftConfig.descripcion_breve || '' },
         { type: 'input', label: 'Version', key: 'version', value: draft?.version || current?.version || '', metadata: true },
@@ -990,22 +1152,43 @@ function renderTemplateSections() {
   const node = document.getElementById('templateSections');
   const idNode = document.getElementById('templateIdValue');
   const activeInput = document.getElementById('templateActiveInput');
+  const deleteButton = document.getElementById('deleteTemplate');
+  const saveTopButton = document.getElementById('saveTemplateChangesTop');
   if (!node || !idNode || !activeInput) return;
   const current = templateLibraryState.current;
-  if (!current) {
+  const draft = templateLibraryState.draft;
+  if (!current && !draft) {
     idNode.textContent = 'Selecciona una partida';
     idNode.className = 'template-id-value';
     activeInput.checked = false;
     activeInput.disabled = true;
+    if (saveTopButton) {
+      saveTopButton.disabled = true;
+      saveTopButton.classList.remove('hidden');
+    }
+    if (deleteButton) {
+      deleteButton.disabled = true;
+      deleteButton.classList.add('hidden');
+    }
     node.innerHTML = '<div class="empty">Selecciona una partida</div>';
     return;
   }
-  const activeValue = Boolean(templateLibraryState.draft?.active ?? current.active);
-  idNode.textContent = current.id || '';
+  const source = current || draft;
+  const createMode = templateLibraryState.mode === 'create';
+  const activeValue = Boolean(draft?.active ?? current?.active);
+  idNode.textContent = source?.id || (createMode ? 'Nueva partida' : '');
   idNode.className = `template-id-value ${activeValue ? 'is-active' : 'is-inactive'}`;
   activeInput.checked = activeValue;
   activeInput.disabled = false;
-  node.innerHTML = buildTemplateSections(current, templateLibraryState.draft || current).map((section) => {
+  if (saveTopButton) {
+    saveTopButton.disabled = false;
+    saveTopButton.classList.remove('hidden');
+  }
+  if (deleteButton) {
+    deleteButton.disabled = createMode || !current;
+    deleteButton.classList.toggle('hidden', createMode || !current);
+  }
+  node.innerHTML = buildTemplateSections(current, draft || current).map((section) => {
     const collapsed = isTemplateSectionCollapsed(section.key);
     const actorDeleted = Boolean(section.actorDeleted);
     return `
@@ -1064,19 +1247,35 @@ async function loadStandardTemplateLibraryList() {
 
 async function loadSelectedStandardTemplate() {
   if (!templateLibraryState.selectedId) {
+    templateLibraryState.mode = 'edit';
     templateLibraryState.current = null;
     templateLibraryState.draft = null;
     renderTemplateLibrary();
     return;
   }
   const payload = await engineJSON(`/admin/standard-templates/${encodeURIComponent(templateLibraryState.selectedId)}`);
+  templateLibraryState.mode = 'edit';
   templateLibraryState.current = payload;
   templateLibraryState.draft = cloneJson(payload);
   hideTemplateLibraryStatus();
   renderTemplateLibrary();
 }
 
-function discardTemplateChanges() {
+async function discardTemplateChanges() {
+  if (templateLibraryState.mode === 'create') {
+    templateLibraryState.mode = 'edit';
+    templateLibraryState.pickerOpen = false;
+    templateLibraryState.selectedId = templateLibraryState.previousSelectedId || templateLibraryState.selectedId;
+    templateLibraryState.current = null;
+    templateLibraryState.draft = null;
+    hideTemplateLibraryStatus();
+    if (templateLibraryState.selectedId) {
+      await loadSelectedStandardTemplate();
+    } else {
+      renderTemplateLibrary();
+    }
+    return;
+  }
   if (!templateLibraryState.current) return;
   templateLibraryState.draft = cloneJson(templateLibraryState.current);
   hideTemplateLibraryStatus();
@@ -1090,6 +1289,8 @@ function updateTemplateDraftField(target) {
   if (field) {
     if (target.getAttribute('data-template-metadata') === 'true') {
       draft[field] = target.value;
+      if (field === 'id') draft.config_json.id = target.value;
+      if (field === 'version') draft.config_json.version = target.value;
     } else {
       draft.config_json[field] = target.value;
     }
@@ -1123,25 +1324,44 @@ function addDraftActor() {
 }
 
 async function saveTemplateChanges() {
-  if (!templateLibraryState.selectedId || !templateLibraryState.draft) return;
+  if (!templateLibraryState.draft) return;
   const saveButton = document.getElementById('saveTemplateChanges');
+  const saveTopButton = document.getElementById('saveTemplateChangesTop');
   if (saveButton) saveButton.disabled = true;
+  if (saveTopButton) saveTopButton.disabled = true;
   showTemplateLibraryStatus('info', 'Validando y guardando partida...');
   try {
     const draft = cloneJson(templateLibraryState.draft);
-    draft.config_json.id = templateLibraryState.selectedId;
+    const targetId = templateLibraryState.mode === 'create'
+      ? String(draft.id || '').trim()
+      : templateLibraryState.selectedId;
+    draft.id = targetId;
+    draft.config_json.id = targetId;
+    draft.config_json.version = draft.version;
+    draft.config_json.active = Boolean(draft.active);
     draft.config_json.actors = visibleDraftActors(draft.config_json).map((actor) => sanitizeActorForSave(actor));
-    const payload = await engineJSON(
-      `/admin/standard-templates/${encodeURIComponent(templateLibraryState.selectedId)}`,
-      {
-        method: 'PUT',
-        body: JSON.stringify({
-          version: draft.version,
-          active: Boolean(draft.active),
-          config_json: draft.config_json,
-        }),
-      }
-    );
+    const requestBody = {
+      version: draft.version,
+      active: Boolean(draft.active),
+      config_json: draft.config_json,
+    };
+    const payload = templateLibraryState.mode === 'create'
+      ? await engineJSON('/admin/standard-templates', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: targetId,
+            ...requestBody,
+          }),
+        })
+      : await engineJSON(
+          `/admin/standard-templates/${encodeURIComponent(templateLibraryState.selectedId)}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify(requestBody),
+          }
+        );
+    templateLibraryState.mode = 'edit';
+    templateLibraryState.selectedId = payload.id;
     templateLibraryState.current = payload;
     templateLibraryState.draft = cloneJson(payload);
     await loadStandardTemplateLibraryList();
@@ -1155,6 +1375,111 @@ async function saveTemplateChanges() {
     );
   } finally {
     if (saveButton) saveButton.disabled = false;
+    if (saveTopButton) saveTopButton.disabled = false;
+  }
+}
+
+function startCreateTemplate() {
+  templateLibraryState.previousSelectedId = templateLibraryState.selectedId || templateLibraryState.current?.id || '';
+  templateLibraryState.mode = 'create';
+  templateLibraryState.pickerOpen = false;
+  templateLibraryState.current = null;
+  templateLibraryState.draft = createEmptyTemplateDraft();
+  hideTemplateLibraryStatus();
+  renderTemplateLibrary();
+}
+
+function loadGeneratedTemplateDraft(payload) {
+  templateLibraryState.previousSelectedId = templateLibraryState.selectedId || templateLibraryState.current?.id || '';
+  templateLibraryState.mode = 'create';
+  templateLibraryState.pickerOpen = false;
+  templateLibraryState.current = null;
+  templateLibraryState.draft = cloneJson(payload);
+  hideTemplateLibraryStatus();
+  showTemplateLibraryStatus(
+    'success',
+    'Borrador generado con LLM.',
+    'Revísalo, ajústalo si hace falta y guarda cuando esté listo.'
+  );
+  renderTemplateLibrary();
+}
+
+async function generateTemplateDraftWithLlm() {
+  const seedInput = document.getElementById('templateGeneratorSeed');
+  const seedText = String(seedInput?.value || '').trim();
+  if (!seedText) {
+    showTemplateGeneratorStatus('error', 'Pega una semilla antes de generar.');
+    return;
+  }
+  clearTemplateGeneratorTimers();
+  const abortController = new AbortController();
+  templateGeneratorState.abortController = abortController;
+  templateGeneratorState.loading = true;
+  renderTemplateGeneratorModal();
+  scheduleTemplateGeneratorProgress();
+  templateGeneratorState.timeoutId = window.setTimeout(() => {
+    if (!templateGeneratorState.loading || templateGeneratorState.abortController !== abortController) return;
+    abortController.abort();
+  }, 95000);
+  try {
+    const payload = await engineJSON('/admin/standard-templates/generate', {
+      method: 'POST',
+      signal: abortController.signal,
+      body: JSON.stringify({
+        seed_text: seedText,
+      }),
+    });
+    templateGeneratorState.loading = false;
+    templateGeneratorState.abortController = null;
+    clearTemplateGeneratorTimers();
+    loadGeneratedTemplateDraft(payload);
+    closeTemplateGeneratorModal({ clear: true });
+  } catch (error) {
+    const aborted = error?.name === 'AbortError';
+    showTemplateGeneratorStatus(
+      aborted ? 'info' : 'error',
+      aborted ? 'La generación se canceló o excedió el tiempo límite del cliente.' : 'No se pudo generar el borrador.',
+      aborted
+        ? 'Si el problema se repite, revisa la pestaña Network del navegador o los logs del engine.'
+        : typeof error?.message === 'string'
+          ? error.message
+          : ''
+    );
+    templateGeneratorState.loading = false;
+    templateGeneratorState.abortController = null;
+    clearTemplateGeneratorTimers();
+    renderTemplateGeneratorModal();
+  }
+}
+
+async function deleteCurrentTemplate() {
+  if (templateLibraryState.mode === 'create' || !templateLibraryState.selectedId) return;
+  const templateId = templateLibraryState.selectedId;
+  if (!window.confirm(`Se eliminara la partida "${templateId}". Esta accion no se puede deshacer.`)) {
+    return;
+  }
+  showTemplateLibraryStatus('info', 'Eliminando partida...');
+  try {
+    await engineJSON(`/admin/standard-templates/${encodeURIComponent(templateId)}`, {
+      method: 'DELETE',
+    });
+    await loadStandardTemplateLibraryList();
+    const next = templateLibraryState.items.find((item) => item.id !== templateId) || null;
+    templateLibraryState.selectedId = next?.id || '';
+    templateLibraryState.current = null;
+    templateLibraryState.draft = null;
+    if (templateLibraryState.selectedId) {
+      await loadSelectedStandardTemplate();
+    } else {
+      renderTemplateLibrary();
+    }
+    showTemplateLibraryStatus('success', 'Partida eliminada de la libreria.');
+  } catch (error) {
+    showTemplateLibraryStatus(
+      'error',
+      'No se pudo eliminar la partida.',
+      typeof error?.message === 'string' ? error.message : ''
+    );
   }
 }
 
@@ -1383,6 +1708,19 @@ document.getElementById('refreshAll')?.addEventListener('click', refreshAll);
 document.getElementById('loadUser')?.addEventListener('click', loadUserDetail);
 document.getElementById('loadGame')?.addEventListener('click', loadGameDetail);
 document.getElementById('userSelect')?.addEventListener('change', loadUserDetail);
+document.getElementById('newTemplate')?.addEventListener('click', startCreateTemplate);
+document.getElementById('generateTemplateLlm')?.addEventListener('click', openTemplateGeneratorModal);
+document.getElementById('deleteTemplate')?.addEventListener('click', deleteCurrentTemplate);
+document.getElementById('saveTemplateChangesTop')?.addEventListener('click', saveTemplateChanges);
+document.getElementById('closeTemplateGenerator')?.addEventListener('click', () => closeTemplateGeneratorModal({ abortIfLoading: true, force: !templateGeneratorState.loading }));
+document.getElementById('cancelTemplateGenerator')?.addEventListener('click', () => {
+  if (templateGeneratorState.loading) {
+    cancelTemplateGenerator();
+    return;
+  }
+  closeTemplateGeneratorModal();
+});
+document.getElementById('submitTemplateGenerator')?.addEventListener('click', generateTemplateDraftWithLlm);
 document.getElementById('gameUserSelect')?.addEventListener('change', async (event) => {
   const userId = event.target.value || '';
   await loadGamesForUser('gameSelect', userId);
@@ -1435,6 +1773,10 @@ document.addEventListener('click', (event) => {
     renderTemplatePicker();
     return;
   }
+  if (target.getAttribute('data-template-generator-close') === 'true') {
+    closeTemplateGeneratorModal({ abortIfLoading: true, force: !templateGeneratorState.loading });
+    return;
+  }
   const templateId = target.getAttribute('data-template-id');
   if (!templateId) return;
   templateLibraryState.selectedId = templateId;
@@ -1461,7 +1803,10 @@ document.addEventListener('mouseleave', (event) => {
   target.querySelectorAll('.mini-series-tooltip').forEach((node) => node.classList.add('hidden'));
 }, true);
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') toggleUserMenu(false);
+  if (event.key === 'Escape') {
+    toggleUserMenu(false);
+    closeTemplateGeneratorModal({ abortIfLoading: true, force: !templateGeneratorState.loading });
+  }
 });
 window.addEventListener('resize', () => {
   if (templateLibraryState.pickerOpen) renderTemplatePicker();

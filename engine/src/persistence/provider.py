@@ -198,3 +198,24 @@ class PersistenceProvider(ABC):
         raise NotImplementedError(
             "This persistence provider does not support standard template management"
         )
+
+    def create_standard_template(
+        self,
+        template_id: str,
+        *,
+        version: str,
+        active: bool,
+        config_json: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Crea una plantilla estándar nueva."""
+        _ = (template_id, version, active, config_json)
+        raise NotImplementedError(
+            "This persistence provider does not support standard template management"
+        )
+
+    def delete_standard_template(self, template_id: str) -> None:
+        """Elimina una plantilla estándar persistida."""
+        _ = template_id
+        raise NotImplementedError(
+            "This persistence provider does not support standard template management"
+        )

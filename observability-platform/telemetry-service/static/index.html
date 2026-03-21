@@ -330,6 +330,8 @@
             <span>Partida</span>
             <div id="templateSelect" class="template-select"></div>
           </label>
+          <button id="newTemplate" class="secondary" type="button">Nueva partida</button>
+          <button id="generateTemplateLlm" class="secondary" type="button">Generar nueva historia con LLM</button>
           <button id="loadTemplate" class="secondary">Cargar partida</button>
         </div>
       </article>
@@ -343,6 +345,8 @@
             <span>Active</span>
             <input id="templateActiveInput" type="checkbox" />
           </label>
+          <button id="saveTemplateChangesTop" class="primary" type="button">Guardar cambios</button>
+          <button id="deleteTemplate" class="secondary" type="button">Eliminar partida</button>
         </div>
       </article>
       <section class="panel template-library-shell">
@@ -376,6 +380,50 @@
   </main>
   </div>
   <div id="templatePickerLayer" class="template-picker-layer hidden" aria-hidden="true"></div>
-  <script src="static/app.js?v=20260314a"></script>
+  <div id="templateGeneratorModal" class="modal-shell hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-template-generator-close="true"></div>
+    <section
+      class="modal-card"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="templateGeneratorTitle"
+    >
+      <header class="modal-head">
+        <div>
+          <p class="eyebrow">Libreria de partidas</p>
+          <h2 id="templateGeneratorTitle">Generar nueva historia con LLM</h2>
+        </div>
+        <button
+          id="closeTemplateGenerator"
+          class="modal-close"
+          type="button"
+          aria-label="Cerrar generador"
+        >
+          ×
+        </button>
+      </header>
+      <div class="modal-body">
+        <p class="modal-copy">
+          Pega una premisa, briefing o bloque de texto en bruto. Se generará un borrador
+          completo de la partida para revisarlo antes de guardar.
+        </p>
+        <label class="modal-field">
+          <span>Seed en bruto</span>
+          <textarea
+            id="templateGeneratorSeed"
+            class="modal-textarea"
+            spellcheck="false"
+            placeholder="Ejemplo: thriller politico en una colonia marciana donde el jugador llega como mediador externo mientras tres ministros compiten por controlar el suministro de oxigeno..."
+          ></textarea>
+        </label>
+        <div id="templateGeneratorStatus" class="prompt-status hidden" aria-live="polite"></div>
+      </div>
+      <footer class="modal-actions">
+        <button id="cancelTemplateGenerator" class="secondary" type="button">Cancelar</button>
+        <button id="submitTemplateGenerator" class="primary" type="button">Generar borrador</button>
+      </footer>
+    </section>
+  </div>
+  <script src="static/app.js?v=20260321a"></script>
 </body>
 </html>

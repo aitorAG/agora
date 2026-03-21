@@ -1,8 +1,11 @@
 """Endpoints HTTP para el motor de partida."""
 
 import json
+import logging
 import os
+import re
 import time
+import unicodedata
 from pathlib import Path
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, Response
@@ -38,7 +41,10 @@ from .schemas import (
     AdminStandardTemplateListItem,
     AdminStandardTemplateListResponse,
     AdminStandardTemplateResponse,
+    AdminStandardTemplateCreateRequest,
+    AdminStandardTemplateGenerateRequest,
     AdminStandardTemplateUpdateRequest,
+    AdminStandardTemplateDeleteResponse,
     ContextResponse,
     GameListItem,
     GameListResponse,
@@ -64,6 +70,8 @@ from ..core.standard_games import (
     list_standard_templates,
     load_standard_template,
 )
+from ..core.game_setup_contract import validate_game_setup
+from ..crew_roles.guionista import create_guionista_agent
 from ..observability import record_user_login
 from ..player_identity import display_author
 from ..text_limits import validate_custom_seed, validate_user_message
@@ -155,6 +163,8 @@ _observability_static_dir = _repo_root / "observability_static"
 if not _observability_static_dir.is_dir():
     _observability_static_dir = _repo_root / "observability-platform" / "telemetry-service" / "static"
 _admin_observability_page = _observability_static_dir / "index.html"
+_TEMPLATE_ID_CHUNK_RE = re.compile(r"[^a-z0-9]+")
+logger = logging.getLogger(__name__)
 
 
 def _ensure_game_ownership(engine, game_id: str, username: str) -> None:
@@ -175,6 +185,45 @@ def _set_auth_cookie(response: Response, token: str) -> None:
         secure=auth_cookie_secure(),
         path="/",
     )
+
+
+def _slugify_template_id(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", str(value or ""))
+    ascii_text = normalized.encode("ascii", "ignore").decode("ascii").lower()
+    collapsed = _TEMPLATE_ID_CHUNK_RE.sub("_", ascii_text).strip("_")
+    if not collapsed:
+        return "historia_generada"
+    return collapsed[:120].strip("_") or "historia_generada"
+
+
+def _suggest_unique_template_id(base_id: str, provider) -> str:
+    candidate = _slugify_template_id(base_id)
+    try:
+        existing_items = provider.list_standard_templates_admin()
+    except NotImplementedError:
+        return candidate
+    existing = {
+        str(item.get("id") or "").strip().lower()
+        for item in existing_items
+        if isinstance(item, dict)
+    }
+    if candidate.lower() not in existing:
+        return candidate
+    suffix = 2
+    while True:
+        numbered = f"{candidate}_{suffix}"
+        trimmed = numbered[:120].strip("_")
+        if trimmed.lower() not in existing:
+            return trimmed
+        suffix += 1
+
+
+def _template_generation_timeout_seconds() -> float:
+    raw = str(os.getenv("AGORA_TEMPLATE_GENERATION_TIMEOUT_SECONDS", "90")).strip()
+    try:
+        return max(10.0, min(float(raw), 300.0))
+    except ValueError:
+        return 90.0
 
 
 @auth_router.post("/login", response_model=LoginResponse)
@@ -335,6 +384,104 @@ def admin_list_standard_templates(
     )
 
 
+@admin_router.post(
+    "/standard-templates",
+    response_model=AdminStandardTemplateResponse,
+)
+def admin_create_standard_template(
+    body: AdminStandardTemplateCreateRequest,
+    _current_user: AuthUserResponse = Depends(require_admin),
+    provider=Depends(get_persistence_provider),
+):
+    _ = _current_user
+    config_json = dict(body.config_json or {})
+    payload_id = str(config_json.get("id") or body.id).strip()
+    if payload_id != str(body.id).strip():
+        raise HTTPException(status_code=422, detail="Template id must match config_json.id")
+    try:
+        item = provider.create_standard_template(
+            body.id,
+            version=body.version,
+            active=body.active,
+            config_json=config_json,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=501, detail=str(exc))
+    return AdminStandardTemplateResponse(**item)
+
+
+@admin_router.post(
+    "/standard-templates/generate",
+    response_model=AdminStandardTemplateResponse,
+)
+def admin_generate_standard_template(
+    body: AdminStandardTemplateGenerateRequest,
+    _current_user: AuthUserResponse = Depends(require_admin),
+    provider=Depends(get_persistence_provider),
+):
+    _ = _current_user
+    seed_text = str(body.seed_text or "").strip()
+    timeout_seconds = _template_generation_timeout_seconds()
+    started_at = time.perf_counter()
+    logger.info(
+        "admin template generation started seed_chars=%s num_actors=%s timeout_seconds=%.1f",
+        len(seed_text),
+        body.num_actors,
+        timeout_seconds,
+    )
+    try:
+        generated_setup = create_guionista_agent().generate_setup(
+            theme=seed_text,
+            num_actors=body.num_actors,
+            stream=False,
+            timeout_seconds=timeout_seconds,
+        )
+        normalized_setup = validate_game_setup(
+            generated_setup,
+            source_name="generated_setup",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except TimeoutError as exc:
+        logger.warning(
+            "admin template generation timed out after %.2f s",
+            time.perf_counter() - started_at,
+        )
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "La generacion de la historia supero el tiempo maximo permitido. "
+                "Prueba con una semilla mas concreta o vuelve a intentarlo."
+            ),
+        ) from exc
+    except Exception as exc:
+        logger.exception("admin template generation failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    template_id = _suggest_unique_template_id(
+        str(normalized_setup.get("titulo") or "historia_generada"),
+        provider,
+    )
+    normalized_setup["id"] = template_id
+    normalized_setup["version"] = str(body.version or "1.0.0").strip() or "1.0.0"
+    normalized_setup["active"] = bool(body.active)
+    logger.info(
+        "admin template generation completed template_id=%s actors=%s duration_ms=%s",
+        template_id,
+        len(normalized_setup.get("actors") or []),
+        int((time.perf_counter() - started_at) * 1000),
+    )
+    return AdminStandardTemplateResponse(
+        id=template_id,
+        version=normalized_setup["version"],
+        active=bool(body.active),
+        num_personajes=len(normalized_setup.get("actors") or []),
+        config_json=normalized_setup,
+    )
+
+
 @admin_router.get(
     "/standard-templates/{template_id}",
     response_model=AdminStandardTemplateResponse,
@@ -381,6 +528,27 @@ def admin_update_standard_template(
     except NotImplementedError as exc:
         raise HTTPException(status_code=501, detail=str(exc))
     return AdminStandardTemplateResponse(**item)
+
+
+@admin_router.delete(
+    "/standard-templates/{template_id}",
+    response_model=AdminStandardTemplateDeleteResponse,
+)
+def admin_delete_standard_template(
+    template_id: str,
+    _current_user: AuthUserResponse = Depends(require_admin),
+    provider=Depends(get_persistence_provider),
+):
+    _ = _current_user
+    try:
+        provider.delete_standard_template(template_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Standard template not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=501, detail=str(exc))
+    return AdminStandardTemplateDeleteResponse(id=str(template_id).strip(), deleted=True)
 
 
 @auth_router.post("/logout")

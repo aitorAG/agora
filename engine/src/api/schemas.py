@@ -152,10 +152,29 @@ class AdminStandardTemplateResponse(BaseModel):
     config_json: dict[str, Any] = Field(default_factory=dict)
 
 
+class AdminStandardTemplateCreateRequest(BaseModel):
+    id: str = Field(min_length=1, max_length=120)
+    version: str = Field(min_length=1, max_length=40)
+    active: bool = True
+    config_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class AdminStandardTemplateGenerateRequest(BaseModel):
+    seed_text: str = Field(min_length=20, max_length=8000)
+    num_actors: int = Field(default=3, ge=1, le=6)
+    version: str = Field(default="1.0.0", min_length=1, max_length=40)
+    active: bool = False
+
+
 class AdminStandardTemplateUpdateRequest(BaseModel):
     version: str = Field(min_length=1, max_length=40)
     active: bool = True
     config_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class AdminStandardTemplateDeleteResponse(BaseModel):
+    id: str
+    deleted: bool = True
 
 
 # --- GET /game/context ---

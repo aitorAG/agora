@@ -103,6 +103,7 @@ def send_message(
     temperature: float = 0.7,
     stream: bool = False,
     max_tokens: int | None = None,
+    timeout: float | None = None,
 ) -> str | Iterator[str]:
     """Envía mensajes a DeepSeek y devuelve la respuesta (texto o stream de chunks).
 
@@ -130,6 +131,7 @@ def send_message(
             "provider": "deepseek",
             "stream": stream,
             "max_tokens": max_tokens,
+            "timeout": timeout,
         },
         input_data=messages,
         metadata={"stream": str(bool(stream)).lower(), "model_family": "deepseek"},
@@ -142,9 +144,12 @@ def send_message(
             temperature=temperature,
             stream=stream,
             max_tokens=max_tokens,
+            timeout=timeout,
         )
     except Exception as exc:
         end_generation(generation, level="ERROR", status_message=str(exc)[:500])
+        if "timeout" in exc.__class__.__name__.lower():
+            raise TimeoutError(str(exc)) from exc
         raise
     if not stream:
         if not response.choices or len(response.choices) == 0:

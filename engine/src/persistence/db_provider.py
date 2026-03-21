@@ -870,6 +870,61 @@ class DatabasePersistenceProvider(PersistenceProvider):
                     updated_at=row[1] if row else now,
                 )
 
+    def create_standard_template(
+        self,
+        template_id: str,
+        *,
+        version: str,
+        active: bool,
+        config_json: dict[str, Any],
+    ) -> dict[str, Any]:
+        safe_id, safe_version, safe_active, normalized = self._normalize_standard_template_payload(
+            template_id,
+            version=version,
+            active=active,
+            config_json=config_json,
+        )
+        now = _utc_now()
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM standard_templates WHERE id = %s", (safe_id,))
+                if cur.fetchone():
+                    raise ValueError("template_id already exists")
+                cur.execute(
+                    """
+                    INSERT INTO standard_templates (id, version, active, config_json, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s::jsonb, %s, %s)
+                    RETURNING created_at, updated_at
+                    """,
+                    (
+                        safe_id,
+                        safe_version,
+                        safe_active,
+                        json.dumps(normalized, ensure_ascii=False),
+                        now,
+                        now,
+                    ),
+                )
+                row = cur.fetchone()
+                return self._serialize_standard_template_row(
+                    template_id=safe_id,
+                    version=safe_version,
+                    active=safe_active,
+                    config_json=normalized,
+                    created_at=row[0] if row else now,
+                    updated_at=row[1] if row else now,
+                )
+
+    def delete_standard_template(self, template_id: str) -> None:
+        safe_id = str(template_id or "").strip()
+        if not safe_id:
+            raise ValueError("template_id is required")
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM standard_templates WHERE id = %s", (safe_id,))
+                if cur.rowcount == 0:
+                    raise KeyError(safe_id)
+
     def get_runtime_setting(self, key: str) -> dict[str, Any] | None:
         safe_key = str(key or "").strip()
         if not safe_key:
